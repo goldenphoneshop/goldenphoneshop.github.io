@@ -15,6 +15,7 @@
 
 .site-header {
     display: flex;
+    flex-direction: column;
     justify-content: flex-start;
     margin-bottom: 24px;
 }
@@ -31,6 +32,16 @@
     margin: 0;
 }
 
+.site-slogan {
+    width: 100px;
+    margin: -2px 0 0;
+    color: #17243b;
+    font-size: 9px;
+    font-weight: bold;
+    line-height: 1.2;
+    text-align: left;
+}
+
 h1 { 
     font-size: 40px;
     color: #222;
@@ -45,7 +56,7 @@ button {
     color: white;
     border: none;
     border-radius: 8px;
-    margin-top: 10px
+    margin-top: 10px;
     transition: 0.3s ease;
 } 
 
@@ -60,7 +71,7 @@ button:hover {
         margin: 30px auto;
         max-width: 500px;
         border-radius: 10px;
-        border-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
      }
 
     .checks-box { 
@@ -74,18 +85,24 @@ button:hover {
     
     .products { 
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 20px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
         margin: 30px auto;
-        max-width: 1000px;
+        max-width: 650px;
+    }
+
+    .products > h2 {
+        grid-column: 1 / -1;
     }
 
     .product-card { 
-       background-color: white;
-        padding: 20px;
-        margin: 20px auto;
-        border-radius: 15px;
-        max-width: 300px;
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 180px;
+        background-color: white;
+        padding: 8px;
+        margin: 4px auto;
+        border-radius: 10px;
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
         transition: transform 0.3s ease;
     } 
@@ -96,11 +113,11 @@ button:hover {
 
     .product-card img { 
         width: 100%;
-        height: 200px;
+        height: 100px;
         object-fit: cover;
         border-radius: 12px;
         display: block;
-        margin-bottom: 20px;
+        margin-bottom: 8px;
     } 
     
     .product-card h2 { 
@@ -117,7 +134,8 @@ button:hover {
         background-color: #222;
         color: white;
         border: none;
-        padding: 10px 20px;
+        padding: 8px 12px;
+        font-size: 14px;
         border-radius: 8px;
         cursor: pointer;
     }
@@ -127,27 +145,27 @@ button:hover {
         background-color: #555;
     }
 
-    e: 18px;
-        color: #555;
-        max-width: 600px;
-        margin: 10px auto 30px;
-        line-height: 1.5;
-    }
-
     .product-card h3 { 
-        font-size: 24px;
-        margin-bottom: 10px;
+        font-size: 17px;
+        margin: 6px 0;
     }
 
     .product-card p { 
-        font-size: 16px;
+        font-size: 13px;
         color: #555;
         line-height: 1.5;
     }
 
     .price { 
-        font-size: 18px;
+        font-size: 15px;
         font-weight: bold;
+    }
+
+    .tagline {
+        color: #555;
+        max-width: 600px;
+        margin: 10px auto 30px;
+        line-height: 1.5;
     }
     
     .contact { 
@@ -167,10 +185,6 @@ button:hover {
         border-radius: 8px;
         font-size: 16px;
         cursor: pointer;
-    }
-
-    .contact button:hover { 
-        background-color: #555;
     }
 
     .contact button:hover { 
@@ -230,17 +244,19 @@ button:hover {
     }
 
     .product-card { 
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 180px;
         background: white;
-        padding: 20px;
-        margin: 20px auto;
-        border-radius: 15px;
-        max-width: 300px;
+        padding: 8px;
+        margin: 4px auto;
+        border-radius: 10px;
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
     }
 
     @media (max-width: 600px) { 
         .product-card { 
-            max-width: 90%;
+            max-width: 190px;
         } 
 
         .about,
@@ -265,7 +281,7 @@ button:hover {
     }
 
     .product-card { 
-        max-width: 100%;
+        max-width: 190px;
     } 
 
     .contact { 
@@ -285,75 +301,67 @@ button:hover {
 <body>
 
 <header class="site-header">
-    <img class="site-logo" src="logo.jpg" alt="Golden Eagle Marketplace logo" width="100" height="100">
+    <img class="site-logo" src="Image/logo.jpg" alt="Golden Eagle Marketplace logo" width="100" height="100">
+    <p class="site-slogan">Bringing the Marketplace Home</p>
 </header>
 
 <p>We help sellers in St. Michael's market and other areas to sell their phones and accessories at affordable prices.</p>
 
 <p class="tagline">
-            Your trusted plug for quality phones and accessories at afforable prices.
+    Your trusted plug for quality phones and accessories at affordable prices.
 </p>
 
     <section class="products"  id="products"> 
         <h2>Our Products</h2>
 
-        <div class="product-card"><
-            <img src="image/smartphone.jpg" alt="Smartphone">
+        <div class="product-card">
+            <img src="Image/Smartphone.%20jpg/smartphone.jpg%20(3).jpeg" alt="Smartphone">
             <h3>Smartphones</h3>
             <p>Quality smartphones for different budgets.</p>
-            <p class="price">From ₦150,000</p>
             <button onclick="window.open('https://wa.me/2347075215355?text=Hello%20Golden%20Phone%20%26%20Accessories!%20I%27m%20interested%20in%20buying%20a%20smartphone.%20Please%20send%20me%20the%20available%20models%20and%20prices.', '_blank')">
-                Contact Us 
+                Order Now
             </button>
         </div>
 
         <div class="product-card">
-            <img src="image/accessories.jpg" alt="Phone Accessories">
+            <img src="Image/Accessories.%20jpg/accessories.jpg%20(2).jpg" alt="Phone Accessories">
             <h3>Phone Accessories</h3>
             <p>Chargers, earpieces, power banks, cases and more.</p>
-            <p class="price">From ₦5,000</p> 
             <button onclick="window.open('https://wa.me/2347075215355?text=Hello%20Golden%20Phone%20%26%20Accessories!%20I%27m%20interested%20in%20buying%20phone%20accessories.%20Please%20send%20me%20the%20available%20options%20and%20prices.', '_blank')">
-                Contact Us 
+                Order Now
             </button>
         </div>
         
         <div class="product-card"> 
-            <img src="image/cases.jpg" alt="Phone Cases">
+            <img src="Image/Case.%20jpg/Smartphone.%20jpg%20(13).PNG" alt="Phone Cases">
             <h3>Phone Cases</h3>
             <p>Stylish and protective cases for your phone.</p>
-            <p class="price">From ₦3,000</p>
             <button onclick="window.open('https://wa.me/2347075215355?text=Hello%20Golden%20Phone%20%26%20Accessories!%20I%27m%20interested%20in%20buying%20a%20phone%20case.%20Please%20send%20me%20the%20available%20designs%20and%20prices.', '_blank')">
-                Contact Us
+                Order Now
             </button>
         </div>
         </section> 
 
     <section class="contact" id="contact">
-         </h2>Need a Phone or Accessory?</h2>
-         </p>Contact us to check availability and prices.</p>
+         <h2>Need a Phone or Accessory?</h2>
+         <p>Contact us to check availability and prices.</p>
          <a href="https://wa.me/2347075215355" target="_blank">
             <button>Contact Us</button>
         </a>
-        </section>
+    </section>
 
-        <section class="about"  id="about">
-            <h2>About Golden phones & Accessories</h2>
-            </p>
-
-                We provide quality phones and accessories at affordable prices.
-                Our goal is to make it easy for customers to find the right products for their needs.
+    <section class="about" id="about">
+        <h2>About Golden phones &amp; Accessories</h2>
+        <p>
+            We provide quality phones and accessories at affordable prices.
+            Our goal is to make it easy for customers to find the right products for their needs.
         </p>
+    </section>
 
-        </section>
-        </script>
-
-        </footer> 
-             <p>©  2026 Golden Phones & Accessories</p>
-             </p>Quality phones. Quality accessories. Trusted service.</p>
-        <footer>
-            </p>© 2026 Golden Phones & Accessories. All rights reserved.</p>
-        </footer>
-
+    <footer>
+        <p>© 2026 Golden Phones &amp; Accessories. All rights reserved.</p>
+        <p>Quality phones. Quality accessories. Trusted service.</p>
+    </footer>
 
 </body>
 </html>
