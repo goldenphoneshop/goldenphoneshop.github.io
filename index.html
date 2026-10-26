@@ -118,7 +118,107 @@ button:hover {
         border-radius: 12px;
         display: block;
         margin-bottom: 8px;
+        cursor: zoom-in;
     } 
+
+    .image-gallery {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(0, 0, 0, 0.94);
+    }
+
+    .image-gallery[hidden] {
+        display: none;
+    }
+
+    .image-gallery-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        max-width: min(900px, 100%);
+        max-height: 100%;
+    }
+
+    .image-gallery-main {
+        display: block;
+        max-width: 100%;
+        max-height: 72vh;
+        object-fit: contain;
+    }
+
+    .image-gallery-thumbnails {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        max-width: 100%;
+        overflow-x: auto;
+        padding: 4px;
+    }
+
+    .image-gallery-thumbnail {
+        flex: 0 0 56px;
+        width: 56px;
+        height: 56px;
+        padding: 2px;
+        border: 2px solid transparent;
+        border-radius: 6px;
+        background: #fff;
+        cursor: pointer;
+    }
+
+    .image-gallery-thumbnail[aria-current="true"] {
+        border-color: #D4AF37;
+    }
+
+    .image-gallery-thumbnail img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .image-gallery-control {
+        position: absolute;
+        padding: 12px;
+        border: 0;
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        font-size: 32px;
+        cursor: pointer;
+    }
+
+    .image-gallery-close {
+        top: 12px;
+        right: 16px;
+        font-size: 28px;
+    }
+
+    .image-gallery-previous {
+        left: 8px;
+    }
+
+    .image-gallery-next {
+        right: 8px;
+    }
+
+    @media (max-width: 600px) {
+        .image-gallery-main {
+            max-height: 65vh;
+        }
+
+        .image-gallery-previous {
+            left: 0;
+        }
+
+        .image-gallery-next {
+            right: 0;
+        }
+    }
     
     .product-card h2 { 
         font-size: 30px;
@@ -130,7 +230,9 @@ button:hover {
     } 
 
 
-    .product-card button { 
+    .product-card button,
+    .product-card .order-button { 
+        display: inline-block;
         background-color: #222;
         color: white;
         border: none;
@@ -138,10 +240,12 @@ button:hover {
         font-size: 14px;
         border-radius: 8px;
         cursor: pointer;
+        text-decoration: none;
     }
 
         
-    .product-card button:hover { 
+    .product-card button:hover,
+    .product-card .order-button:hover { 
         background-color: #555;
     }
 
@@ -305,7 +409,7 @@ button:hover {
     <p class="site-slogan">Bringing the Marketplace Home</p>
 </header>
 
-<p>We help sellers in St. Michael's market and other areas to sell their phones and accessories at affordable prices.</p>
+<p>We help sellers in Lag and at Aba, St. Michael's market and other areas to sell their phones and accessories at affordable prices.</p>
 
 <p class="tagline">
     Your trusted plug for quality phones and accessories at affordable prices.
@@ -315,30 +419,24 @@ button:hover {
         <h2>Our Products</h2>
 
         <div class="product-card">
-            <img src="Image/Smartphone.%20jpg/smartphone.jpg%20(3).jpeg" alt="Smartphone">
+            <img src="Image/Smartphone.%20jpg/smartphone.jpg%20(3).jpeg" alt="Smartphone" data-product-gallery="smartphones" tabindex="0" role="button" aria-label="View smartphone photos">
             <h3>Smartphones</h3>
             <p>Quality smartphones for different budgets.</p>
-            <button onclick="window.open('https://wa.me/2347075215355?text=Hello%20Golden%20Phone%20%26%20Accessories!%20I%27m%20interested%20in%20buying%20a%20smartphone.%20Please%20send%20me%20the%20available%20models%20and%20prices.', '_blank')">
-                Order Now
-            </button>
+            <a class="order-button" href="./Markertplace.html" target="_self">Order Now</a>
         </div>
 
         <div class="product-card">
-            <img src="Image/Accessories.%20jpg/accessories.jpg%20(2).jpg" alt="Phone Accessories">
+            <img src="Image/Accessories.%20jpg/accessories.jpg%20(2).jpg" alt="Phone Accessories" data-product-gallery="accessories" tabindex="0" role="button" aria-label="View phone accessory photos">
             <h3>Phone Accessories</h3>
             <p>Chargers, earpieces, power banks, cases and more.</p>
-            <button onclick="window.open('https://wa.me/2347075215355?text=Hello%20Golden%20Phone%20%26%20Accessories!%20I%27m%20interested%20in%20buying%20phone%20accessories.%20Please%20send%20me%20the%20available%20options%20and%20prices.', '_blank')">
-                Order Now
-            </button>
+            <a class="order-button" href="./Markertplace.html" target="_self">Order Now</a>
         </div>
         
         <div class="product-card"> 
-            <img src="Image/Case.%20jpg/Smartphone.%20jpg%20(13).PNG" alt="Phone Cases">
+            <img src="Image/Case.%20jpg/Smartphone.%20jpg%20(13).PNG" alt="Phone Cases" data-product-gallery="cases" tabindex="0" role="button" aria-label="View phone case photos">
             <h3>Phone Cases</h3>
             <p>Stylish and protective cases for your phone.</p>
-            <button onclick="window.open('https://wa.me/2347075215355?text=Hello%20Golden%20Phone%20%26%20Accessories!%20I%27m%20interested%20in%20buying%20a%20phone%20case.%20Please%20send%20me%20the%20available%20designs%20and%20prices.', '_blank')">
-                Order Now
-            </button>
+            <a class="order-button" href="./Markertplace.html" target="_self">Order Now</a>
         </div>
         </section> 
 
@@ -362,6 +460,132 @@ button:hover {
         <p>© 2026 Golden Phones &amp; Accessories. All rights reserved.</p>
         <p>Quality phones. Quality accessories. Trusted service.</p>
     </footer>
+
+    <div id="productImageGallery" class="image-gallery" role="dialog" aria-modal="true" aria-label="Product photo gallery" hidden>
+        <button type="button" class="image-gallery-control image-gallery-close" aria-label="Close gallery">&times;</button>
+        <button type="button" class="image-gallery-control image-gallery-previous" aria-label="Previous photo">&#8249;</button>
+        <div class="image-gallery-content">
+            <img id="galleryMainImage" class="image-gallery-main" src="" alt="">
+            <p id="galleryImageCount" aria-live="polite"></p>
+            <div id="galleryThumbnails" class="image-gallery-thumbnails" aria-label="Choose a product photo"></div>
+        </div>
+        <button type="button" class="image-gallery-control image-gallery-next" aria-label="Next photo">&#8250;</button>
+    </div>
+
+    <script>
+        const productImageSets = {
+            smartphones: [
+                "Image/Smartphone.%20jpg/smartphone.jpg%20(3).jpeg",
+                "Image/Smartphone.%20jpg/smartphone.jpg%20(1).jpeg",
+                "Image/Smartphone.%20jpg/smartphone.jpg%20(2).jpeg"
+            ],
+            accessories: [
+                "Image/Accessories.%20jpg/accessories.jpg%20(2).jpg",
+                "Image/Accessories.%20jpg/accessories.jpg%20(1).jpg",
+                "Image/Accessories.%20jpg/accessories.jpg%20(3).jpg",
+                "Image/Accessories.%20jpg/accessories.jpg%20(4).jpg",
+                "Image/Accessories.%20jpg/accessories.jpg%20(5).jpg",
+                "Image/Accessories.%20jpg/accessories.jpg%20(6).jpg"
+            ],
+            cases: [
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(13).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(2).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(3).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(4).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(5).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(6).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(7).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(8).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(9).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(10).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(11).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(12).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(14).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(15).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(16).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(17).PNG"
+            ]
+        };
+
+        const imageGallery = document.getElementById("productImageGallery");
+        const galleryMainImage = document.getElementById("galleryMainImage");
+        const galleryImageCount = document.getElementById("galleryImageCount");
+        const galleryThumbnails = document.getElementById("galleryThumbnails");
+        let activeGalleryImages = [];
+        let activeGalleryIndex = 0;
+        let previousGalleryFocus = null;
+
+        function showGalleryImage(index) {
+            activeGalleryIndex = (index + activeGalleryImages.length) % activeGalleryImages.length;
+            const imagePath = activeGalleryImages[activeGalleryIndex];
+            galleryMainImage.src = imagePath;
+            galleryMainImage.alt = `Product photo ${activeGalleryIndex + 1}`;
+            galleryImageCount.textContent = `${activeGalleryIndex + 1} of ${activeGalleryImages.length}`;
+
+            [...galleryThumbnails.children].forEach((thumbnail, thumbnailIndex) => {
+                thumbnail.setAttribute("aria-current", String(thumbnailIndex === activeGalleryIndex));
+            });
+        }
+
+        function openProductGallery(image) {
+            const galleryKey = image.dataset.productGallery;
+            activeGalleryImages = productImageSets[galleryKey] || [image.getAttribute("src")];
+            activeGalleryIndex = 0;
+            previousGalleryFocus = image;
+            galleryThumbnails.replaceChildren();
+
+            activeGalleryImages.forEach((imagePath, index) => {
+                const thumbnail = document.createElement("button");
+                thumbnail.type = "button";
+                thumbnail.className = "image-gallery-thumbnail";
+                thumbnail.setAttribute("aria-label", `Show photo ${index + 1}`);
+                thumbnail.addEventListener("click", () => showGalleryImage(index));
+
+                const thumbnailImage = document.createElement("img");
+                thumbnailImage.src = imagePath;
+                thumbnailImage.alt = "";
+                thumbnail.loading = "lazy";
+                thumbnail.addEventListener("error", () => thumbnail.remove(), { once: true });
+
+                thumbnail.append(thumbnailImage);
+                galleryThumbnails.append(thumbnail);
+            });
+
+            showGalleryImage(0);
+            imageGallery.hidden = false;
+            document.body.style.overflow = "hidden";
+            imageGallery.querySelector(".image-gallery-close").focus();
+        }
+
+        function closeProductGallery() {
+            imageGallery.hidden = true;
+            document.body.style.overflow = "";
+            if (previousGalleryFocus) previousGalleryFocus.focus();
+        }
+
+        document.querySelectorAll("[data-product-gallery]").forEach(image => {
+            image.addEventListener("click", () => openProductGallery(image));
+            image.addEventListener("keydown", event => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openProductGallery(image);
+                }
+            });
+        });
+
+        imageGallery.querySelector(".image-gallery-close").addEventListener("click", closeProductGallery);
+        imageGallery.querySelector(".image-gallery-previous").addEventListener("click", () => showGalleryImage(activeGalleryIndex - 1));
+        imageGallery.querySelector(".image-gallery-next").addEventListener("click", () => showGalleryImage(activeGalleryIndex + 1));
+        imageGallery.addEventListener("click", event => {
+            if (event.target === imageGallery) closeProductGallery();
+        });
+        document.addEventListener("keydown", event => {
+            if (imageGallery.hidden) return;
+            if (event.key === "Escape") closeProductGallery();
+            if (event.key === "ArrowLeft") showGalleryImage(activeGalleryIndex - 1);
+            if (event.key === "ArrowRight") showGalleryImage(activeGalleryIndex + 1);
+        });
+    </script>
 
 </body>
 </html>

@@ -1,0 +1,1850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GOLDEN EAGLE - GSM & Electronics Marketplace</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0b0f19',
+                        darkCard: '#131b2e',
+                        darkBorder: '#1f2b47',
+                        gold: {
+                            light: '#ffe57f',
+                            DEFAULT: '#ffd700',
+                            dark: '#b8860b',
+                            gradientStart: '#ffd700',
+                            gradientEnd: '#dfa835'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0b0f19;
+            color: #f3f4f6;
+            font-family: 'Inter', sans-serif;
+        }
+        .gold-gradient-text {
+            background: linear-gradient(135deg, #ffd700 0%, #dfa835 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .gold-gradient-bg {
+            background: linear-gradient(135deg, #ffd700 0%, #dfa835 100%);
+        }
+        .gold-gradient-bg-hover:hover {
+            background: linear-gradient(135deg, #ffe033 0%, #e5b342 100%);
+        }
+        .gold-glow {
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.25);
+        }
+        .gold-border-glow:focus {
+            outline: none;
+            border-color: #ffd700;
+            box-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0b0f19;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f2b47;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #dfa835;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between antialiased">
+
+    <!-- TOP ANNOUNCEMENT BAR -->
+    <div class="bg-gradient-to-r from-yellow-600 via-yellow-500 to-yellow-600 text-black text-xs font-bold py-1 px-4 text-center tracking-wide flex justify-between items-center">
+        <span class="hidden md:inline"><i class="fa-solid fa-shield-halved mr-1"></i> VERIFIED VENDORS & GSM PARTS PLATFORM</span>
+        <span>🦅 WELCOME TO GOLDEN EAGLE GSM MARKETPLACE - FAST NATIONWIDE DELIVERY!</span>
+        <button onclick="openGuidanceModal()" class="underline hover:text-white transition">Anti-Spam Rules</button>
+    </div>
+
+    <!-- MAIN NAVBAR -->
+    <header class="sticky top-0 z-40 bg-darkCard/95 backdrop-blur-md border-b border-darkBorder">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
+            
+            <!-- Logo -->
+            <div class="flex items-center gap-3 cursor-pointer" onclick="filterCategory('All')">
+                <img src="Image/app-logo.jpg" alt="Golden Eagle Marketplace logo" class="w-12 h-12 rounded-full object-cover border border-gold/50 shadow-lg gold-glow">
+                <div>
+                    <span class="text-xl sm:text-2xl font-extrabold tracking-wider gold-gradient-text block leading-none">GOLDEN EAGLE</span>
+                    <span class="text-[10px] tracking-widest text-gray-400 uppercase block font-semibold">GSM & Electronics Hub</span>
+                </div>
+            </div>
+
+            <!-- Search Bar -->
+            <form id="marketplaceSearchForm" role="search" onsubmit="handleSearch(event)" class="flex-1 max-w-2xl mx-2 sm:mx-4">
+                <div class="relative">
+                    <input type="text" id="searchInput" oninput="handleSearch()" placeholder="Search phones, repair tools, screens, chargers, SIM boxes..." class="w-full bg-darkBg border border-darkBorder text-sm text-gray-200 rounded-full pl-10 pr-24 py-2.5 gold-border-glow transition">
+                    <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                    </div>
+                    <button type="submit" class="absolute right-1 top-1 bottom-1 px-4 text-xs font-bold rounded-full gold-gradient-bg text-black hover:opacity-90 transition flex items-center gap-1">
+                        <span>Search</span>
+                    </button>
+                </div>
+            </form>
+
+            <!-- Action Navigation Buttons -->
+            <div class="flex items-center gap-2 sm:gap-4">
+
+                <button type="button" onclick="openCartModal()" class="relative flex-shrink-0 px-3 py-2 text-xs font-bold rounded-lg border border-gold/50 text-gold hover:bg-gold/10 transition" aria-label="Open shopping cart">
+                    <i class="fa-solid fa-cart-shopping"></i>
+                    <span class="hidden sm:inline ml-1">Cart</span>
+                    <span id="cartItemCount" class="absolute -top-2 -right-2 min-w-5 h-5 px-1 rounded-full bg-gold text-black text-[10px] flex items-center justify-center">0</span>
+                </button>
+                
+                <!-- Post Product Button -->
+                <button onclick="handlePostProductClick()" class="hidden sm:flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg border border-gold/50 text-gold hover:bg-gold/10 transition">
+                    <i class="fa-solid fa-circle-plus text-sm"></i>
+                    <span>Sell / Post Product</span>
+                </button>
+
+                <!-- Auth Navigation Section -->
+                <div id="authNavSection">
+                    <!-- Populated dynamically by JS -->
+                </div>
+
+                <!-- Guidance & Anti-Spam Trigger -->
+                <button onclick="openGuidanceModal()" title="Platform Guidelines & Report" class="p-2 text-gray-400 hover:text-gold transition">
+                    <i class="fa-solid fa-scale-balanced text-lg"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile Post Product Sub-bar -->
+        <div class="sm:hidden px-4 py-2 border-t border-darkBorder flex justify-between items-center bg-darkBg/60">
+            <button onclick="handlePostProductClick()" class="w-full py-2 text-xs font-bold rounded-lg gold-gradient-bg text-black flex items-center justify-center gap-2">
+                <i class="fa-solid fa-circle-plus"></i>
+                <span>Post Product as Vendor</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN BODY / HERO & CATEGORIES -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+        
+        <!-- Hero Banner -->
+        <div class="relative rounded-2xl overflow-hidden mb-8 border border-darkBorder bg-gradient-to-r from-darkCard via-darkBg to-darkCard p-6 sm:p-10 shadow-2xl">
+            <div class="absolute -right-10 -bottom-10 w-64 h-64 bg-gold/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div class="relative z-10 max-w-2xl">
+                <span class="inline-block px-3 py-1 bg-gold/20 text-gold text-xs font-bold rounded-full mb-3 border border-gold/30">
+                    🔥 Premier GSM Marketplace
+                </span>
+                <h1 class="text-2xl sm:text-4xl font-extrabold text-white mb-3 tracking-tight">
+                    Trade Original Mobile Devices, Repair Parts & Tools
+                </h1>
+                <p class="text-sm sm:text-base text-gray-300 mb-6 leading-relaxed">
+                    Connect directly with verified vendors across the country. Buy new & renewed smartphones, high-precision soldering stations, screen assemblies, and unlock boxes.
+                </p>
+                <div class="flex flex-wrap gap-3">
+                    <button onclick="openPostModal()" class="px-5 py-2.5 rounded-xl gold-gradient-bg text-black font-bold text-xs sm:text-sm gold-glow hover:opacity-95 transition flex items-center gap-2">
+                        <i class="fa-solid fa-store"></i> Start Selling Today
+                    </button>
+                    <button onclick="toggleAiDrawer()" class="px-5 py-2.5 rounded-xl bg-darkCard border border-darkBorder text-gray-200 hover:text-gold font-semibold text-xs sm:text-sm transition flex items-center gap-2">
+                        <i class="fa-solid fa-robot text-gold"></i> Ask Golden AI Assistant
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Category Filter Tabs -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-layer-group text-gold"></i> Product Categories
+                </h2>
+                <span id="productCountBadge" class="text-xs text-gray-400 bg-darkCard px-3 py-1 rounded-full border border-darkBorder">
+                    Loading products...
+                </span>
+            </div>
+
+            <div id="categoryTabs" class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+                <!-- Dynamic categories loaded via JS -->
+            </div>
+        </div>
+
+        <!-- Marketplace Products Grid -->
+        <section>
+            <div id="productGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <!-- Products dynamically rendered here -->
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="hidden text-center py-16 bg-darkCard/50 rounded-2xl border border-darkBorder my-6">
+                <i class="fa-solid fa-box-open text-5xl text-gray-600 mb-4"></i>
+                <h3 class="text-lg font-bold text-gray-300">No products found</h3>
+                <p class="text-sm text-gray-500 max-w-md mx-auto mt-1 mb-4">No listings match your current filter or search criteria. Be the first vendor to add one!</p>
+                <button onclick="resetFilters()" class="px-4 py-2 text-xs font-bold gold-gradient-bg text-black rounded-lg">Clear Filters</button>
+            </div>
+        </section>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="bg-darkCard border-t border-darkBorder mt-12 text-xs text-gray-400">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+                <div>
+                    <div class="flex items-center gap-2 mb-3">
+                        <img src="Image/app-logo.jpg" alt="" class="w-8 h-8 rounded-full object-cover border border-gold/50">
+                        <span class="font-bold text-white tracking-wider">GOLDEN EAGLE</span>
+                    </div>
+                    <p class="text-gray-400 leading-relaxed">
+                        The leading verified B2B and B2C marketplace for GSM devices, spare parts, and technician equipment.
+                    </p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-white mb-3 uppercase tracking-wider">Quick Navigation</h4>
+                    <ul class="space-y-2">
+                        <li><a href="#" onclick="filterCategory('Smartphones & Feature Phones'); return false;" class="hover:text-gold">Smartphones</a></li>
+                        <li><a href="#" onclick="filterCategory('GSM Repair Tools & Parts'); return false;" class="hover:text-gold">Repair Tools & Parts</a></li>
+                        <li><a href="#" onclick="filterCategory('Mobile Accessories'); return false;" class="hover:text-gold">Accessories</a></li>
+                        <li><a href="#" onclick="openPostModal(); return false;" class="hover:text-gold">Vendor Portal</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-bold text-white mb-3 uppercase tracking-wider">Trust & Safety</h4>
+                    <ul class="space-y-2">
+                        <li><button onclick="openGuidanceModal()" class="hover:text-gold">Anti-Spam Policy</button></li>
+                        <li><button onclick="openComplaintModal()" class="hover:text-gold text-left">Report Fraud / Spam Vendor</button></li>
+                        <li><button onclick="openGuidanceModal()" class="hover:text-gold">Terms of Service</button></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-bold text-white mb-3 uppercase tracking-wider">AI Support</h4>
+                    <p class="mb-3 text-gray-400">Need help troubleshooting a phone or finding rare IC chips?</p>
+                    <button onclick="toggleAiDrawer()" class="w-full py-2 px-3 rounded-lg border border-gold/40 text-gold hover:bg-gold/10 transition font-bold flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-headset text-sm"></i> Launch AI Assistant
+                    </button>
+                </div>
+            </div>
+            <div class="border-t border-darkBorder pt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+                <p>© 2026 GOLDEN EAGLE GSM & Electronics Marketplace. All rights reserved.</p>
+                <div class="flex items-center gap-4 text-lg">
+                    <i class="fa-brands fa-whatsapp hover:text-gold cursor-pointer"></i>
+                    <i class="fa-brands fa-telegram hover:text-gold cursor-pointer"></i>
+                    <i class="fa-solid fa-envelope hover:text-gold cursor-pointer"></i>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- MODAL 1: AUTHENTICATION MODAL (LOGIN / REGISTER) -->
+    <div id="authModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-darkCard border border-darkBorder w-full max-w-md rounded-2xl p-6 shadow-2xl relative">
+            <button onclick="closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            
+            <div class="text-center mb-6">
+                <img src="Image/app-logo.jpg" alt="Golden Eagle Marketplace logo" class="w-16 h-16 rounded-full object-cover border border-gold/50 mx-auto mb-2">
+                <h3 id="authModalTitle" class="text-xl font-bold text-white">Sign In to Golden Eagle</h3>
+                <p id="authModalSubtitle" class="text-xs text-gray-400 mt-1">Access your marketplace account & orders</p>
+            </div>
+
+            <!-- Tab Switcher -->
+            <div class="flex bg-darkBg rounded-lg p-1 mb-6 border border-darkBorder">
+                <button id="tabSignInBtn" onclick="setAuthTab('signin')" class="flex-1 py-1.5 text-xs font-bold rounded-md bg-gold text-black transition">Sign In</button>
+                <button id="tabRegisterBtn" onclick="setAuthTab('register')" class="flex-1 py-1.5 text-xs font-bold rounded-md text-gray-400 hover:text-white transition">Create Account</button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 mb-4">
+                <button type="button" id="authEmailMethodBtn" onclick="setAuthMethod('email')" class="py-2 text-xs font-bold rounded-lg bg-gold text-black">Continue with email</button>
+                <button type="button" id="authPhoneMethodBtn" onclick="setAuthMethod('phone')" class="py-2 text-xs font-bold rounded-lg bg-darkBg border border-darkBorder text-gray-300">Continue with phone</button>
+            </div>
+
+            <!-- Auth Form -->
+            <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+                <div id="authNameGroup">
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Full Name</label>
+                    <input type="text" id="authName" required placeholder="John Doe" class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100 gold-border-glow">
+                </div>
+
+                <div>
+                    <label id="authIdentifierLabel" for="authIdentifier" class="block text-xs font-semibold text-gray-300 mb-1">Email Address</label>
+                    <input type="email" id="authIdentifier" required autocomplete="email" placeholder="you@example.com" class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100 gold-border-glow">
+                </div>
+
+                <div id="authPasswordGroup">
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Password</label>
+                    <input type="password" id="authPassword" minlength="8" autocomplete="current-password" placeholder="At least 8 characters" class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100 gold-border-glow">
+                    <button type="button" id="forgotPasswordBtn" onclick="sendPasswordReset()" class="hidden mt-2 text-xs text-gold hover:underline">Forgot password? Send reset link</button>
+                </div>
+
+                <div id="smsCodeGroup" class="hidden">
+                    <label for="smsVerificationCode" class="block text-xs font-semibold text-gray-300 mb-1">SMS verification code</label>
+                    <input type="text" id="smsVerificationCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="Enter the 6-digit code" class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100 gold-border-glow">
+                    <button type="button" onclick="sendPhoneCode(true)" class="mt-2 text-xs text-gold hover:underline">Resend SMS code</button>
+                </div>
+
+                <div id="phoneRecaptcha" class="hidden"></div>
+                <p id="authHelpText" class="text-[11px] text-gray-400">Email accounts must verify their email before signing in.</p>
+                <p id="authErrorMessage" class="hidden text-xs text-red-400" role="alert"></p>
+
+                <!-- Account Type Selector (Only visible for Register or toggle) -->
+                <div id="roleSelectorGroup">
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Select Account Type</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <label class="border border-darkBorder rounded-xl p-3 flex items-center gap-2 cursor-pointer bg-darkBg hover:border-gold/50 transition">
+                            <input type="radio" name="userRole" value="Vendor" checked class="text-gold focus:ring-0">
+                            <div>
+                                <span class="block text-xs font-bold text-white">Vendor / Seller</span>
+                                <span class="block text-[10px] text-gray-400">Can post products</span>
+                            </div>
+                        </label>
+                        <label class="border border-darkBorder rounded-xl p-3 flex items-center gap-2 cursor-pointer bg-darkBg hover:border-gold/50 transition">
+                            <input type="radio" name="userRole" value="Buyer" class="text-gold focus:ring-0">
+                            <div>
+                                <span class="block text-xs font-bold text-white">Buyer / Customer</span>
+                                <span class="block text-[10px] text-gray-400">Shop & inquire</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" id="authSubmitBtn" class="w-full py-2.5 gold-gradient-bg font-bold text-black rounded-xl text-sm gold-glow hover:opacity-95 transition mt-2">
+                    Sign In
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 2: PRODUCT POSTING PORTAL (VENDOR ONLY) -->
+    <div id="postModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-darkCard border border-darkBorder w-full max-w-2xl rounded-2xl p-6 shadow-2xl relative my-8 max-h-[90vh] overflow-y-auto">
+            <button onclick="closePostModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="flex items-center gap-3 mb-6 pb-4 border-b border-darkBorder">
+                <div class="w-10 h-10 rounded-xl bg-gold/20 text-gold flex items-center justify-center text-xl font-bold">
+                    <i class="fa-solid fa-box-archive"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">Post New Product</h3>
+                    <p class="text-xs text-gray-400">List your GSM equipment, parts, or devices for instant visibility</p>
+                </div>
+            </div>
+
+            <form id="postProductForm" onsubmit="handleProductSubmit(event)" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-300 mb-1">Product Title *</label>
+                        <input type="text" id="postTitle" required placeholder="e.g. iPhone 15 Pro Max 256GB / QUICK 861DW Station" class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100 gold-border-glow">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-300 mb-1">Category *</label>
+                        <select id="postCategory" required class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100 gold-border-glow">
+                            <option value="Smartphones & Feature Phones">Smartphones & Feature Phones</option>
+                            <option value="GSM Repair Tools & Parts">GSM Repair Tools & Parts</option>
+                            <option value="Mobile Accessories">Mobile Accessories</option>
+                            <option value="Tablets & Wearables">Tablets & Wearables</option>
+                            <option value="Network & SIM Equipment">Network & SIM Equipment</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-300 mb-1">Price (₦) *</label>
+                        <input type="number" id="postPrice" required placeholder="85000" class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100 gold-border-glow">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-300 mb-1">Stock Quantity *</label>
+                        <input type="number" id="postStock" min="1" value="10" required class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100 gold-border-glow">
+                    </div>
+                </div>
+
+                <!-- Product images & quick selection -->
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Product Image URLs *</label>
+                    <textarea id="postImageUrl" required rows="3" placeholder="Add one or more image URLs, one per line" aria-describedby="postImageHelp" class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100 gold-border-glow mb-2 resize-y"></textarea>
+                    <p id="postImageHelp" class="text-[11px] text-gray-400 mb-2">Add one URL per line or separate URLs with commas. Buyers can browse and enlarge these photos.</p>
+                    
+                    <span class="text-[11px] text-gray-400 block mb-1">Or click a quick test image preset:</span>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" onclick="setPresetImg('https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=500&q=80')" class="text-[10px] bg-darkBg px-2 py-1 rounded border border-darkBorder hover:border-gold text-gray-300">iPhone Device</button>
+                        <button type="button" onclick="setPresetImg('https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=500&q=80')" class="text-[10px] bg-darkBg px-2 py-1 rounded border border-darkBorder hover:border-gold text-gray-300">Samsung Phone</button>
+                        <button type="button" onclick="setPresetImg('https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=500&q=80')" class="text-[10px] bg-darkBg px-2 py-1 rounded border border-darkBorder hover:border-gold text-gray-300">Soldering Station / Tool</button>
+                        <button type="button" onclick="setPresetImg('https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=500&q=80')" class="text-[10px] bg-darkBg px-2 py-1 rounded border border-darkBorder hover:border-gold text-gray-300">Headphones / Accessories</button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Short Summary *</label>
+                    <input type="text" id="postShortDesc" required placeholder="Original screen assembly with 6 months warranty..." class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100 gold-border-glow">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Detailed Description & Specifications</label>
+                    <textarea id="postFullDesc" rows="3" placeholder="Provide technical specs, compatibility, condition (Brand New / Refurbished)..." class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100 gold-border-glow"></textarea>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-300 mb-1">Vendor Location / Shop Address</label>
+                        <input type="text" id="postLocation" placeholder="Suite 42, Computer Village, Lagos" class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100 gold-border-glow">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-300 mb-1">Vendor Contact Phone / WhatsApp</label>
+                        <input type="text" id="postContact" placeholder="+234 800 123 4567" class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100 gold-border-glow">
+                    </div>
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit" class="w-full py-3 gold-gradient-bg font-extrabold text-black rounded-xl text-sm gold-glow hover:opacity-95 transition">
+                        Publish Product Listing
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 3: PRODUCT DETAIL MODAL -->
+    <div id="detailModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-darkCard border border-darkBorder w-full max-w-3xl rounded-2xl p-6 shadow-2xl relative my-8 max-h-[90vh] overflow-y-auto">
+            <button onclick="closeDetailModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-lg z-10">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div id="detailContent" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Content dynamically populated -->
+            </div>
+        </div>
+    </div>
+
+    <!-- SHOPPING CART MODAL -->
+    <div id="cartModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4 overflow-y-auto" onclick="if (event.target === this) closeCartModal()">
+        <div class="bg-darkCard border border-darkBorder w-full max-w-2xl rounded-2xl p-5 sm:p-6 shadow-2xl relative my-8 max-h-[90vh] overflow-y-auto">
+            <button type="button" onclick="closeCartModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-lg" aria-label="Close cart">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <h2 class="text-xl font-extrabold text-white mb-1"><i class="fa-solid fa-cart-shopping text-gold mr-2"></i>Your Cart</h2>
+            <p class="text-xs text-gray-400 mb-5">Review your selected products and quantities.</p>
+            <div id="cartItems" class="space-y-3"></div>
+            <div id="cartSummary" class="hidden mt-5 pt-4 border-t border-darkBorder">
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-sm font-semibold text-gray-300">Estimated subtotal</span>
+                    <span id="cartSubtotal" class="text-lg font-extrabold text-gold"></span>
+                </div>
+                <div class="rounded-xl border border-gold/30 bg-gold/10 p-3 text-xs text-gray-300">
+                    Payment checkout is not connected yet. Your cart is saved on this device; no payment has been taken.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="imageViewerModal" class="fixed inset-0 z-[60] bg-black/95 hidden flex items-center justify-center p-4" onclick="closeImageViewer()">
+        <button type="button" onclick="event.stopPropagation(); closeImageViewer()" class="absolute top-4 right-4 text-white text-3xl px-3" aria-label="Close image viewer">&times;</button>
+        <button id="expandedPrevButton" type="button" onclick="event.stopPropagation(); changeProductImage(-1)" class="absolute left-2 sm:left-6 text-white text-4xl px-3" aria-label="Previous image">&#8249;</button>
+        <img id="expandedProductImage" src="" alt="" class="max-h-[90vh] max-w-[85vw] object-contain" onclick="event.stopPropagation()" onerror="this.onerror=null;this.src='https://placehold.co/900x900/131b2e/ffd700?text=GSM+Item'">
+        <button id="expandedNextButton" type="button" onclick="event.stopPropagation(); changeProductImage(1)" class="absolute right-2 sm:right-6 text-white text-4xl px-3" aria-label="Next image">&#8250;</button>
+        <p id="expandedImageCounter" class="absolute bottom-4 text-sm text-white"></p>
+    </div>
+
+    <!-- MODAL 4: ANTI-SPAM GUIDANCE & COMMUNITY STANDARDS -->
+    <div id="guidanceModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-darkCard border border-darkBorder w-full max-w-2xl rounded-2xl p-6 shadow-2xl relative max-h-[85vh] overflow-y-auto">
+            <button onclick="closeGuidanceModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="flex items-center gap-3 mb-4 pb-3 border-b border-darkBorder">
+                <div class="w-10 h-10 rounded-xl bg-yellow-500/20 text-gold flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">Platform Guidance & Anti-Spam Policy</h3>
+                    <p class="text-xs text-gray-400">Strict rules ensuring genuine GSM hardware and scam-free trading</p>
+                </div>
+            </div>
+
+            <div class="space-y-4 text-xs text-gray-300 leading-relaxed">
+                <div class="bg-darkBg p-3 rounded-xl border border-darkBorder">
+                    <h4 class="font-bold text-gold text-sm mb-1"><i class="fa-solid fa-circle-check mr-1"></i> 1. Genuine Product Representation</h4>
+                    <p>All listings for GSM spare parts (IC chips, displays, ribbon flex cables) must clearly state whether they are OEM Original, High Copy, or Refurbished. Mislabeling grade is strictly prohibited.</p>
+                </div>
+
+                <div class="bg-darkBg p-3 rounded-xl border border-darkBorder">
+                    <h4 class="font-bold text-gold text-sm mb-1"><i class="fa-solid fa-ban mr-1"></i> 2. Zero Tolerance Anti-Spam & Duplicate Postings</h4>
+                    <p>Vendors posting duplicate listings within 24 hours or submitting spam text in descriptions will face instant account suspension. Automated bots are actively monitoring marketplace posts.</p>
+                </div>
+
+                <div class="bg-darkBg p-3 rounded-xl border border-darkBorder">
+                    <h4 class="font-bold text-gold text-sm mb-1"><i class="fa-solid fa-lock mr-1"></i> 3. Escrow & Secure Payment Advice</h4>
+                    <p>Never send direct wire transfers to unverified accounts. Always inspect repair equipment or devices upon arrival. Request video verification for high-value items.</p>
+                </div>
+
+                <div class="bg-darkBg p-3 rounded-xl border border-darkBorder">
+                    <h4 class="font-bold text-gold text-sm mb-1"><i class="fa-solid fa-triangle-exclamation mr-1"></i> 4. Reporting Fraudulent Listings</h4>
+                    <p>If you discover a fake product, stolen IMEI phone, or spam listing, click the "Report Fraud / Spam" button on the item card or footer to alert site moderators instantly.</p>
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-between items-center pt-4 border-t border-darkBorder">
+                <button onclick="openComplaintModal()" class="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/40 rounded-xl text-xs font-bold hover:bg-red-500/30 transition flex items-center gap-1">
+                    <i class="fa-solid fa-flag"></i> File a Complaint / Report Spam
+                </button>
+                <button onclick="closeGuidanceModal()" class="px-5 py-2 gold-gradient-bg text-black font-bold rounded-xl text-xs">
+                    I Understand & Accept
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 5: COMPLAINT / REPORT FORM -->
+    <div id="complaintModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-darkCard border border-darkBorder w-full max-w-lg rounded-2xl p-6 shadow-2xl relative">
+            <button onclick="closeComplaintModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold text-white">Submit a Complaint / Report Listing</h3>
+                    <p class="text-xs text-gray-400">Help keep GOLDEN EAGLE clean & spam-free</p>
+                </div>
+            </div>
+
+            <form onsubmit="handleComplaintSubmit(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Issue Category</label>
+                    <select id="complaintCategory" required class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100">
+                        <option value="Spam or Duplicate Post">Spam or Duplicate Post</option>
+                        <option value="Fake / Counterfeit Product">Fake / Counterfeit Product</option>
+                        <option value="Unreachable or Fraudulent Vendor">Unreachable or Fraudulent Vendor</option>
+                        <option value="Wrong Category or Misleading Title">Wrong Category or Misleading Title</option>
+                        <option value="Other Policy Violation">Other Policy Violation</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Product Title / Vendor Name (If applicable)</label>
+                    <input type="text" id="complaintTarget" placeholder="e.g. Listing #104 / Vendor TechHub" class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-300 mb-1">Detailed Explanation of Issue</label>
+                    <textarea id="complaintDetails" rows="3" required placeholder="Describe what happened or why this listing violates guidelines..." class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100"></textarea>
+                </div>
+
+                <button type="submit" class="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-sm transition">
+                    Submit Report to Guidance Team
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- AI CHAT FLOATING DRAWER (POWERED BY GEMINI) -->
+    <div id="aiDrawer" class="fixed bottom-20 right-4 sm:right-6 w-96 max-w-[calc(100vw-2rem)] bg-darkCard border border-darkBorder rounded-2xl shadow-2xl z-40 hidden flex flex-col h-[520px] overflow-hidden">
+        <!-- AI Header -->
+        <div class="p-3.5 bg-gradient-to-r from-darkCard to-darkBg border-b border-darkBorder flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-full gold-gradient-bg flex items-center justify-center text-black font-extrabold text-xs">
+                    🦅
+                </div>
+                <div>
+                    <h4 class="text-xs font-bold text-white flex items-center gap-1">
+                        Golden Eagle AI Assistant
+                        <span class="w-2 h-2 rounded-full bg-green-500 inline-block animate-pulse"></span>
+                    </h4>
+                    <p class="text-[10px] text-gray-400">Powered by Gemini AI • Smart & Fast</p>
+                </div>
+            </div>
+            <button onclick="toggleAiDrawer()" class="text-gray-400 hover:text-white text-sm">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- Quick Prompt Pills -->
+        <div class="px-3 py-2 bg-darkBg/80 border-b border-darkBorder flex gap-1.5 overflow-x-auto scrollbar-none text-[11px]">
+            <button onclick="sendQuickPrompt('How do I post a product as a vendor?')" class="whitespace-nowrap px-2.5 py-1 bg-darkCard border border-darkBorder hover:border-gold/50 rounded-full text-gray-300">
+                💡 How to post product?
+            </button>
+            <button onclick="sendQuickPrompt('How can I verify if GSM repair tools are original?')" class="whitespace-nowrap px-2.5 py-1 bg-darkCard border border-darkBorder hover:border-gold/50 rounded-full text-gray-300">
+                🔧 Verify genuine tools
+            </button>
+            <button onclick="sendQuickPrompt('What is the anti-spam policy for sellers?')" class="whitespace-nowrap px-2.5 py-1 bg-darkCard border border-darkBorder hover:border-gold/50 rounded-full text-gray-300">
+                🛡️ Anti-spam rules
+            </button>
+        </div>
+
+        <!-- Chat History -->
+        <div id="aiChatBox" class="flex-1 p-3 overflow-y-auto space-y-3 text-xs">
+            <div class="flex gap-2 items-start">
+                <div class="w-6 h-6 rounded-full gold-gradient-bg flex-shrink-0 flex items-center justify-center text-[10px] text-black font-bold">🦅</div>
+                <div class="bg-darkBg border border-darkBorder rounded-xl p-3 text-gray-200 max-w-[85%] leading-relaxed">
+                    Hello! I am your <strong>Golden Eagle Smart Assistant</strong>. Ask me anything about posting products, GSM repair specs, troubleshooting mobile devices, or platform rules!
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Input Form -->
+        <form onsubmit="handleAiSendMessage(event)" class="p-3 bg-darkBg border-t border-darkBorder flex gap-2">
+            <input type="text" id="aiInput" placeholder="Ask AI about GSM parts, repairs, rules..." class="flex-1 bg-darkCard border border-darkBorder text-xs text-white rounded-xl px-3 py-2 gold-border-glow">
+            <button type="submit" id="aiSendBtn" class="px-3 py-2 gold-gradient-bg text-black font-bold rounded-xl text-xs hover:opacity-90 transition">
+                <i class="fa-solid fa-paper-plane"></i>
+            </button>
+        </form>
+    </div>
+
+    <!-- AI FLOATING BUTTON TOGGLE -->
+    <button onclick="toggleAiDrawer()" class="fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full gold-gradient-bg text-black font-bold flex items-center justify-center shadow-2xl gold-glow hover:scale-105 transition transform">
+        <span class="text-2xl">🦅</span>
+    </button>
+
+    <!-- NOTIFICATION TOAST CONTAINER -->
+    <div id="toastContainer" class="fixed top-20 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- APPLICATION LOGIC SCRIPT -->
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAuEIGypz6qdsHfTYuSg4nS-CloXcqDGGc",
+            authDomain: "golden-eagle-marketplace.firebaseapp.com",
+            projectId: "golden-eagle-marketplace",
+            storageBucket: "golden-eagle-marketplace.firebasestorage.app",
+            messagingSenderId: "120512676475",
+            appId: "1:120512676475:web:9f451f54ff3d36771258de",
+            measurementId: "G-M8S05C406W"
+        };
+        const firebaseApp = firebase.initializeApp(firebaseConfig);
+        const firebaseAuth = firebase.auth();
+
+        /* ==========================================================================
+           STATE MANAGEMENT & LOCAL STORAGE PERSISTENCE
+           ========================================================================== */
+
+        // Default initial products if localStorage is empty
+        const initialProducts = [
+            {
+                id: 'prod-101',
+                title: 'iPhone 15 Pro Max - 256GB Natural Titanium (Grade A Unlocked)',
+                category: 'Smartphones & Feature Phones',
+                price: 1350000,
+                stock: 5,
+                imageUrl: 'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=500&q=80',
+                shortDesc: 'Factory unlocked, pristine condition with 100% battery health & original box.',
+                fullDesc: 'Original Apple iPhone 15 Pro Max in Natural Titanium. 256GB storage. Super Retina XDR OLED display, A17 Pro chip. Fully tested by Golden Eagle technicians. Comes with 6 months warranty.',
+                vendorName: 'Apex Mobile Hub',
+                vendorLocation: 'Computer Village, Ikeja, Lagos',
+                vendorContact: '+234 802 111 2233',
+                rating: 4.9,
+                createdAt: new Date().toISOString()
+            },
+            {
+                id: 'prod-102',
+                title: 'QUICK 861DW 1000W High Power SMD Rework Hot Air Station',
+                category: 'GSM Repair Tools & Parts',
+                price: 165000,
+                stock: 12,
+                imageUrl: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=500&q=80',
+                shortDesc: 'Professional micro-soldering station for motherboard repair & IC chip swapping.',
+                fullDesc: 'Industry standard QUICK 861DW hot air station. Features 1000W heating capacity, CH1, CH2, CH3 preset memory channels, auto-sleep sensor handle, and precision digital airflow control.',
+                vendorName: 'MicroTech Repair Tools',
+                vendorLocation: 'Garrison Electronics Market, Port Harcourt',
+                vendorContact: '+234 803 444 5566',
+                rating: 5.0,
+                createdAt: new Date().toISOString()
+            },
+            {
+                id: 'prod-103',
+                title: 'Samsung Galaxy S24 Ultra Original AMOLED Screen Assembly',
+                category: 'GSM Repair Tools & Parts',
+                price: 245000,
+                stock: 8,
+                imageUrl: 'https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=500&q=80',
+                shortDesc: 'Original frame display replacement module with touch digitizer & S-Pen support.',
+                fullDesc: '100% genuine Samsung replacement screen with outer frame. Supports high refresh rate and fingerprint sensor calibration. Perfect for technician replacements.',
+                vendorName: 'Eagle Spare Parts Ltd',
+                vendorLocation: 'Alaba International Market, Lagos',
+                vendorContact: '+234 814 999 8877',
+                rating: 4.8,
+                createdAt: new Date().toISOString()
+            },
+            {
+                id: 'prod-104',
+                title: 'Anker PowerCore 20,000mAh Fast Charging Power Bank',
+                category: 'Mobile Accessories',
+                price: 38000,
+                stock: 25,
+                imageUrl: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=500&q=80',
+                shortDesc: 'Dual USB output high-capacity portable charger for phones & tablets.',
+                fullDesc: 'High-speed Anker PowerIQ technology. Delivers up to 5 full phone charges. Flame-retardant casing with multi-protect safety system.',
+                vendorName: 'GadgetZone Store',
+                vendorLocation: 'Wuse Market, Abuja',
+                vendorContact: '+234 809 333 1122',
+                rating: 4.7,
+                createdAt: new Date().toISOString()
+            }
+        ];
+
+        // Global State variables
+        let products = [];
+        let currentUser = null;
+        let selectedCategory = 'All';
+        let searchQuery = '';
+        let currentAuthTab = 'signin';
+        let currentAuthMethod = 'email';
+        let phoneConfirmationResult = null;
+        let phoneRecaptchaVerifier = null;
+        let pendingPhoneProfile = null;
+        let allowUnverifiedEmailSession = false;
+        let activeProductImages = [];
+        let activeProductImageIndex = 0;
+        let activeProductTitle = '';
+        let cartItems = [];
+
+        const categories = [
+            'All',
+            'Smartphones & Feature Phones',
+            'GSM Repair Tools & Parts',
+            'Mobile Accessories',
+            'Tablets & Wearables',
+            'Network & SIM Equipment'
+        ];
+
+        /* ==========================================================================
+           INITIALIZATION & LOCALSTORAGE MANAGEMENT
+           ========================================================================== */
+
+        window.onload = function() {
+            loadProductsData();
+            loadCartData();
+            renderAuthNav();
+            renderCategoryTabs();
+            renderProducts();
+            renderCart();
+            initializeFirebaseAuth();
+        };
+
+        // --- AUTO-DETECT ORDER LINK FROM WEBSITE ---
+document.addEventListener("DOMContentLoaded", () => {
+    // 1. Read the address bar parameters (e.g. ?productId=1)
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetProductId = urlParams.get('productId');
+
+    // 2. If a productId was passed in the URL, open the modal immediately
+    if (targetProductId) {
+        // Find the product in our list
+        const foundProduct = products.find(p => p.id == targetProductId);
+        
+        if (foundProduct) {
+            // Open the product modal for this exact item
+            openModal(foundProduct.id);
+        } else {
+            console.warn("Product ID " + targetProductId + " not found in system.");
+        }
+    }
+});
+
+        function initializeFirebaseAuth() {
+            firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+                .catch(error => showToast(getAuthErrorMessage(error), 'error'));
+
+            firebaseAuth.onAuthStateChanged(async user => {
+                if (user && user.providerData.some(provider => provider.providerId === 'password') && !user.emailVerified) {
+                    currentUser = null;
+                    renderAuthNav();
+                    if (!allowUnverifiedEmailSession) {
+                        firebaseAuth.signOut().catch(error => showToast(getAuthErrorMessage(error), 'error'));
+                    }
+                    return;
+                }
+
+                const profile = user ? loadAccountProfile(user.uid) : null;
+                const profileName = typeof profile?.name === 'string' && profile.name.trim()
+                    ? profile.name.trim()
+                    : '';
+                const profileRole = profile?.role === 'Vendor' || profile?.role === 'Buyer'
+                    ? profile.role
+                    : 'Buyer';
+                currentUser = user ? {
+                    uid: user.uid,
+                    name: profileName || user.displayName || user.email || user.phoneNumber || 'Marketplace User',
+                    email: user.email || '',
+                    phoneNumber: user.phoneNumber || '',
+                    role: profileRole
+                } : null;
+                renderAuthNav();
+            });
+        }
+
+        function loadProductsData() {
+            const storedProducts = localStorage.getItem('goldenEagle_products');
+            if (storedProducts) {
+                try {
+                    products = JSON.parse(storedProducts);
+                } catch (e) {
+                    products = initialProducts;
+                    saveProductsData();
+                }
+            } else {
+                products = initialProducts;
+                saveProductsData();
+            }
+        }
+
+        function saveProductsData() {
+            localStorage.setItem('goldenEagle_products', JSON.stringify(products));
+        }
+
+        function loadCartData() {
+            try {
+                const storedCart = JSON.parse(localStorage.getItem('goldenEagle_cart') || '[]');
+                cartItems = Array.isArray(storedCart)
+                    ? storedCart.filter(item =>
+                        item &&
+                        typeof item.productId === 'string' &&
+                        Number.isInteger(item.quantity) &&
+                        item.quantity > 0
+                    )
+                    : [];
+            } catch (error) {
+                console.error('Unable to read the saved cart.', error);
+                cartItems = [];
+                showToast('The saved cart could not be read and has been cleared.', 'error');
+            }
+        }
+
+        function saveCartData() {
+            localStorage.setItem('goldenEagle_cart', JSON.stringify(cartItems));
+        }
+
+        function saveAccountProfile(uid, profile) {
+            localStorage.setItem(`goldenEagle_profile_${uid}`, JSON.stringify(profile));
+        }
+
+        function loadAccountProfile(uid) {
+            try {
+                return JSON.parse(localStorage.getItem(`goldenEagle_profile_${uid}`) || 'null');
+            } catch (error) {
+                console.error('Unable to read the local account profile.', error);
+                return null;
+            }
+        }
+
+        /* ==========================================================================
+           NAVIGATION & AUTHENTICATION RENDER & HANDLERS
+           ========================================================================== */
+
+        function renderAuthNav() {
+            const container = document.getElementById('authNavSection');
+            if (currentUser) {
+                const displayName = currentUser.name || currentUser.email || currentUser.phoneNumber || 'Marketplace User';
+                container.innerHTML = `
+                    <div class="flex items-center gap-2 bg-darkBg border border-darkBorder rounded-full py-1.5 px-3">
+                        <div class="w-6 h-6 rounded-full gold-gradient-bg flex items-center justify-center text-black font-extrabold text-[10px]">
+                            ${escapeHtml(displayName.charAt(0).toUpperCase())}
+                        </div>
+                        <div class="text-left hidden md:block">
+                            <span class="block text-xs font-bold text-white leading-none">${escapeHtml(displayName)}</span>
+                            <span class="block text-[9px] text-gold font-semibold uppercase">${escapeHtml(currentUser.role)}</span>
+                        </div>
+                        <button onclick="handleSignOut()" class="ml-1 text-gray-400 hover:text-red-400 text-xs" title="Sign Out">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <button onclick="openAuthModal('signin')" class="px-4 py-2 text-xs font-bold gold-gradient-bg text-black rounded-lg gold-glow hover:opacity-95 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-user-lock text-xs"></i>
+                        <span>Sign In / Register</span>
+                    </button>
+                `;
+            }
+        }
+
+        function openAuthModal(tab = 'signin') {
+            setAuthMethod('email');
+            setAuthTab(tab);
+            document.getElementById('authModal').classList.remove('hidden');
+        }
+
+        function closeAuthModal() {
+            document.getElementById('authModal').classList.add('hidden');
+            clearPhoneRecaptcha();
+            phoneConfirmationResult = null;
+        }
+
+        function setAuthTab(tab) {
+            currentAuthTab = tab;
+            phoneConfirmationResult = null;
+            pendingPhoneProfile = null;
+            document.getElementById('smsVerificationCode').value = '';
+            document.getElementById('smsCodeGroup').classList.add('hidden');
+            clearPhoneRecaptcha();
+            const signBtn = document.getElementById('tabSignInBtn');
+            const regBtn = document.getElementById('tabRegisterBtn');
+            const title = document.getElementById('authModalTitle');
+            const submitBtn = document.getElementById('authSubmitBtn');
+            const roleGroup = document.getElementById('roleSelectorGroup');
+            const nameGroup = document.getElementById('authNameGroup');
+            const nameInput = document.getElementById('authName');
+            const forgotPasswordBtn = document.getElementById('forgotPasswordBtn');
+
+            if (tab === 'signin') {
+                signBtn.className = "flex-1 py-1.5 text-xs font-bold rounded-md bg-gold text-black transition";
+                regBtn.className = "flex-1 py-1.5 text-xs font-bold rounded-md text-gray-400 hover:text-white transition";
+                title.innerText = "Sign In to Golden Eagle";
+                roleGroup.classList.add('hidden');
+            } else {
+                regBtn.className = "flex-1 py-1.5 text-xs font-bold rounded-md bg-gold text-black transition";
+                signBtn.className = "flex-1 py-1.5 text-xs font-bold rounded-md text-gray-400 hover:text-white transition";
+                title.innerText = "Create Marketplace Account";
+                roleGroup.classList.remove('hidden');
+            }
+
+            const isRegistering = tab === 'register';
+            nameGroup.classList.toggle('hidden', !isRegistering);
+            nameInput.required = isRegistering;
+            forgotPasswordBtn.classList.toggle('hidden', isRegistering || currentAuthMethod !== 'email');
+            document.getElementById('authErrorMessage').classList.add('hidden');
+            updateAuthMethodFields();
+        }
+
+        function setAuthMethod(method) {
+            currentAuthMethod = method;
+            phoneConfirmationResult = null;
+            pendingPhoneProfile = null;
+            document.getElementById('smsCodeGroup').classList.add('hidden');
+            document.getElementById('smsVerificationCode').required = false;
+            document.getElementById('smsVerificationCode').value = '';
+            clearPhoneRecaptcha();
+            updateAuthMethodFields();
+        }
+
+        function updateAuthMethodFields() {
+            const emailMethod = currentAuthMethod === 'email';
+            const identifier = document.getElementById('authIdentifier');
+            const passwordGroup = document.getElementById('authPasswordGroup');
+            const password = document.getElementById('authPassword');
+            const nameGroup = document.getElementById('authNameGroup');
+            const nameInput = document.getElementById('authName');
+            const forgotPasswordBtn = document.getElementById('forgotPasswordBtn');
+            const submitBtn = document.getElementById('authSubmitBtn');
+            const helpText = document.getElementById('authHelpText');
+            const emailButton = document.getElementById('authEmailMethodBtn');
+            const phoneButton = document.getElementById('authPhoneMethodBtn');
+            const isRegistering = currentAuthTab === 'register';
+            const waitingForCode = Boolean(phoneConfirmationResult);
+
+            identifier.type = emailMethod ? 'email' : 'tel';
+            identifier.autocomplete = emailMethod ? 'email' : 'tel';
+            identifier.placeholder = emailMethod ? 'you@example.com' : '+2348012345678';
+            document.getElementById('authIdentifierLabel').textContent = emailMethod ? 'Email Address' : 'Phone Number (include country code)';
+            passwordGroup.classList.toggle('hidden', !emailMethod);
+            password.required = emailMethod;
+            password.autocomplete = isRegistering ? 'new-password' : 'current-password';
+            nameGroup.classList.toggle('hidden', !isRegistering);
+            nameInput.required = isRegistering;
+            document.getElementById('phoneRecaptcha').classList.toggle('hidden', emailMethod);
+            document.getElementById('smsCodeGroup').classList.toggle('hidden', emailMethod || !waitingForCode);
+            document.getElementById('smsVerificationCode').required = !emailMethod && waitingForCode;
+            forgotPasswordBtn.classList.toggle('hidden', !emailMethod || isRegistering);
+            document.getElementById('roleSelectorGroup').classList.toggle('hidden', !isRegistering);
+            emailButton.className = emailMethod
+                ? 'py-2 text-xs font-bold rounded-lg bg-gold text-black'
+                : 'py-2 text-xs font-bold rounded-lg bg-darkBg border border-darkBorder text-gray-300';
+            phoneButton.className = emailMethod
+                ? 'py-2 text-xs font-bold rounded-lg bg-darkBg border border-darkBorder text-gray-300'
+                : 'py-2 text-xs font-bold rounded-lg bg-gold text-black';
+
+            if (emailMethod) {
+                submitBtn.textContent = isRegistering ? 'Create Account & Verify Email' : 'Sign In';
+                helpText.textContent = 'Email verification and password recovery links are sent to your inbox.';
+            } else if (window.location.protocol === 'file:') {
+                submitBtn.textContent = waitingForCode ? 'Verify SMS Code' : 'Send SMS Code';
+                helpText.textContent = 'Phone verification cannot run from a file:// address. Open this page on localhost or your HTTPS website, and authorize that domain in Firebase.';
+            } else {
+                submitBtn.textContent = waitingForCode ? 'Verify SMS Code' : 'Send SMS Code';
+                helpText.textContent = 'Use international format (for example, +2348012345678). Firebase Phone Authentication and reCAPTCHA must be enabled for this website domain.';
+            }
+        }
+
+        function showAuthError(message) {
+            const error = document.getElementById('authErrorMessage');
+            error.textContent = message;
+            error.classList.remove('hidden');
+        }
+
+        function getAuthErrorMessage(error) {
+            const messages = {
+                'auth/email-already-in-use': 'That email already has an account. Try signing in instead.',
+                'auth/invalid-email': 'Enter a valid email address.',
+                'auth/invalid-phone-number': 'Enter a valid phone number with country code, for example +2348012345678.',
+                'auth/invalid-app-credential': 'Phone verification could not complete. Check the authorized website domain and reCAPTCHA settings in Firebase.',
+                'auth/internal-error': 'Firebase could not start phone verification. Open this app on localhost or HTTPS (not file://), enable Phone Authentication, and authorize the website domain in Firebase Console.',
+                'auth/missing-phone-number': 'Enter your phone number with its international country code.',
+                'auth/invalid-credential': 'The email/phone or password is incorrect.',
+                'auth/user-not-found': 'No account was found. Check your details or create an account.',
+                'auth/wrong-password': 'The password is incorrect.',
+                'auth/weak-password': 'Choose a password with at least 8 characters.',
+                'auth/too-many-requests': 'Too many attempts. Wait a while and try again.',
+                'auth/operation-not-allowed': 'This sign-in method is not enabled in Firebase Authentication yet.',
+                'auth/unauthorized-domain': 'This website domain is not authorized in Firebase Authentication. Add the domain in Firebase Console.',
+                'auth/captcha-check-failed': 'The reCAPTCHA check failed. Please try again.',
+                'auth/invalid-verification-code': 'That SMS code is incorrect or expired. Request a new code.',
+                'auth/code-expired': 'That SMS code expired. Request a new code.',
+                'auth/quota-exceeded': 'Firebase SMS quota has been reached. Try again later or check Firebase billing and limits.'
+            };
+            return messages[error.code] || error.message || 'Authentication failed. Please try again.';
+        }
+
+        async function handleAuthSubmit(event) {
+            event.preventDefault();
+            document.getElementById('authErrorMessage').classList.add('hidden');
+
+            try {
+                if (currentAuthMethod === 'phone') {
+                    if (!phoneConfirmationResult) {
+                        await sendPhoneCode();
+                        return;
+                    }
+                    await verifyPhoneCode();
+                    return;
+                }
+
+                const identifier = document.getElementById('authIdentifier').value.trim();
+                const password = document.getElementById('authPassword').value;
+                if (currentAuthTab === 'register') {
+                    const name = document.getElementById('authName').value.trim();
+                    const selectedRole = document.querySelector('input[name="userRole"]:checked')?.value || 'Buyer';
+                    allowUnverifiedEmailSession = true;
+                    try {
+                        const credential = await firebaseAuth.createUserWithEmailAndPassword(identifier, password);
+                        await credential.user.updateProfile({ displayName: name });
+                        saveAccountProfile(credential.user.uid, { name, role: selectedRole });
+                        await credential.user.sendEmailVerification();
+                        await firebaseAuth.signOut();
+                    } finally {
+                        allowUnverifiedEmailSession = false;
+                        if (firebaseAuth.currentUser && !firebaseAuth.currentUser.emailVerified) {
+                            await firebaseAuth.signOut();
+                        }
+                    }
+                    closeAuthModal();
+                    showToast('Account created. Check your email for the verification link before signing in.', 'success');
+                    return;
+                }
+
+                allowUnverifiedEmailSession = true;
+                try {
+                    const credential = await firebaseAuth.signInWithEmailAndPassword(identifier, password);
+                    if (!credential.user.emailVerified) {
+                        await credential.user.sendEmailVerification();
+                        await firebaseAuth.signOut();
+                        showAuthError('Verify your email using the link we just sent, then sign in again.');
+                        return;
+                    }
+                } finally {
+                    allowUnverifiedEmailSession = false;
+                }
+
+                closeAuthModal();
+                showToast('You are signed in to Golden Eagle.', 'success');
+            } catch (error) {
+                allowUnverifiedEmailSession = false;
+                showAuthError(getAuthErrorMessage(error));
+            }
+        }
+
+        async function sendPhoneCode(resend = false) {
+            document.getElementById('authErrorMessage').classList.add('hidden');
+            if (window.location.protocol !== 'http:' && window.location.protocol !== 'https:') {
+                showAuthError('Phone verification requires the app to be served from localhost or HTTPS. Open it through a local web server or your deployed HTTPS website, then authorize that domain in Firebase Console.');
+                return;
+            }
+
+            const phoneNumber = document.getElementById('authIdentifier').value.trim().replace(/[()\s-]/g, '');
+            if (!/^\+[1-9]\d{7,14}$/.test(phoneNumber)) {
+                showAuthError('Enter a valid phone number in international format, for example +2348012345678.');
+                return;
+            }
+
+            try {
+                if (resend) clearPhoneRecaptcha();
+                if (!phoneRecaptchaVerifier) {
+                    phoneRecaptchaVerifier = new firebase.auth.RecaptchaVerifier('phoneRecaptcha', {
+                        size: 'normal'
+                    });
+                    await phoneRecaptchaVerifier.render();
+                }
+
+                phoneConfirmationResult = await firebaseAuth.signInWithPhoneNumber(phoneNumber, phoneRecaptchaVerifier);
+                if (currentAuthTab === 'register') {
+                    pendingPhoneProfile = {
+                        name: document.getElementById('authName').value.trim(),
+                        role: document.querySelector('input[name="userRole"]:checked')?.value || 'Buyer'
+                    };
+                } else {
+                    pendingPhoneProfile = null;
+                }
+                document.getElementById('smsCodeGroup').classList.remove('hidden');
+                document.getElementById('smsVerificationCode').required = true;
+                updateAuthMethodFields();
+                showToast('Verification code sent by SMS.', 'success');
+            } catch (error) {
+                phoneConfirmationResult = null;
+                clearPhoneRecaptcha();
+                showAuthError(getAuthErrorMessage(error));
+            }
+        }
+
+        async function verifyPhoneCode() {
+            const code = document.getElementById('smsVerificationCode').value.trim();
+            if (!/^\d{6}$/.test(code)) {
+                showAuthError('Enter the 6-digit code sent to your phone.');
+                return;
+            }
+
+            try {
+                const credential = await phoneConfirmationResult.confirm(code);
+                const user = credential.user;
+                if (pendingPhoneProfile) {
+                    await user.updateProfile({ displayName: pendingPhoneProfile.name });
+                    saveAccountProfile(user.uid, pendingPhoneProfile);
+                } else if (!loadAccountProfile(user.uid)) {
+                    saveAccountProfile(user.uid, { name: user.phoneNumber, role: 'Buyer' });
+                }
+                phoneConfirmationResult = null;
+                pendingPhoneProfile = null;
+                closeAuthModal();
+                showToast('Your phone number is verified and you are signed in.', 'success');
+            } catch (error) {
+                showAuthError(getAuthErrorMessage(error));
+            }
+        }
+
+        async function sendPasswordReset() {
+            const email = document.getElementById('authIdentifier').value.trim();
+            if (!email) {
+                showAuthError('Enter your email address first, then request a password reset.');
+                return;
+            }
+            try {
+                await firebaseAuth.sendPasswordResetEmail(email);
+                showToast('If an account exists for that email, a password reset link has been sent.', 'success');
+            } catch (error) {
+                showAuthError(getAuthErrorMessage(error));
+            }
+        }
+
+        function clearPhoneRecaptcha() {
+            if (phoneRecaptchaVerifier) {
+                phoneRecaptchaVerifier.clear();
+                phoneRecaptchaVerifier = null;
+            }
+            const container = document.getElementById('phoneRecaptcha');
+            if (container) container.replaceChildren();
+        }
+
+        async function handleSignOut() {
+            try {
+                await firebaseAuth.signOut();
+                showToast('Signed out successfully.', 'info');
+            } catch (error) {
+                showToast(getAuthErrorMessage(error), 'error');
+            }
+        }
+
+        function handlePostProductClick() {
+            if (!currentUser) {
+                showToast('Authentication Required: Please sign in or create a Vendor account.', 'error');
+                openAuthModal('register');
+                return;
+            }
+
+            if (currentUser.role !== 'Vendor') {
+                showToast('Vendor Account Required. Your current role is Buyer. Please register as a Vendor to post products.', 'error');
+                openAuthModal('register');
+                return;
+            }
+
+            openPostModal();
+        }
+
+        /* ==========================================================================
+           PRODUCT POSTING PORTAL (VENDOR)
+           ========================================================================== */
+
+        function openPostModal() {
+            if (!currentUser || currentUser.role !== 'Vendor') {
+                handlePostProductClick();
+                return;
+            }
+            document.getElementById('postModal').classList.remove('hidden');
+        }
+
+        function closePostModal() {
+            document.getElementById('postModal').classList.add('hidden');
+        }
+
+        function setPresetImg(url) {
+            document.getElementById('postImageUrl').value = url;
+        }
+
+        function handleProductSubmit(e) {
+            e.preventDefault();
+
+            if (!currentUser || currentUser.role !== 'Vendor') {
+                showToast('Unauthorized. Vendor role required.', 'error');
+                return;
+            }
+
+            const imageUrls = document.getElementById('postImageUrl').value
+                .split(/[\n,]+/)
+                .map(url => url.trim())
+                .filter(Boolean);
+            if (imageUrls.length === 0 || imageUrls.some(url => {
+                try {
+                    const parsedUrl = new URL(url);
+                    return parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:';
+                } catch {
+                    return true;
+                }
+            })) {
+                showToast('Enter one or more valid http or https image URLs.', 'error');
+                return;
+            }
+
+            const newProd = {
+                id: 'prod-' + Date.now(),
+                title: document.getElementById('postTitle').value.trim(),
+                category: document.getElementById('postCategory').value,
+                price: parseFloat(document.getElementById('postPrice').value),
+                stock: parseInt(document.getElementById('postStock').value),
+                imageUrl: imageUrls[0],
+                imageUrls,
+                shortDesc: document.getElementById('postShortDesc').value.trim(),
+                fullDesc: document.getElementById('postFullDesc').value.trim() || document.getElementById('postShortDesc').value.trim(),
+                vendorName: currentUser.name || 'Verified Vendor',
+                vendorLocation: document.getElementById('postLocation').value.trim() || 'Central Electronics Hub',
+                vendorContact: document.getElementById('postContact').value.trim() || '+234 Market Desk',
+                rating: 5.0,
+                createdAt: new Date().toISOString()
+            };
+
+            products.unshift(newProd);
+            saveProductsData();
+            renderProducts();
+            closePostModal();
+            document.getElementById('postProductForm').reset();
+            showToast('Product successfully published to marketplace!', 'success');
+        }
+
+        /* ==========================================================================
+           CATEGORIES & MARKETPLACE RENDERING
+           ========================================================================== */
+
+        function renderCategoryTabs() {
+            const container = document.getElementById('categoryTabs');
+            container.innerHTML = categories.map(cat => {
+                const isActive = cat === selectedCategory;
+                return `
+                    <button onclick="filterCategory('${cat}')" 
+                        class="px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                            isActive 
+                            ? 'gold-gradient-bg text-black gold-glow' 
+                            : 'bg-darkCard text-gray-300 hover:text-white border border-darkBorder hover:border-gold/30'
+                        }">
+                        ${cat}
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function filterCategory(cat) {
+            selectedCategory = cat;
+            renderCategoryTabs();
+            renderProducts();
+        }
+
+        function handleSearch(event) {
+            if (event) event.preventDefault();
+            searchQuery = document.getElementById('searchInput').value.trim().toLowerCase();
+            renderProducts();
+        }
+
+        function resetFilters() {
+            selectedCategory = 'All';
+            searchQuery = '';
+            document.getElementById('searchInput').value = '';
+            renderCategoryTabs();
+            renderProducts();
+        }
+
+        function renderProducts() {
+            const grid = document.getElementById('productGrid');
+            const empty = document.getElementById('emptyState');
+            const countBadge = document.getElementById('productCountBadge');
+
+            const filtered = products.filter(p => {
+                const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
+                const searchableText = [
+                    p.title,
+                    p.category,
+                    p.vendorName,
+                    p.vendorLocation,
+                    p.shortDesc,
+                    p.fullDesc
+                ].filter(value => typeof value === 'string').join(' ').toLowerCase();
+                const matchesQuery = !searchQuery || searchQuery
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .every(term => searchableText.includes(term));
+                return matchesCat && matchesQuery;
+            });
+
+            countBadge.innerText = `Showing ${filtered.length} listings`;
+
+            if (filtered.length === 0) {
+                grid.innerHTML = '';
+                empty.classList.remove('hidden');
+                return;
+            }
+
+            empty.classList.add('hidden');
+            grid.innerHTML = filtered.map(prod => `
+                <div class="bg-darkCard border border-darkBorder rounded-2xl overflow-hidden hover:border-gold/50 transition duration-300 flex flex-col group shadow-lg">
+                    <!-- Image Container -->
+                    <div class="relative h-48 bg-darkBg overflow-hidden cursor-zoom-in" onclick="openDetailModal('${prod.id}')">
+                        <img src="${getProductImages(prod)[0] || ''}" alt="${prod.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-500" onerror="this.onerror=null;this.src='https://placehold.co/500x350/131b2e/ffd700?text=GOLDEN+EAGLE+GSM'">
+                        <div class="absolute bottom-3 left-3 bg-black/75 backdrop-blur-md px-2 py-1 rounded text-[10px] text-gray-200">
+                            <i class="fa-solid fa-expand mr-1"></i>Tap to view ${getProductImages(prod).length > 1 ? `${getProductImages(prod).length} photos` : 'photo'}
+                        </div>
+                        <div class="absolute top-3 left-3 bg-darkBg/90 backdrop-blur-md px-2.5 py-1 rounded-full border border-gold/40 text-[10px] font-bold text-gold flex items-center gap-1">
+                            <span>🦅 Verified</span>
+                        </div>
+                        <div class="absolute bottom-3 right-3 bg-black/75 backdrop-blur-md px-2 py-0.5 rounded text-[10px] text-gray-300">
+                            Stock: ${prod.stock}
+                        </div>
+                    </div>
+
+                    <!-- Card Body -->
+                    <div class="p-4 flex-1 flex flex-col justify-between">
+                        <div>
+                            <div class="text-[11px] text-gray-400 font-medium mb-1 truncate">${prod.category}</div>
+                            <h3 onclick="openDetailModal('${prod.id}')" class="text-sm font-bold text-white hover:text-gold transition cursor-pointer line-clamp-2 mb-2 leading-snug">
+                                ${prod.title}
+                            </h3>
+                            <p class="text-xs text-gray-400 line-clamp-2 mb-3">${prod.shortDesc}</p>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center justify-between mb-3 border-t border-darkBorder/60 pt-2 text-[11px] text-gray-400">
+                                <span class="truncate max-w-[130px]"><i class="fa-solid fa-store text-gold mr-1"></i>${prod.vendorName}</span>
+                                <span class="text-yellow-400 font-bold"><i class="fa-solid fa-star text-xs"></i> ${prod.rating || 5.0}</span>
+                            </div>
+
+                            <div class="flex items-center justify-between gap-2">
+                                <div>
+                                    <span class="text-xs text-gray-400 block leading-none">Price</span>
+                                    <span class="text-base font-extrabold text-gold">₦${prod.price.toLocaleString()}</span>
+                                </div>
+                                <button onclick="openDetailModal('${prod.id}')" class="px-3 py-1.5 text-xs font-bold gold-gradient-bg text-black rounded-xl gold-glow hover:opacity-90 transition flex items-center gap-1">
+                                    <span>Order Now</span>
+                                    <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        /* ==========================================================================
+           PRODUCT DETAIL MODAL & ORDER FLOW
+           ========================================================================== */
+
+        function getProductImages(prod) {
+            const imageUrls = Array.isArray(prod.imageUrls) ? prod.imageUrls : [];
+            return [...new Set([prod.imageUrl, ...imageUrls]
+                .filter(url => typeof url === 'string' && url.trim())
+                .map(url => url.trim()))];
+        }
+
+        function openDetailModal(id) {
+            const prod = products.find(p => p.id === id);
+            if (!prod) return;
+
+            activeProductImages = getProductImages(prod);
+            activeProductImageIndex = 0;
+            activeProductTitle = prod.title;
+            const container = document.getElementById('detailContent');
+            container.innerHTML = `
+                <div class="bg-darkBg rounded-xl overflow-hidden border border-darkBorder p-2">
+                    <img id="detailProductImage" src="${activeProductImages[0] || ''}" alt="${prod.title}" class="w-full max-h-[65vh] object-contain rounded-lg cursor-zoom-in" onclick="openImageViewer()" onerror="this.onerror=null;this.src='https://placehold.co/500x350/131b2e/ffd700?text=GSM+Item'">
+                    <div id="productImageGallery" class="hidden mt-3">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs text-gray-400">Product photos</span>
+                            <span id="productImageCounter" class="text-xs text-gray-400"></span>
+                        </div>
+                        <div id="productImageThumbnails" class="flex gap-2 overflow-x-auto pb-1"></div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col justify-between">
+                    <div>
+                        <span class="text-xs font-bold text-gold bg-gold/10 border border-gold/30 px-3 py-1 rounded-full inline-block mb-2">
+                            ${prod.category}
+                        </span>
+                        <h2 class="text-xl font-extrabold text-white mb-2 leading-snug">${prod.title}</h2>
+                        
+                        <div class="text-2xl font-black text-gold mb-4">₦${prod.price.toLocaleString()}</div>
+
+                        <div class="bg-darkBg p-3 rounded-xl border border-darkBorder mb-4 space-y-1.5 text-xs">
+                            <div class="flex justify-between"><span class="text-gray-400">Vendor:</span> <span class="text-white font-semibold">${prod.vendorName}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-400">Location:</span> <span class="text-gray-200">${prod.vendorLocation || 'Main Electronics Hub'}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-400">Contact / Order Hotline:</span> <span class="text-gold font-bold">${prod.vendorContact || 'Direct Eagle Desk'}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-400">Availability:</span> <span class="text-green-400 font-semibold">${prod.stock} Units in stock</span></div>
+                        </div>
+
+                        <div class="mb-4">
+                            <h4 class="text-xs font-bold text-gray-300 uppercase tracking-wider mb-1">Product Description</h4>
+                            <p class="text-xs text-gray-300 leading-relaxed">${prod.fullDesc || prod.shortDesc}</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2 pt-3 border-t border-darkBorder">
+                        <button onclick="addToCart('${prod.id}')" class="w-full py-3 gold-gradient-bg font-extrabold text-black rounded-xl text-sm gold-glow hover:opacity-95 transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-cart-plus"></i> Add to Cart
+                        </button>
+                        
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="askAiAboutItem('${prod.title}')" class="py-2 bg-darkBg border border-darkBorder hover:border-gold/50 text-gray-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1">
+                                <i class="fa-solid fa-robot text-gold"></i> Ask AI About Item
+                            </button>
+                            <button onclick="openComplaintModal('${prod.title}')" class="py-2 bg-darkBg border border-darkBorder hover:border-red-500/50 text-gray-400 hover:text-red-400 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1">
+                                <i class="fa-solid fa-flag text-xs"></i> Report Item
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            renderProductImageGallery();
+            document.getElementById('detailModal').classList.remove('hidden');
+        }
+
+        function renderProductImageGallery() {
+            const image = document.getElementById('detailProductImage');
+            if (!image || activeProductImages.length === 0) return;
+
+            image.src = activeProductImages[activeProductImageIndex];
+            image.alt = `${activeProductTitle} - photo ${activeProductImageIndex + 1}`;
+
+            const gallery = document.getElementById('productImageGallery');
+            if (activeProductImages.length < 2) {
+                gallery.classList.add('hidden');
+                return;
+            }
+
+            gallery.classList.remove('hidden');
+            document.getElementById('productImageCounter').textContent =
+                `${activeProductImageIndex + 1} of ${activeProductImages.length}`;
+            document.getElementById('productImageThumbnails').innerHTML = activeProductImages.map((url, index) => `
+                <button type="button" onclick="showProductImage(${index})" class="flex-shrink-0 rounded-lg overflow-hidden border-2 ${index === activeProductImageIndex ? 'border-gold' : 'border-darkBorder'}" aria-label="Show product photo ${index + 1}">
+                    <img src="${url}" alt="${activeProductTitle} thumbnail ${index + 1}" class="w-14 h-14 object-cover" onerror="this.onerror=null;this.src='https://placehold.co/100x100/131b2e/ffd700?text=Photo'">
+                </button>
+            `).join('');
+        }
+
+        function showProductImage(index) {
+            if (index < 0 || index >= activeProductImages.length) return;
+            activeProductImageIndex = index;
+            renderProductImageGallery();
+            if (!document.getElementById('imageViewerModal').classList.contains('hidden')) {
+                renderExpandedProductImage();
+            }
+        }
+
+        function changeProductImage(direction) {
+            if (activeProductImages.length < 2) return;
+            activeProductImageIndex = (activeProductImageIndex + direction + activeProductImages.length) % activeProductImages.length;
+            renderProductImageGallery();
+            renderExpandedProductImage();
+        }
+
+        function openImageViewer() {
+            renderExpandedProductImage();
+            document.getElementById('imageViewerModal').classList.remove('hidden');
+        }
+
+        function renderExpandedProductImage() {
+            const image = document.getElementById('expandedProductImage');
+            image.src = activeProductImages[activeProductImageIndex] || '';
+            image.alt = activeProductTitle;
+            const hasMultipleImages = activeProductImages.length > 1;
+            document.getElementById('expandedImageCounter').textContent = hasMultipleImages
+                ? `${activeProductImageIndex + 1} of ${activeProductImages.length}`
+                : '';
+            document.getElementById('expandedPrevButton').classList.toggle('hidden', !hasMultipleImages);
+            document.getElementById('expandedNextButton').classList.toggle('hidden', !hasMultipleImages);
+        }
+
+        function closeImageViewer() {
+            document.getElementById('imageViewerModal').classList.add('hidden');
+        }
+
+        function closeDetailModal() {
+            closeImageViewer();
+            document.getElementById('detailModal').classList.add('hidden');
+        }
+
+        function addToCart(productId) {
+            const product = products.find(item => item.id === productId);
+            if (!product) {
+                showToast('This product is no longer available.', 'error');
+                return;
+            }
+
+            const stock = Number(product.stock);
+            if (!Number.isFinite(stock) || stock < 1) {
+                showToast('This product is currently out of stock.', 'error');
+                return;
+            }
+
+            const cartItem = cartItems.find(item => item.productId === productId);
+            if (cartItem && cartItem.quantity >= stock) {
+                showToast('Your cart already has all available stock for this product.', 'info');
+                return;
+            }
+
+            if (cartItem) {
+                cartItem.quantity += 1;
+            } else {
+                cartItems.push({ productId, quantity: 1 });
+            }
+
+            saveCartData();
+            renderCart();
+            closeDetailModal();
+            showToast(`${product.title} added to your cart.`, 'success');
+        }
+
+        function openCartModal() {
+            renderCart();
+            document.getElementById('cartModal').classList.remove('hidden');
+        }
+
+        function closeCartModal() {
+            document.getElementById('cartModal').classList.add('hidden');
+        }
+
+        function updateCartQuantity(productId, change) {
+            const cartItem = cartItems.find(item => item.productId === productId);
+            if (!cartItem) return;
+
+            const product = products.find(item => item.id === productId);
+            const nextQuantity = cartItem.quantity + change;
+            if (nextQuantity < 1) {
+                removeFromCart(productId);
+                return;
+            }
+            const stock = Number(product?.stock);
+            if (!product || !Number.isFinite(stock) || nextQuantity > stock) {
+                showToast('That quantity is not available in stock.', 'error');
+                return;
+            }
+
+            cartItem.quantity = nextQuantity;
+            saveCartData();
+            renderCart();
+        }
+
+        function removeFromCart(productId) {
+            cartItems = cartItems.filter(item => item.productId !== productId);
+            saveCartData();
+            renderCart();
+        }
+
+        function formatNaira(amount) {
+            return `₦${Number(amount).toLocaleString('en-NG')}`;
+        }
+
+        function renderCart() {
+            const itemCount = cartItems.reduce((total, item) => total + item.quantity, 0);
+            document.getElementById('cartItemCount').textContent = itemCount;
+
+            const cartContent = document.getElementById('cartItems');
+            const summary = document.getElementById('cartSummary');
+            const subtotalElement = document.getElementById('cartSubtotal');
+            if (!cartItems.length) {
+                cartContent.innerHTML = '<div class="text-center py-10 text-sm text-gray-400"><i class="fa-solid fa-basket-shopping text-3xl text-gray-600 mb-3 block"></i>Your cart is empty.</div>';
+                summary.classList.add('hidden');
+                return;
+            }
+
+            let subtotal = 0;
+            cartContent.innerHTML = cartItems.map(item => {
+                const product = products.find(product => product.id === item.productId);
+                if (!product) {
+                    return `
+                        <div class="flex items-center justify-between gap-3 rounded-xl border border-darkBorder bg-darkBg p-3">
+                            <span class="text-xs text-gray-400">This product is no longer listed.</span>
+                            <button type="button" onclick="removeFromCart('${escapeHtml(item.productId)}')" class="text-xs text-red-400 hover:text-red-300">Remove</button>
+                        </div>
+                    `;
+                }
+
+                subtotal += Number(product.price) * item.quantity;
+                const image = getProductImages(product)[0] || '';
+                const stock = Number(product.stock);
+                const canAddMore = Number.isFinite(stock) && item.quantity < stock;
+                return `
+                    <div class="flex items-center gap-3 rounded-xl border border-darkBorder bg-darkBg p-3">
+                        <img src="${escapeHtml(image)}" alt="" class="w-16 h-16 object-cover rounded-lg bg-darkCard" onerror="this.onerror=null;this.src='https://placehold.co/100x100/131b2e/ffd700?text=GSM'">
+                        <div class="min-w-0 flex-1">
+                            <h3 class="text-xs font-bold text-white line-clamp-2">${escapeHtml(product.title)}</h3>
+                            <p class="text-xs text-gold mt-1">${formatNaira(product.price)} each</p>
+                            <div class="flex items-center gap-2 mt-2">
+                                <button type="button" onclick="updateCartQuantity('${escapeHtml(item.productId)}', -1)" class="w-7 h-7 rounded border border-darkBorder text-white hover:border-gold" aria-label="Decrease quantity">−</button>
+                                <span class="text-xs text-white min-w-4 text-center">${item.quantity}</span>
+                                <button type="button" onclick="updateCartQuantity('${escapeHtml(item.productId)}', 1)" class="w-7 h-7 rounded border border-darkBorder text-white hover:border-gold disabled:opacity-40" aria-label="Increase quantity" ${canAddMore ? '' : 'disabled'}>+</button>
+                            </div>
+                        </div>
+                        <button type="button" onclick="removeFromCart('${escapeHtml(item.productId)}')" class="text-xs text-red-400 hover:text-red-300 self-start" aria-label="Remove ${escapeHtml(product.title)} from cart">Remove</button>
+                    </div>
+                `;
+            }).join('');
+
+            summary.classList.remove('hidden');
+            subtotalElement.textContent = formatNaira(subtotal);
+        }
+
+        function askAiAboutItem(title) {
+            closeDetailModal();
+            toggleAiDrawer(true);
+            sendQuickPrompt(`Tell me more about ${title}, its compatibility, and typical usage in GSM repairs.`);
+        }
+
+        /* ==========================================================================
+           ANTI-SPAM GUIDANCE & COMPLAINT SYSTEM
+           ========================================================================== */
+
+        function openGuidanceModal() {
+            document.getElementById('guidanceModal').classList.remove('hidden');
+        }
+
+        function closeGuidanceModal() {
+            document.getElementById('guidanceModal').classList.add('hidden');
+        }
+
+        function openComplaintModal(target = '') {
+            closeGuidanceModal();
+            if (target) {
+                document.getElementById('complaintTarget').value = target;
+            }
+            document.getElementById('complaintModal').classList.remove('hidden');
+        }
+
+        function closeComplaintModal() {
+            document.getElementById('complaintModal').classList.add('hidden');
+        }
+
+        function handleComplaintSubmit(e) {
+            e.preventDefault();
+            const category = document.getElementById('complaintCategory').value;
+            const target = document.getElementById('complaintTarget').value.trim();
+            const details = document.getElementById('complaintDetails').value.trim();
+
+            const complaintRecord = {
+                id: 'cmp-' + Date.now(),
+                category,
+                target,
+                details,
+                submittedBy: currentUser ? currentUser.email : 'Anonymous',
+                timestamp: new Date().toISOString()
+            };
+
+            // Persist locally
+            let complaints = JSON.parse(localStorage.getItem('goldenEagle_complaints') || '[]');
+            complaints.push(complaintRecord);
+            localStorage.setItem('goldenEagle_complaints', JSON.stringify(complaints));
+
+            closeComplaintModal();
+            document.getElementById('complaintTarget').value = '';
+            document.getElementById('complaintDetails').value = '';
+            showToast('Complaint submitted successfully. Our Anti-Spam moderation team will review it within 2 hours.', 'success');
+        }
+
+        /* ==========================================================================
+           SMART & FAST GEMINI AI ASSISTANT INTEGRATION
+           ========================================================================== */
+
+        function toggleAiDrawer(forceOpen = false) {
+            const drawer = document.getElementById('aiDrawer');
+            if (forceOpen) {
+                drawer.classList.remove('hidden');
+            } else {
+                drawer.classList.toggle('hidden');
+            }
+        }
+
+        function appendAiMessage(sender, text) {
+            const chatBox = document.getElementById('aiChatBox');
+            const isUser = sender === 'user';
+
+            const msgHtml = isUser ? `
+                <div class="flex gap-2 items-start justify-end">
+                    <div class="bg-gold/10 border border-gold/30 rounded-xl p-3 text-white max-w-[85%] leading-relaxed">
+                        ${escapeHtml(text)}
+                    </div>
+                    <div class="w-6 h-6 rounded-full bg-gold flex-shrink-0 flex items-center justify-center text-[10px] text-black font-bold">U</div>
+                </div>
+            ` : `
+                <div class="flex gap-2 items-start">
+                    <div class="w-6 h-6 rounded-full gold-gradient-bg flex-shrink-0 flex items-center justify-center text-[10px] text-black font-bold">🦅</div>
+                    <div class="bg-darkBg border border-darkBorder rounded-xl p-3 text-gray-200 max-w-[85%] leading-relaxed">
+                        ${text}
+                    </div>
+                </div>
+            `;
+
+            chatBox.insertAdjacentHTML('beforeend', msgHtml);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function sendQuickPrompt(promptText) {
+            document.getElementById('aiInput').value = promptText;
+            handleAiSendMessage(new Event('submit'));
+        }
+
+        async function handleAiSendMessage(e) {
+            if (e) e.preventDefault();
+            const input = document.getElementById('aiInput');
+            const userPrompt = input.value.trim();
+            if (!userPrompt) return;
+
+            // Clear input & display user message
+            input.value = '';
+            appendAiMessage('user', userPrompt);
+
+            // Show loading indicator
+            const loadingId = 'loading-' + Date.now();
+            const chatBox = document.getElementById('aiChatBox');
+            chatBox.insertAdjacentHTML('beforeend', `
+                <div id="${loadingId}" class="flex gap-2 items-start">
+                    <div class="w-6 h-6 rounded-full gold-gradient-bg flex-shrink-0 flex items-center justify-center text-[10px] text-black font-bold">🦅</div>
+                    <div class="bg-darkBg border border-darkBorder rounded-xl p-3 text-gold text-xs animate-pulse">
+                        <i class="fa-solid fa-spinner fa-spin mr-1"></i> Golden Eagle AI is thinking...
+                    </div>
+                </div>
+            `);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            // Call Gemini API
+            try {
+                const systemPrompt = `You are the Golden Eagle Smart Assistant, an AI expert embedded in the "GOLDEN EAGLE" GSM & Electronics Marketplace. 
+                Your expertise includes mobile device specifications, micro-soldering, GSM repair tools (hot air stations, soldering irons, programmers), screen replacements, marketplace vendor guidelines, anti-spam policies, and platform navigation.
+                Provide concise, smart, friendly, and direct answers in clean text with simple line breaks or bullet points if needed. Keep answers concise.`;
+
+                const apiKey = "";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+                const payload = {
+                    contents: [{ parts: [{ text: userPrompt }] }],
+                    systemInstruction: {
+                        parts: [{ text: systemPrompt }]
+                    }
+                };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                const loadingElem = document.getElementById(loadingId);
+                if (loadingElem) loadingElem.remove();
+
+                if (result.candidates && result.candidates[0]?.content?.parts?.[0]?.text) {
+                    let aiText = result.candidates[0].content.parts[0].text;
+                    // Format basic markdown bolding to HTML
+                    aiText = aiText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                    aiText = aiText.replace(/\n/g, '<br>');
+                    appendAiMessage('ai', aiText);
+                } else {
+                    appendAiMessage('ai', 'I am currently processing high request volume. Please try asking your question again in a moment!');
+                }
+            } catch (error) {
+                const loadingElem = document.getElementById(loadingId);
+                if (loadingElem) loadingElem.remove();
+                appendAiMessage('ai', 'Notice: Unable to reach AI servers right now. For instant help, you can check our Platform Anti-Spam Guidance or reach out to verified vendors directly!');
+            }
+        }
+
+        /* ==========================================================================
+           UI UTILITIES & TOAST NOTIFICATIONS
+           ========================================================================== */
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            
+            let icon = 'fa-circle-info';
+            let borderCol = 'border-gold';
+            if (type === 'success') { icon = 'fa-circle-check'; borderCol = 'border-green-500'; }
+            if (type === 'error') { icon = 'fa-circle-exclamation'; borderCol = 'border-red-500'; }
+
+            toast.className = `pointer-events-auto bg-darkCard border ${borderCol} text-white text-xs px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 transform transition duration-300 translate-y-2 opacity-0 max-w-sm`;
+            toast.innerHTML = `<i class="fa-solid ${icon} text-gold"></i> <span>${escapeHtml(message)}</span>`;
+
+            container.appendChild(toast);
+
+            // Animate in
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            // Auto dismiss
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
