@@ -223,7 +223,7 @@
                 <!-- Post Product Button -->
                 <button onclick="handlePostProductClick()" class="hidden sm:flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg border border-gold/50 text-gold hover:bg-gold/10 transition">
                     <i class="fa-solid fa-circle-plus text-sm"></i>
-                    <span>Sell / Post Product</span>
+                    <span id="desktopPostActionLabel">Create post</span>
                 </button>
 
                 <!-- Auth Navigation Section -->
@@ -246,7 +246,7 @@
         <div class="sm:hidden px-4 py-2 border-t border-darkBorder flex justify-between items-center bg-darkBg/60">
             <button onclick="handlePostProductClick()" class="w-full py-2 text-xs font-bold rounded-lg gold-gradient-bg text-black flex items-center justify-center gap-2">
                 <i class="fa-solid fa-circle-plus"></i>
-                <span>Create a Post / Sell</span>
+                <span id="mobilePostActionLabel">Create post</span>
             </button>
         </div>
     </header>
@@ -269,9 +269,12 @@
                 <button type="button" onclick="showMarketplacePage()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
                     <i class="fa-solid fa-house w-5 text-center"></i> Marketplace
                 </button>
+                <button type="button" onclick="openMemberSearch()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
+                    <i class="fa-solid fa-users w-5 text-center"></i> Find members
+                </button>
                 <button type="button" onclick="openChatPage()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
-                    <i class="fa-solid fa-comments w-5 text-center"></i> Private chats
-                    <span class="ml-auto rounded-full border border-gold/40 px-2 py-0.5 text-[9px] text-gold">PREVIEW</span>
+                    <i class="fa-solid fa-comments w-5 text-center"></i> Golden Chat
+                    <span class="ml-auto rounded-full border border-gold/40 px-2 py-0.5 text-[9px] text-gold">COINS</span>
                 </button>
                 <button type="button" onclick="toggleSideMenu(false); openQuizStore()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
                     <i class="fa-solid fa-gamepad w-5 text-center"></i> Quiz & reaction store
@@ -290,7 +293,7 @@
                 </button>
             </div>
             <div class="mt-auto rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-3 text-[11px] leading-relaxed text-yellow-100">
-                Preview only: chat, media, and calls are not connected to other users. Role separation is not secure until the backend is deployed.
+                Golden Chat messages and media use verified accounts, private conversations, and server-checked coin charges. Voice and video calls remain unavailable until a calling provider is configured.
             </div>
         </nav>
     </div>
@@ -313,7 +316,7 @@
                 </p>
                 <div class="flex flex-wrap gap-3">
                     <button onclick="handlePostProductClick()" class="px-5 py-2.5 rounded-xl gold-gradient-bg text-black font-bold text-xs sm:text-sm gold-glow hover:opacity-95 transition flex items-center gap-2">
-                        <i class="fa-solid fa-store"></i> Create Post / Sell
+                        <i class="fa-solid fa-circle-plus"></i> <span id="heroPostActionLabel">Create post</span>
                     </button>
                     <button onclick="toggleAiDrawer()" class="px-5 py-2.5 rounded-xl bg-darkCard border border-darkBorder text-gray-200 hover:text-gold font-semibold text-xs sm:text-sm transition flex items-center gap-2">
                         <i class="fa-solid fa-robot text-gold"></i> Ask Golden AI Assistant
@@ -321,6 +324,22 @@
                 </div>
             </div>
         </div>
+
+        <section id="memberSearchSection" class="mb-10 rounded-2xl border border-darkBorder bg-darkCard p-4 sm:p-6" aria-labelledby="memberSearchHeading">
+            <div class="mb-4">
+                <h2 id="memberSearchHeading" class="flex items-center gap-2 text-lg font-bold text-white">
+                    <i class="fa-solid fa-users text-gold"></i> Find members
+                </h2>
+                <p class="mt-1 text-xs text-gray-400">Search by exact email, display name, location, account type, or public business/about information. Email addresses are only used to find a match and are never shown.</p>
+            </div>
+            <form id="memberSearchForm" class="flex flex-col gap-2 sm:flex-row" onsubmit="searchMarketplaceMembers(event)">
+                <label for="memberSearchInput" class="sr-only">Search member email or profile information</label>
+                <input id="memberSearchInput" type="search" maxlength="120" placeholder="Exact email, name, location, or business information" class="min-w-0 flex-1 rounded-xl border border-darkBorder bg-darkBg px-3 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-gold focus:outline-none">
+                <button id="memberSearchButton" type="submit" class="rounded-xl gold-gradient-bg px-5 py-2.5 text-sm font-bold text-black">Search members</button>
+            </form>
+            <p id="memberSearchStatus" class="mt-3 hidden text-xs text-gray-300" role="status" aria-live="polite"></p>
+            <div id="memberSearchResults" class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+        </section>
 
         <!-- Marketplace and Following feeds -->
         <section id="communityFeedSection" class="mb-10">
@@ -377,37 +396,28 @@
         </section>
     </main>
 
-    <!-- PRIVATE CHAT PAGE PREVIEW -->
+    <!-- GOLDEN CHAT -->
     <main id="chatPage" class="hidden max-w-7xl mx-auto px-3 sm:px-6 py-4 flex-1 w-full">
-        <div class="mb-3 rounded-xl border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs leading-relaxed text-yellow-100">
-            <i class="fa-solid fa-triangle-exclamation mr-1"></i>
-            <strong>Preview only.</strong> Messages and selected media stay in this browser and are not delivered. Calls and voice recording are not connected. Buyer/vendor separation cannot be enforced until the secure backend is deployed.
-        </div>
         <section class="min-h-[65vh] overflow-hidden rounded-2xl border border-darkBorder bg-darkCard shadow-xl">
             <div class="grid min-h-[65vh] grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)]">
                 <aside class="border-b border-darkBorder md:border-b-0 md:border-r">
                     <div class="flex items-center justify-between border-b border-darkBorder p-4">
                         <div>
-                            <h1 class="text-lg font-extrabold text-white">Private chats</h1>
+                            <h1 class="text-lg font-extrabold text-white">Golden Chat</h1>
                             <p id="chatRoleLabel" class="mt-1 text-[10px] font-semibold uppercase tracking-wide text-gold"></p>
                         </div>
                         <button type="button" onclick="showMarketplacePage()" class="rounded-lg border border-darkBorder px-3 py-2 text-xs text-gray-300 hover:text-gold" aria-label="Back to marketplace">
                             <i class="fa-solid fa-arrow-left"></i>
                         </button>
                     </div>
-                    <div class="p-3">
-                        <label for="chatContactSearch" class="sr-only">Search preview chats</label>
-                        <input id="chatContactSearch" type="search" placeholder="Search chats" class="w-full rounded-lg border border-darkBorder bg-darkBg px-3 py-2 text-xs text-white placeholder:text-gray-500">
+                    <div class="flex items-center justify-between gap-2 border-b border-darkBorder p-3">
+                        <p class="text-xs font-bold text-gray-300"><i class="fa-solid fa-coins mr-1 text-gold"></i><span id="chatCoinBalance">0</span> coins</p>
+                        <button type="button" onclick="openChatCoinStore()" class="rounded-lg gold-gradient-bg px-3 py-2 text-[10px] font-extrabold text-black">Buy coins</button>
                     </div>
-                    <button type="button" class="flex w-full items-center gap-3 border-y border-darkBorder bg-gold/10 px-4 py-3 text-left">
-                        <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full gold-gradient-bg text-black"><i class="fa-solid fa-user"></i></span>
-                        <span class="min-w-0 flex-1">
-                            <span id="chatContactName" class="block truncate text-sm font-bold text-white"></span>
-                            <span class="block truncate text-[11px] text-gray-400">Sample conversation preview</span>
-                        </span>
-                        <span class="h-2 w-2 rounded-full bg-gray-500" title="Preview contact"></span>
-                    </button>
-                    <p class="p-4 text-[10px] leading-relaxed text-gray-500">Contact discovery and real private messages will be available after backend setup.</p>
+                    <h2 class="px-4 pb-2 pt-4 text-[10px] font-bold uppercase tracking-wider text-gray-500">Conversations</h2>
+                    <div id="chatConversationList" class="max-h-[55vh] space-y-1 overflow-y-auto px-2 pb-3" aria-live="polite">
+                        <p class="p-3 text-[10px] text-gray-500">Your conversations will appear here.</p>
+                    </div>
                 </aside>
 
                 <div class="flex min-h-[65vh] min-w-0 flex-col">
@@ -415,15 +425,16 @@
                         <div class="flex min-w-0 items-center gap-3">
                             <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full gold-gradient-bg text-black"><i class="fa-solid fa-user"></i></span>
                             <div class="min-w-0">
-                                <h2 id="chatThreadTitle" class="truncate text-sm font-bold text-white"></h2>
-                                <p class="text-[10px] text-gray-400">Private one-to-one · preview</p>
+                                <h2 id="chatThreadTitle" class="truncate text-sm font-bold text-white">Choose a conversation</h2>
+                                <p id="chatThreadSubtitle" class="text-[10px] text-gray-400">Buyer and Vendor private chat</p>
                             </div>
                         </div>
                         <div class="flex flex-shrink-0 items-center gap-1">
-                            <button type="button" onclick="showChatBackendNotice('Audio calls')" title="Audio calls need the secure backend" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-500" aria-label="Audio call unavailable in preview"><i class="fa-solid fa-phone"></i></button>
-                            <button type="button" onclick="showChatBackendNotice('Video calls')" title="Video calls need the secure backend" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-500" aria-label="Video call unavailable in preview"><i class="fa-solid fa-video"></i></button>
+                            <button type="button" onclick="showChatBackendNotice('Voice calls')" title="Voice calling provider is not configured" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-500" aria-label="Voice calls not configured"><i class="fa-solid fa-phone"></i></button>
+                            <button type="button" onclick="showChatBackendNotice('Video calls')" title="Video calling provider is not configured" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-500" aria-label="Video calls not configured"><i class="fa-solid fa-video"></i></button>
                         </div>
                     </header>
+                    <div id="chatProductStatus" class="hidden border-b border-darkBorder bg-gold/5 px-4 py-2 text-[10px] text-gray-300" aria-live="polite"></div>
                     <div id="chatMessages" class="flex-1 space-y-3 overflow-y-auto bg-darkBg/50 p-3 sm:p-5" aria-live="polite"></div>
                     <div id="chatPendingFiles" class="hidden border-t border-darkBorder px-3 pt-3 sm:px-4"></div>
                     <div id="chatEmojiPanel" class="hidden flex-wrap gap-2 border-t border-darkBorder bg-darkBg p-3" aria-label="Emoji and stickers">
@@ -444,27 +455,123 @@
                             </div>
                         </div>
                     </div>
-                    <form id="chatComposer" class="border-t border-darkBorder bg-darkCard p-3 sm:p-4" onsubmit="sendPreviewMessage(event)">
-                        <label for="chatMessageInput" class="sr-only">Write a preview message</label>
-                        <textarea id="chatMessageInput" rows="2" placeholder="Write a message (local preview only)..." class="w-full resize-y rounded-xl border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-gold focus:outline-none"></textarea>
+                    <form id="chatComposer" class="hidden border-t border-darkBorder bg-darkCard p-3 sm:p-4" onsubmit="sendGoldenChatMessage(event)">
+                        <label for="chatMessageInput" class="sr-only">Write a message</label>
+                        <textarea id="chatMessageInput" rows="2" maxlength="2000" placeholder="Message the Buyer or Vendor · 1 coin per message" class="w-full resize-y rounded-xl border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-gold focus:outline-none"></textarea>
                         <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
                             <div class="flex items-center gap-1">
-                                <label for="chatMediaInput" class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-darkBorder text-gray-300 hover:text-gold" title="Select a photo or video (preview only)">
+                                <label for="chatMediaInput" class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-darkBorder text-gray-300 hover:text-gold" title="Send a photo · 2 coins">
                                     <i class="fa-solid fa-paperclip"></i>
                                 </label>
-                                <input id="chatMediaInput" type="file" accept="image/*,video/*" multiple class="hidden" onchange="previewChatFiles(event)">
+                                <input id="chatMediaInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden" onchange="previewChatFiles(event)">
                                 <button type="button" onclick="toggleChatEmojiPanel()" class="h-9 w-9 rounded-lg border border-darkBorder text-xl text-gray-300 hover:text-gold" aria-label="Open emojis and stickers">😊</button>
-                                <button type="button" onclick="showChatBackendNotice('Voice recording')" title="Voice recording is not connected in preview" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-500" aria-label="Voice recording unavailable in preview"><i class="fa-solid fa-microphone"></i></button>
+                                <button id="chatVoiceRecordButton" type="button" onclick="toggleChatVoiceRecording()" title="Record a voice note · 3 coins" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-300 hover:text-gold" aria-label="Record a voice note"><i class="fa-solid fa-microphone"></i></button>
                             </div>
                             <button type="submit" class="rounded-lg gold-gradient-bg px-4 py-2.5 text-xs font-bold text-black hover:opacity-90">
-                                Add to preview <i class="fa-solid fa-paper-plane ml-1"></i>
+                                Send · 1 coin <i class="fa-solid fa-paper-plane ml-1"></i>
                             </button>
                         </div>
+                        <p id="chatVoiceRecordStatus" class="mt-2 hidden text-[10px] text-gray-400" role="status"></p>
                     </form>
                 </div>
             </div>
         </section>
     </main>
+
+    <div id="chatCoinStoreModal" class="fixed inset-0 z-[70] hidden items-center justify-center overflow-y-auto bg-black/80 p-4" role="dialog" aria-modal="true" aria-labelledby="chatCoinStoreHeading" onclick="if (event.target === this) closeChatCoinStore()">
+        <section class="my-8 w-full max-w-lg rounded-2xl border border-gold/40 bg-darkCard p-5 shadow-2xl sm:p-6">
+            <header class="flex items-start justify-between gap-3">
+                <div>
+                    <h2 id="chatCoinStoreHeading" class="text-xl font-extrabold text-white"><i class="fa-solid fa-coins mr-2 text-gold"></i>Golden Chat coins</h2>
+                    <p class="mt-1 text-xs text-gray-400">Buy coins once, then use them as you chat. No six-month subscription.</p>
+                </div>
+                <button type="button" onclick="closeChatCoinStore()" class="rounded-lg p-2 text-gray-400 hover:text-white" aria-label="Close coin store"><i class="fa-solid fa-xmark"></i></button>
+            </header>
+            <div class="mt-4 grid grid-cols-2 gap-2 rounded-xl border border-darkBorder bg-darkBg p-3 text-[10px] text-gray-300">
+                <span>Text · 1 coin/message</span><span>Picture · 2 coins</span>
+                <span>Voice note · 3 coins</span><span>Voice call · 5 coins/minute*</span>
+                <span class="col-span-2">Video call · 10 coins/minute*</span>
+            </div>
+            <div class="mt-4 space-y-2">
+                <button type="button" onclick="startWalletPurchase('chatCoins12')" class="flex w-full items-center justify-between gap-3 rounded-xl border border-gold/30 bg-darkBg p-3 text-left hover:border-gold">
+                    <span><strong class="block text-sm text-gold">12 Golden Coins</strong><small class="text-[10px] text-gray-400">Starter pack</small></span><strong class="text-sm text-white">₦350</strong>
+                </button>
+                <button type="button" onclick="startWalletPurchase('chatCoins50')" class="flex w-full items-center justify-between gap-3 rounded-xl border border-gold/40 bg-darkBg p-3 text-left hover:border-gold">
+                    <span><strong class="block text-sm text-gold">50 Golden Coins</strong><small class="text-[10px] text-gray-400">Value pack</small></span><strong class="text-sm text-white">₦1,500</strong>
+                </button>
+                <button type="button" onclick="startWalletPurchase('chatCoins350')" class="flex w-full items-center justify-between gap-3 rounded-xl border border-gold/60 bg-darkBg p-3 text-left hover:border-gold">
+                    <span><strong class="block text-sm text-gold">350 Golden Coins</strong><small class="text-[10px] text-gray-400">300 coins + 50 bonus</small></span><strong class="text-sm text-white">₦7,500</strong>
+                </button>
+            </div>
+            <button type="button" onclick="openGoldenCoinUtilities()" class="mt-4 w-full rounded-xl border border-darkBorder bg-darkBg px-3 py-2.5 text-xs font-bold text-gold hover:border-gold">
+                Explore Golden Coin utilities
+            </button>
+            <p class="mt-3 text-[10px] leading-relaxed text-gray-500">*Calls are not active until a calling provider is configured. You will not be charged for calls while they are unavailable. Payments are credited only after Flutterwave verifies them.</p>
+        </section>
+    </div>
+
+    <div id="goldenCoinUtilitiesModal" class="fixed inset-0 z-[75] hidden items-center justify-center overflow-y-auto bg-black/80 p-4" role="dialog" aria-modal="true" aria-labelledby="goldenCoinUtilitiesHeading" onclick="if (event.target === this) closeGoldenCoinUtilities()">
+        <section class="my-8 max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-gold/40 bg-darkCard p-5 shadow-2xl sm:p-6">
+            <header class="flex items-start justify-between gap-3">
+                <div>
+                    <h2 id="goldenCoinUtilitiesHeading" class="text-xl font-extrabold text-white"><i class="fa-solid fa-coins mr-2 text-gold"></i>Golden Coin utilities</h2>
+                    <p class="mt-1 text-xs text-gray-400">Explore planned ways Buyers and Vendors may use Golden Coins.</p>
+                </div>
+                <button type="button" onclick="closeGoldenCoinUtilities()" class="rounded-lg p-2 text-gray-400 hover:text-white" aria-label="Close Golden Coin utilities"><i class="fa-solid fa-xmark"></i></button>
+            </header>
+            <div class="mt-4 rounded-xl border border-gold/30 bg-gold/5 p-3 text-xs leading-relaxed text-gray-200">
+                <strong class="text-gold">Available now:</strong> verified coin purchases and sender-paid Golden Chat text, photo, and voice-note messages. Calls are not available. The ideas below are not active: they cannot deduct or award coins, promote listings, or initiate payouts.
+            </div>
+            <div class="mt-5 grid gap-5 md:grid-cols-2">
+                <section aria-labelledby="vendorCoinUtilitiesHeading">
+                    <h3 id="vendorCoinUtilitiesHeading" class="mb-2 text-sm font-extrabold text-gold">For Vendors</h3>
+                    <div class="space-y-2">
+                        <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
+                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Promote and boost listings</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Planned</span></div>
+                            <p class="mt-1 text-[10px] text-gray-400">Paid listing placement is not enabled; coins cannot boost or pin products.</p>
+                        </article>
+                        <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
+                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Vendor earnings and cash-out</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Not available</span></div>
+                            <p class="mt-1 text-[10px] text-gray-400">Chat coins are not currently credited as vendor earnings. No bank payout can be requested or promised here.</p>
+                        </article>
+                        <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
+                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Verified dealer badge</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Planned</span></div>
+                            <p class="mt-1 text-[10px] text-gray-400">Coin-funded verification badges are not enabled.</p>
+                        </article>
+                        <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
+                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Stock notifications</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Planned</span></div>
+                            <p class="mt-1 text-[10px] text-gray-400">Coin-funded broadcasts to marketplace members are not enabled.</p>
+                        </article>
+                    </div>
+                </section>
+                <section aria-labelledby="buyerCoinUtilitiesHeading">
+                    <h3 id="buyerCoinUtilitiesHeading" class="mb-2 text-sm font-extrabold text-gold">For Buyers</h3>
+                    <div class="space-y-2">
+                        <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
+                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Store discount vouchers</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Planned</span></div>
+                            <p class="mt-1 text-[10px] text-gray-400">No coin redemption or checkout discount is currently offered.</p>
+                        </article>
+                        <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
+                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Escrow protection</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Not available</span></div>
+                            <p class="mt-1 text-[10px] text-gray-400">The marketplace does not hold or protect transaction funds. Arrange purchases safely with the Vendor.</p>
+                        </article>
+                        <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
+                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Daily check-in coins</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Planned</span></div>
+                            <p class="mt-1 text-[10px] text-gray-400">Opening the app does not currently award Golden Coins.</p>
+                        </article>
+                        <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
+                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Refer and earn</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Planned</span></div>
+                            <p class="mt-1 text-[10px] text-gray-400">Referral links and referral coin bonuses are not enabled.</p>
+                        </article>
+                    </div>
+                </section>
+            </div>
+            <footer class="mt-5 flex flex-wrap justify-end gap-2 border-t border-darkBorder pt-4">
+                <button type="button" onclick="closeGoldenCoinUtilities(); openChatCoinStore()" class="rounded-lg border border-gold/40 px-4 py-2 text-xs font-bold text-gold hover:bg-gold/10">Golden Chat coin packs</button>
+                <button type="button" onclick="closeGoldenCoinUtilities()" class="rounded-lg bg-darkBg px-4 py-2 text-xs font-bold text-gray-300 hover:text-white">Close</button>
+            </footer>
+        </section>
+    </div>
 
     <!-- ACCOUNT, FOLLOWERS, AND FOLLOWING PAGE -->
     <main id="accountPage" class="hidden max-w-4xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full">
@@ -704,7 +811,12 @@
 
                 <div id="authPasswordGroup">
                     <label class="block text-xs font-semibold text-gray-300 mb-1">Password</label>
-                    <input type="password" id="authPassword" minlength="8" autocomplete="current-password" placeholder="At least 8 characters" class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100 gold-border-glow">
+                    <div class="relative">
+                        <input type="password" id="authPassword" minlength="8" autocomplete="current-password" placeholder="At least 8 characters" class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 pr-12 text-sm text-gray-100 gold-border-glow">
+                        <button type="button" id="toggleAuthPasswordButton" onclick="toggleAuthPasswordVisibility()" aria-label="Show password" aria-pressed="false" class="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-gray-400 hover:text-gold focus:outline-none focus:ring-2 focus:ring-inset focus:ring-gold">
+                            <i id="toggleAuthPasswordIcon" class="fa-solid fa-eye" aria-hidden="true"></i>
+                        </button>
+                    </div>
                     <button type="button" id="forgotPasswordBtn" onclick="sendPasswordReset()" class="hidden mt-2 text-xs font-semibold text-gold hover:underline">Forgot password? Send password reset link</button>
                 </div>
 
@@ -929,7 +1041,7 @@
             <div class="flex items-start justify-between gap-3">
                 <div>
                     <h2 id="quizStoreHeading" class="text-xl font-extrabold text-white"><i class="fa-solid fa-gamepad mr-2 text-gold"></i>Quiz & reaction store</h2>
-                    <p class="mt-1 text-xs text-gray-400">Get 2 free reward plays each UTC day. A perfect reward play earns 20 likes; free practice is unlimited.</p>
+                    <p class="mt-1 text-xs text-gray-400">Get 2 free reward plays each UTC day. Complete each one to earn 10 likes, even if you miss answers. Free practice is unlimited.</p>
                 </div>
                 <button type="button" onclick="closeQuizStore()" class="rounded-lg p-2 text-gray-400 hover:text-white" aria-label="Close quiz store"><i class="fa-solid fa-xmark"></i></button>
             </div>
@@ -945,7 +1057,7 @@
             <div class="mt-4 grid gap-3 sm:grid-cols-2">
                 <button type="button" onclick="startTimedQuiz('reward')" class="rounded-xl gold-gradient-bg p-3 text-left text-sm font-extrabold text-black hover:opacity-90">
                     <i class="fa-solid fa-stopwatch mr-1"></i> Reward play
-                    <span class="mt-1 block text-[10px] font-semibold">2 free daily plays · 20 likes for each perfect score</span>
+                    <span class="mt-1 block text-[10px] font-semibold">2 free daily plays · 10 likes for each completed quiz</span>
                 </button>
                 <button type="button" onclick="startTimedQuiz('practice')" class="rounded-xl border border-darkBorder bg-darkBg p-3 text-left text-sm font-bold text-white hover:border-gold">
                     <i class="fa-solid fa-rotate mr-1 text-gold"></i> Free practice
@@ -954,7 +1066,7 @@
                 <button id="buyQuizPlayPackButton" type="button" onclick="startWalletPurchase('quizPlayPack')" class="rounded-xl border border-gold/40 bg-darkBg p-3 text-left text-sm font-bold text-white hover:border-gold">
                     <i class="fa-solid fa-plus mr-1 text-gold"></i> 5 extra reward plays · ₦1,000
                     <span id="quizPlayPackUsd" class="mt-1 block text-[10px] font-medium text-gray-400">USD estimate loading…</span>
-                    <span id="quizPlayPackAvailability" class="mt-1 block text-[10px] font-medium text-gray-500">One pack per UTC day · resets at 00:00 UTC</span>
+                    <span id="quizPlayPackAvailability" class="mt-1 block text-[10px] font-medium text-gray-500">Five additional plays do not award likes · resets at 00:00 UTC</span>
                 </button>
                 <button type="button" onclick="startWalletPurchase('lovePack')" class="rounded-xl border border-pink-400/40 bg-darkBg p-3 text-left text-sm font-bold text-white hover:border-pink-300">
                     <i class="fa-regular fa-heart mr-1 text-pink-300"></i> 10 loves · ₦500
@@ -1256,23 +1368,29 @@
         // Global State variables
         let products = [];
         let currentUser = null;
-        let quizWallet = { likes: 0, loves: 0, hates: 0 };
+        let quizWallet = { likes: 0, loves: 0, hates: 0, coins: 0 };
         let quizDailyStatus = null;
         let quizWalletUnsubscribe = null;
         let quizAttemptId = null;
         let activeQuizRewardEligible = false;
+        let activeQuizLikeRewardEligible = false;
         let activeQuizQuestions = [];
+        let activeQuizQuestionCount = 0;
         let quizQuestionIndex = 0;
         let quizCurrentAnswer = -1;
         let quizTimerInterval = null;
         let quizTimerSeconds = 150;
         let quizSubmitting = false;
+        let quizStarting = false;
         let currentAdminQuestions = [];
         let selectedCategory = 'All';
         let selectedProductFeed = 'all';
+        let followedMemberIds = new Set();
         let followedVendorIds = new Set();
         let followingUnsubscribe = null;
         let accountConnectionsUnsubscribe = null;
+        let memberSearchRequestId = 0;
+        let memberDirectoryInitializationUid = null;
         let activeAccountSection = 'followers';
         let accountBackSection = 'followers';
         let viewedProfileUid = null;
@@ -1304,6 +1422,10 @@
         let selectedCommunityMediaFiles = [];
         let communityPosts = [];
         let communityPostsUnsubscribe = null;
+        const communityCommentUnsubscribers = new Map();
+        const communityCommentDocs = new Map();
+        const communityCommentErrors = new Set();
+        const openCommunityCommentPostIds = new Set();
         const communityMediaObjectUrls = new Set();
         const communityDownloadPermissionCache = new Map();
         let communityPostSubmitting = false;
@@ -1312,10 +1434,22 @@
         const MAX_PRODUCT_VIDEO_BYTES = 50 * 1024 * 1024;
         const MAX_BUYER_COMMUNITY_VIDEO_BYTES = 500 * 1024 * 1024;
         const MAX_PRODUCT_VIDEO_SECONDS = 10;
+        const MAX_GOLDEN_CHAT_VOICE_BYTES = 25 * 1024 * 1024;
         let cartItems = [];
-        let chatPreviewRole = 'Buyer';
-        let chatPreviewMessages = [];
+        let activeGoldenChatId = null;
+        let activeGoldenChatData = null;
+        let goldenChatListUnsubscribe = null;
+        let goldenChatMessagesUnsubscribe = null;
+        let goldenChatProductUnsubscribe = null;
+        let goldenChatMediaUrls = new Map();
+        let goldenChatListenerUid = null;
+        let chatSendRetry = null;
         let pendingChatFiles = [];
+        let pendingChatVoiceBlob = null;
+        let chatVoiceRecorder = null;
+        let chatVoiceChunks = [];
+        let chatVoiceRecordedBytes = 0;
+        let discardChatVoiceOnStop = false;
         const attemptedLegacyProductMigrations = new Set();
         let discussionProductId = null;
         let discussionCounts = { likes: 0, loves: 0, hates: 0 };
@@ -1397,14 +1531,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
             firebaseAuth.onAuthStateChanged(async user => {
                 if (user && user.providerData.some(provider => provider.providerId === 'password') && !user.emailVerified) {
+                    if (chatVoiceRecorder?.state === 'recording') {
+                        discardChatVoiceOnStop = true;
+                        chatVoiceRecorder.stop();
+                    }
+                    stopGoldenChatSubscriptions();
                     if (followingUnsubscribe) followingUnsubscribe();
                     followingUnsubscribe = null;
                     if (accountConnectionsUnsubscribe) accountConnectionsUnsubscribe();
                     accountConnectionsUnsubscribe = null;
+                    followedMemberIds = new Set();
                     followedVendorIds = new Set();
                     currentUser = null;
                     subscribeToQuizAccount();
+                    chatSendRetry = null;
+                    clearUnsentGoldenChatDraft();
                     if (!document.getElementById('accountPage').classList.contains('hidden')) {
+                        showMarketplacePage();
+                    }
+                    if (!document.getElementById('chatPage').classList.contains('hidden')) {
                         showMarketplacePage();
                     }
                     renderAuthNav();
@@ -1421,18 +1566,19 @@ document.addEventListener("DOMContentLoaded", () => {
                 let profile = user ? loadAccountProfile(user.uid) : null;
                 let isAdmin = false;
                 if (user) {
-                    try {
-                        profile = await loadOrCreateRemoteAccountProfile(user);
-                    } catch (error) {
-                        console.error('Unable to load the account role from Firebase.', error);
-                        showToast('Account role could not be verified online. Product posting may be unavailable.', 'error');
-                    }
-                    try {
-                        const tokenResult = await user.getIdTokenResult();
-                        isAdmin = tokenResult.claims.admin === true;
-                    } catch (error) {
-                        console.error('Unable to verify quiz administrator access.', error);
-                    }
+                    const [remoteProfile, tokenResult] = await Promise.all([
+                        loadOrCreateRemoteAccountProfile(user).catch(error => {
+                            console.error('Unable to load the account role from Firebase.', error);
+                            showToast('Account role could not be verified online. Product posting may be unavailable.', 'error');
+                            return profile;
+                        }),
+                        user.getIdTokenResult().catch(error => {
+                            console.error('Unable to verify quiz administrator access.', error);
+                            return null;
+                        })
+                    ]);
+                    profile = remoteProfile || profile;
+                    isAdmin = tokenResult?.claims.admin === true;
                 }
                 const profileName = typeof profile?.name === 'string' && profile.name.trim()
                     ? profile.name.trim()
@@ -1456,8 +1602,25 @@ document.addEventListener("DOMContentLoaded", () => {
                 } : null;
                 if (currentUser) {
                     startPresenceHeartbeat(currentUser.uid);
+                    if (memberDirectoryInitializationUid !== currentUser.uid) {
+                        memberDirectoryInitializationUid = currentUser.uid;
+                        firebaseFunctions.httpsCallable('ensureMyMemberDirectoryEntry')()
+                            .catch(error => console.error('Unable to prepare your profile for member search.', error));
+                    }
                 } else {
                     stopPresenceHeartbeat();
+                }
+                if (!currentUser) {
+                    if (chatVoiceRecorder?.state === 'recording') {
+                        discardChatVoiceOnStop = true;
+                        chatVoiceRecorder.stop();
+                    }
+                    stopGoldenChatSubscriptions();
+                    chatSendRetry = null;
+                    clearUnsentGoldenChatDraft();
+                    if (!document.getElementById('chatPage').classList.contains('hidden')) {
+                        showMarketplacePage();
+                    }
                 }
                 subscribeToFollowedVendors();
                 subscribeToQuizAccount();
@@ -1477,7 +1640,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     populateProfileSettings();
                 }
                 updateDiscussionComposer();
-                updateVendorFollowButtons();
+                updateMemberFollowButtons();
                 if (currentUser?.isAdmin && activeAccountSection === 'app') loadQuizAdminQuestions();
                 if (currentUser) confirmFlutterwaveReturn();
                 renderProducts();
@@ -1520,6 +1683,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 products = initialProducts;
                 saveProductsData();
             }
+        }
+
+        function updatePostActionLabels() {
+            const isVendor = currentUser?.role === 'Vendor';
+            const label = isVendor ? 'Sell / Post Product' : 'Create post';
+            ['desktopPostActionLabel', 'mobilePostActionLabel', 'heroPostActionLabel']
+                .forEach(id => {
+                    const element = document.getElementById(id);
+                    if (element) element.textContent = label;
+                });
         }
 
         function saveProductsData() {
@@ -1852,6 +2025,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         function renderAuthNav() {
             const container = document.getElementById('authNavSection');
+            updatePostActionLabels();
             if (currentUser) {
                 const displayName = currentUser.name || currentUser.email || currentUser.phoneNumber || 'Marketplace User';
                 container.innerHTML = `
@@ -1888,6 +2062,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         function showMarketplacePage() {
             toggleSideMenu(false);
+            if (chatVoiceRecorder?.state === 'recording') chatVoiceRecorder.stop();
+            stopGoldenChatSubscriptions();
             unsubscribeFromProfilePresence();
             if (accountConnectionsUnsubscribe) accountConnectionsUnsubscribe();
             accountConnectionsUnsubscribe = null;
@@ -1906,6 +2082,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 openAuthModal('signin');
                 return;
             }
+            if (chatVoiceRecorder?.state === 'recording') chatVoiceRecorder.stop();
+            stopGoldenChatSubscriptions();
             document.getElementById('marketplaceMain').classList.add('hidden');
             document.getElementById('chatPage').classList.add('hidden');
             document.getElementById('marketplaceFooter').classList.add('hidden');
@@ -1914,6 +2092,130 @@ document.addEventListener("DOMContentLoaded", () => {
             updateAccountPageHeader();
             showAccountSection(section);
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function openMemberSearch() {
+            toggleSideMenu(false);
+            showMarketplacePage();
+            document.getElementById('memberSearchSection').scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
+            document.getElementById('memberSearchInput').focus({ preventScroll: true });
+        }
+
+        async function searchMarketplaceMembers(event) {
+            event.preventDefault();
+            if (!currentUser) {
+                showToast('Sign in with a verified account to find and follow members.', 'info');
+                openAuthModal('signin');
+                return;
+            }
+            const input = document.getElementById('memberSearchInput');
+            const query = input.value.trim();
+            const status = document.getElementById('memberSearchStatus');
+            const button = document.getElementById('memberSearchButton');
+            const results = document.getElementById('memberSearchResults');
+            if (query.length < 2 || query.length > 120) {
+                status.textContent = 'Enter at least 2 characters and no more than 120.';
+                status.classList.remove('hidden');
+                results.replaceChildren();
+                return;
+            }
+
+            const requestId = ++memberSearchRequestId;
+            button.disabled = true;
+            button.textContent = 'Searching…';
+            status.textContent = 'Searching public member profiles…';
+            status.classList.remove('hidden');
+            results.replaceChildren();
+            try {
+                const response = await firebaseFunctions.httpsCallable('searchMarketplaceMembers')({ query });
+                if (requestId !== memberSearchRequestId) return;
+                const members = Array.isArray(response.data?.members) ? response.data.members : [];
+                renderMemberSearchResults(members);
+                status.textContent = members.length
+                    ? `${members.length} matching ${members.length === 1 ? 'member' : 'members'}.`
+                    : 'No matching members found. Email searches must use the exact account email.';
+            } catch (error) {
+                if (requestId !== memberSearchRequestId) return;
+                console.error('Unable to search marketplace members.', error);
+                status.textContent = error.message || 'Member search could not load. Check your connection, account verification, and deployed Cloud Functions.';
+            } finally {
+                if (requestId === memberSearchRequestId) {
+                    button.disabled = false;
+                    button.textContent = 'Search members';
+                }
+            }
+        }
+
+        function renderMemberSearchResults(members) {
+            const container = document.getElementById('memberSearchResults');
+            container.replaceChildren();
+            members.forEach(member => {
+                if (!member || typeof member.uid !== 'string' || member.uid === currentUser?.uid) return;
+                const card = document.createElement('article');
+                card.className = 'rounded-xl border border-darkBorder bg-darkBg p-3';
+                const header = document.createElement('div');
+                header.className = 'flex items-center gap-3';
+                const avatar = document.createElement('span');
+                avatar.className = 'flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-full gold-gradient-bg text-sm font-extrabold text-black';
+                const name = typeof member.name === 'string' && member.name.trim()
+                    ? member.name.trim()
+                    : 'Marketplace member';
+                avatar.textContent = name.charAt(0).toUpperCase();
+                if (safeProfilePhotoPath(member.profilePhotoPath, member.uid)) {
+                    const image = document.createElement('img');
+                    image.alt = '';
+                    image.className = 'hidden h-full w-full object-cover';
+                    avatar.replaceChildren(image);
+                    loadProfilePhotoInto(image, member.profilePhotoPath, member.uid);
+                }
+                const identity = document.createElement('div');
+                identity.className = 'min-w-0 flex-1';
+                const displayName = document.createElement('p');
+                displayName.className = 'truncate text-sm font-bold text-white';
+                displayName.textContent = name;
+                const role = document.createElement('p');
+                role.className = 'text-[10px] font-semibold uppercase tracking-wide text-gold';
+                role.textContent = member.role === 'Vendor' ? 'Vendor' : 'Buyer';
+                identity.append(displayName, role);
+                header.append(avatar, identity);
+                const details = document.createElement('div');
+                details.className = 'mt-3 space-y-1';
+                if (typeof member.location === 'string' && member.location.trim()) {
+                    const location = document.createElement('p');
+                    location.className = 'text-[11px] text-gray-400';
+                    location.textContent = `Location: ${member.location}`;
+                    details.appendChild(location);
+                }
+                if (typeof member.description === 'string' && member.description.trim()) {
+                    const description = document.createElement('p');
+                    description.className = 'line-clamp-3 whitespace-pre-wrap break-words text-xs text-gray-300';
+                    description.textContent = member.description;
+                    details.appendChild(description);
+                }
+                const actions = document.createElement('div');
+                actions.className = 'mt-3 flex flex-wrap gap-2';
+                const viewProfile = document.createElement('button');
+                viewProfile.type = 'button';
+                viewProfile.className = 'rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] font-semibold text-gray-200 hover:border-gold/50 hover:text-gold';
+                viewProfile.textContent = 'View profile';
+                viewProfile.addEventListener('click', () => {
+                    openAccountPage('profile');
+                    openMemberProfile(member.uid);
+                });
+                actions.appendChild(viewProfile);
+                const follow = document.createElement('span');
+                follow.innerHTML = renderMemberFollowButton(member);
+                if (follow.firstElementChild) {
+                    follow.firstElementChild.classList.remove('mb-3');
+                    actions.appendChild(follow.firstElementChild);
+                }
+                card.append(header, details, actions);
+                container.appendChild(card);
+            });
+            updateMemberFollowButtons();
         }
 
         function updateAccountPageHeader() {
@@ -1956,6 +2258,14 @@ document.addEventListener("DOMContentLoaded", () => {
             if (emptyState) emptyState.classList.toggle('hidden', !empty);
             if (empty) return;
             container.innerHTML = posts.map(renderCommunityPostCard).join('');
+            posts.forEach(post => {
+                if (!openCommunityCommentPostIds.has(post.id)) return;
+                if (communityCommentDocs.has(post.id)) {
+                    renderCommunityPostComments(post.id, communityCommentDocs.get(post.id));
+                } else if (communityCommentErrors.has(post.id)) {
+                    renderCommunityPostCommentsError(post.id);
+                }
+            });
         }
 
         function renderCommunityPostCard(post) {
@@ -1983,17 +2293,152 @@ document.addEventListener("DOMContentLoaded", () => {
             const downloadButton = downloadable
                 ? `<button type="button" onclick="downloadCommunityPostMedia(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] text-gray-300 hover:border-gold/50 hover:text-gold"><i class="fa-solid fa-download mr-1"></i>Download</button>`
                 : '';
+            const commentsOpen = openCommunityCommentPostIds.has(post.id);
             return `
-                <article class="overflow-hidden rounded-2xl border border-darkBorder bg-darkCard p-3 shadow-lg">
+                <article data-community-post-id="${escapeHtml(post.id)}" class="overflow-hidden rounded-2xl border border-darkBorder bg-darkCard p-3 shadow-lg">
                     <div class="mb-3 flex items-center justify-between gap-2">${profileAction}<span class="text-[10px] text-gray-500">${formatCommunityPostDate(post.createdAt)}</span></div>
                     ${reshareNote}
                     ${media ? `<div class="space-y-2">${media}</div>` : '<p class="rounded-lg bg-darkBg p-4 text-xs text-gray-400">This media is unavailable.</p>'}
                     ${post.caption ? `<p class="mt-3 whitespace-pre-wrap break-words text-sm text-gray-200">${escapeHtml(post.caption)}</p>` : ''}
                     <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-darkBorder pt-3">
                         <button type="button" onclick="reshareCommunityPost(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="rounded-lg border border-gold/30 px-3 py-1.5 text-[10px] font-bold text-gold hover:bg-gold/10"><i class="fa-solid fa-retweet mr-1"></i>Reshare</button>
+                        <button type="button" onclick="toggleCommunityComments(this, this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" aria-expanded="${commentsOpen}" class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] font-bold text-gray-200 hover:border-gold/50 hover:text-gold"><i class="fa-regular fa-comment mr-1"></i>Comments</button>
                         ${downloadButton}
                     </div>
+                    <section data-community-comment-panel data-post-id="${escapeHtml(post.id)}" class="${commentsOpen ? 'mt-3 border-t border-darkBorder pt-3' : 'hidden'}" aria-label="Comments">
+                        <div data-community-comment-list data-post-id="${escapeHtml(post.id)}" class="max-h-60 space-y-2 overflow-y-auto" aria-live="polite">
+                            ${commentsOpen ? '<p class="text-xs text-gray-500">Loading comments…</p>' : ''}
+                        </div>
+                        <form class="mt-3 space-y-2" data-post-id="${escapeHtml(post.id)}" onsubmit="postCommunityComment(event, this.dataset.postId)">
+                            <textarea aria-label="Write a comment" maxlength="2000" rows="2" placeholder="Write a comment…" class="w-full resize-y rounded-xl border border-darkBorder bg-darkBg px-3 py-2 text-xs text-white placeholder:text-gray-500 focus:border-gold focus:outline-none"></textarea>
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-[10px] text-gray-500">Be respectful. Up to 2,000 characters.</span>
+                                <button type="submit" class="rounded-lg gold-gradient-bg px-3 py-1.5 text-[10px] font-bold text-black">Post comment</button>
+                            </div>
+                        </form>
+                    </section>
                 </article>`;
+        }
+
+        function toggleCommunityComments(button, postId) {
+            const card = button.closest('[data-community-post-id]');
+            const panel = card?.querySelector('[data-community-comment-panel]');
+            if (!panel) return;
+            const isOpen = !panel.classList.contains('hidden');
+            panel.classList.toggle('hidden', isOpen);
+            button.setAttribute('aria-expanded', String(!isOpen));
+            if (isOpen) {
+                openCommunityCommentPostIds.delete(postId);
+                return;
+            }
+            openCommunityCommentPostIds.add(postId);
+            if (communityCommentUnsubscribers.has(postId)) return;
+
+            const unsubscribe = firebaseFirestore.collection('communityPosts').doc(postId)
+                .collection('comments').orderBy('createdAt', 'asc').limitToLast(50)
+                .onSnapshot(snapshot => {
+                    communityCommentDocs.set(postId, snapshot.docs);
+                    communityCommentErrors.delete(postId);
+                    renderCommunityPostComments(postId, snapshot.docs);
+                }, error => {
+                    console.error('Unable to load community post comments.', error);
+                    renderCommunityPostCommentsError(postId);
+                });
+            communityCommentUnsubscribers.set(postId, unsubscribe);
+        }
+
+        function renderCommunityPostComments(postId, commentDocs) {
+            document.querySelectorAll('[data-community-comment-list]').forEach(container => {
+                if (container.dataset.postId !== postId) return;
+                container.replaceChildren();
+                if (!commentDocs.length) {
+                    const empty = document.createElement('p');
+                    empty.className = 'text-xs text-gray-500';
+                    empty.textContent = 'No comments yet. Start the conversation.';
+                    container.appendChild(empty);
+                    return;
+                }
+                commentDocs.forEach(commentDoc => {
+                    const comment = commentDoc.data();
+                    const row = document.createElement('article');
+                    row.className = 'rounded-xl border border-darkBorder bg-darkBg p-2.5';
+                    const author = document.createElement('p');
+                    author.className = 'mb-1 text-[10px] font-bold text-gold';
+                    author.textContent = comment.authorName || 'Marketplace member';
+                    const body = document.createElement('p');
+                    body.className = 'whitespace-pre-wrap break-words text-xs text-gray-200';
+                    body.textContent = comment.text || '';
+                    const date = document.createElement('p');
+                    date.className = 'mt-1 text-[9px] text-gray-500';
+                    const createdAt = comment.createdAt?.toDate?.();
+                    date.textContent = createdAt ? createdAt.toLocaleString() : 'Just now';
+                    row.append(author, body, date);
+                    if (currentUser?.uid === comment.authorUid) {
+                        const remove = document.createElement('button');
+                        remove.type = 'button';
+                        remove.className = 'mt-1 text-[10px] text-red-300 hover:text-red-200';
+                        remove.textContent = 'Delete my comment';
+                        remove.addEventListener('click', async () => {
+                            try {
+                                await commentDoc.ref.delete();
+                            } catch (error) {
+                                console.error('Unable to delete your community comment.', error);
+                                showToast('Your comment could not be deleted.', 'error');
+                            }
+                        });
+                        row.appendChild(remove);
+                    }
+                    container.appendChild(row);
+                });
+            });
+        }
+
+        function renderCommunityPostCommentsError(postId) {
+            communityCommentErrors.add(postId);
+            document.querySelectorAll('[data-community-comment-list]').forEach(container => {
+                if (container.dataset.postId === postId) {
+                    container.textContent = 'Comments could not load. Check Firebase setup and Firestore rules.';
+                }
+            });
+        }
+
+        async function postCommunityComment(event, postId) {
+            event.preventDefault();
+            if (!currentUser) {
+                showToast('Sign in to comment on community posts.', 'info');
+                openAuthModal('signin');
+                return;
+            }
+            const form = event.currentTarget;
+            const input = form.querySelector('textarea');
+            const button = form.querySelector('button[type="submit"]');
+            const text = input.value.trim();
+            if (!text) {
+                showToast('Write a comment before posting.', 'info');
+                return;
+            }
+            if (text.length > 2000) {
+                showToast('Comments must be 2,000 characters or fewer.', 'error');
+                return;
+            }
+            button.disabled = true;
+            button.textContent = 'Posting…';
+            try {
+                await firebaseFirestore.collection('communityPosts').doc(postId)
+                    .collection('comments').add({
+                        authorUid: currentUser.uid,
+                        authorName: currentUser.name || 'Marketplace member',
+                        text,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                input.value = '';
+            } catch (error) {
+                console.error('Unable to post community comment.', error);
+                showToast('Your comment could not be posted. Check your connection and Firebase setup.', 'error');
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Post comment';
+            }
         }
 
         async function loadCommunityDownloadPermissions() {
@@ -2307,15 +2752,24 @@ document.addEventListener("DOMContentLoaded", () => {
             presenceBadge.append(presenceIcon, presenceLabel);
             identity.append(title, roleLabel, presenceBadge);
             header.appendChild(identity);
-            if (!isOwnProfile && role === 'Vendor') {
+            if (!isOwnProfile) {
                 const followContainer = document.createElement('div');
-                followContainer.innerHTML = renderVendorFollowButton({
+                followContainer.innerHTML = renderMemberFollowButton({
                     ownerUid: profileUid,
-                    vendorName: name
+                    name,
+                    role
                 });
                 if (followContainer.firstElementChild) {
                     followContainer.firstElementChild.classList.remove('mb-3');
                     header.appendChild(followContainer.firstElementChild);
+                }
+                if (currentUser?.role && currentUser.role !== role) {
+                    const messageButton = document.createElement('button');
+                    messageButton.type = 'button';
+                    messageButton.className = 'rounded-lg gold-gradient-bg px-3 py-2 text-xs font-bold text-black';
+                    messageButton.innerHTML = '<i class="fa-solid fa-message mr-1"></i> Message';
+                    messageButton.addEventListener('click', () => openChatPage(profileUid));
+                    header.appendChild(messageButton);
                 }
             }
             card.appendChild(header);
@@ -2334,6 +2788,20 @@ document.addEventListener("DOMContentLoaded", () => {
             );
             card.appendChild(details);
             content.appendChild(card);
+            if (role === 'Vendor') {
+                const productsSection = document.createElement('section');
+                productsSection.className = 'space-y-3';
+                const productsHeading = document.createElement('h3');
+                productsHeading.className = 'text-base font-bold text-white';
+                productsHeading.textContent = `${isOwnProfile ? 'Your' : `${name}’s`} products for sale`;
+                const productsContainer = document.createElement('div');
+                productsContainer.id = `vendorProductsFor-${profileUid}`;
+                productsContainer.className = 'grid grid-cols-1 gap-3 sm:grid-cols-2';
+                productsContainer.textContent = 'Loading vendor listings…';
+                productsSection.append(productsHeading, productsContainer);
+                content.appendChild(productsSection);
+                renderVendorProductsForProfile(profileUid);
+            }
             const postsSection = document.createElement('section');
             postsSection.className = 'space-y-3';
             const postsHeading = document.createElement('h3');
@@ -2347,6 +2815,61 @@ document.addEventListener("DOMContentLoaded", () => {
             renderCommunityPostsForProfile(profileUid);
             document.getElementById('editOwnProfileButton').classList.toggle('hidden', !isOwnProfile);
             subscribeToProfilePresence(profileUid);
+        }
+
+        async function renderVendorProductsForProfile(uid) {
+            const target = document.getElementById(`vendorProductsFor-${uid}`);
+            if (!target || !uid) return;
+            try {
+                const snapshot = await firebaseFirestore.collection('products')
+                    .where('ownerUid', '==', uid)
+                    .get();
+                if (!target.isConnected || viewedProfileUid !== uid) return;
+                const profileProducts = snapshot.docs.map(document => ({
+                    ...document.data(),
+                    id: document.id
+                })).sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
+                profileProducts.forEach(product => {
+                    if (!products.some(existing => existing.id === product.id)) products.unshift(product);
+                });
+                if (!profileProducts.length) {
+                    target.textContent = 'No shared product listings yet.';
+                    return;
+                }
+                target.innerHTML = profileProducts.map(product => {
+                    const media = getProductMedia(product)[0];
+                    const thumbnail = media?.type === 'video'
+                        ? `<video src="${escapeHtml(media.url)}" muted playsinline preload="metadata" class="h-28 w-full rounded-lg bg-black object-cover"></video>`
+                        : `<img src="${escapeHtml(media?.url || '')}" alt="${escapeHtml(product.title)}" loading="lazy" class="h-28 w-full rounded-lg bg-black object-cover" onerror="this.onerror=null;this.src='https://placehold.co/500x350/131b2e/ffd700?text=GOLDEN+EAGLE+GSM'">`;
+                    return `<button type="button" onclick="openProfileProductListing(this.dataset.productId)" data-product-id="${escapeHtml(product.id)}" class="rounded-xl border border-darkBorder bg-darkCard p-3 text-left hover:border-gold/50">
+                        ${thumbnail}
+                        <span class="mt-2 block truncate text-sm font-bold text-white">${escapeHtml(product.title)}</span>
+                        <span class="mt-1 block text-xs text-gold">₦${Number(product.price).toLocaleString()}</span>
+                        <span class="mt-1 block text-[10px] text-gray-400">Stock: ${Number(product.stock) || 0}</span>
+                    </button>`;
+                }).join('');
+            } catch (error) {
+                console.error('Unable to load vendor listings for the profile.', error);
+                if (target.isConnected) target.textContent = 'Vendor product listings could not load. Check your connection and Firestore rules.';
+            }
+        }
+
+        async function openProfileProductListing(productId) {
+            let product = products.find(item => item.id === productId);
+            if (!product) {
+                try {
+                    const snapshot = await firebaseFirestore.collection('products').doc(productId).get();
+                    if (snapshot.exists) {
+                        product = { ...snapshot.data(), id: snapshot.id };
+                        products.unshift(product);
+                    }
+                } catch (error) {
+                    console.error('Unable to open the vendor product listing.', error);
+                    showToast('This product listing could not be opened. Check your connection.', 'error');
+                    return;
+                }
+            }
+            if (product) openDetailModal(product.id);
         }
 
         function appendProfileDetail(container, label, value) {
@@ -2370,8 +2893,8 @@ document.addEventListener("DOMContentLoaded", () => {
             const accountUid = currentUser.uid;
             document.getElementById('accountConnectionsHeading').textContent = isFollowers ? 'Followers' : 'Following';
             document.getElementById('accountConnectionsHint').textContent = isFollowers
-                ? 'People who follow your vendor account.'
-                : 'Vendor accounts you follow. Their shared product listings appear in your Following FYP.';
+                ? 'Buyers and Vendors who follow your account.'
+                : 'Buyer and Vendor accounts you follow.';
             list.textContent = 'Loading profiles…';
 
             accountConnectionsUnsubscribe = firebaseFirestore
@@ -2395,17 +2918,19 @@ document.addEventListener("DOMContentLoaded", () => {
                 empty.className = 'rounded-xl border border-darkBorder bg-darkBg p-4 text-sm text-gray-400';
                 empty.textContent = isFollowers
                     ? 'You do not have any followers yet.'
-                    : 'You are not following any vendors yet. Follow a vendor from one of their product listings.';
+                    : 'You are not following any accounts yet. Search for a Buyer or Vendor profile to follow.';
                 list.appendChild(empty);
                 return;
             }
 
             profileDocs.forEach(profileDoc => {
                 const profile = profileDoc.data();
-                const name = isFollowers ? profile.followerName : profile.vendorName;
+                const name = isFollowers
+                    ? profile.followerName
+                    : (profile.memberName || profile.vendorName);
                 const role = isFollowers
                     ? (profile.followerRole === 'Vendor' ? 'Vendor' : 'Buyer')
-                    : 'Vendor';
+                    : (profile.memberRole || 'Vendor');
                 const card = document.createElement('article');
                 card.className = 'flex items-center gap-3 rounded-xl border border-darkBorder bg-darkBg p-3';
                 const avatar = document.createElement('span');
@@ -2427,6 +2952,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 viewProfile.dataset.profileUid = profileDoc.id;
                 viewProfile.addEventListener('click', () => openMemberProfile(viewProfile.dataset.profileUid));
                 card.append(avatar, identity, viewProfile);
+                if (!isFollowers) {
+                    const unfollow = document.createElement('button');
+                    unfollow.type = 'button';
+                    unfollow.className = 'rounded-lg border border-darkBorder px-3 py-2 text-[11px] font-semibold text-gray-300 hover:border-red-400/50 hover:text-red-300';
+                    unfollow.textContent = 'Unfollow';
+                    unfollow.addEventListener('click', () => toggleMemberFollow(
+                        profileDoc.id,
+                        name,
+                        role
+                    ));
+                    card.appendChild(unfollow);
+                }
                 list.appendChild(card);
             });
         }
@@ -2588,7 +3125,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
 
-        function openChatPage() {
+        function openChatPage(otherUid = '', productId = '') {
             toggleSideMenu(false);
             if (!currentUser) {
                 showToast('Sign in before opening chats.', 'info');
@@ -2604,142 +3141,552 @@ document.addEventListener("DOMContentLoaded", () => {
             unsubscribeFromProfilePresence();
             if (accountConnectionsUnsubscribe) accountConnectionsUnsubscribe();
             accountConnectionsUnsubscribe = null;
-            chatPreviewRole = currentUser?.role === 'Vendor' ? 'Vendor' : 'Buyer';
-            const roleName = chatPreviewRole === 'Vendor' ? 'Vendor' : 'Buyer';
-            document.getElementById('chatRoleLabel').textContent = `${roleName}-to-${roleName} chat · preview`;
-            document.getElementById('chatContactName').textContent = `${roleName} member (sample)`;
-            document.getElementById('chatThreadTitle').textContent = `${roleName} member (sample)`;
+            document.getElementById('chatRoleLabel').textContent = `${currentUser.role} account · coins charged per sent message`;
             document.getElementById('marketplaceMain').classList.add('hidden');
             document.getElementById('accountPage').classList.add('hidden');
             document.getElementById('marketplaceFooter').classList.add('hidden');
             document.getElementById('chatPage').classList.remove('hidden');
-
-            if (chatPreviewMessages.length === 0) {
-                chatPreviewMessages.push({
-                    sender: 'other',
-                    text: `This is a sample ${roleName.toLowerCase()}-to-${roleName.toLowerCase()} conversation. Messages are not delivered to another person.`,
-                    voicePreview: true
-                });
-            }
-            renderChatPreviewMessages();
+            subscribeToGoldenChats();
             window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            if (otherUid) startGoldenChat(otherUid, productId);
         }
 
-        function renderChatPreviewMessages() {
+        async function startGoldenChat(otherUid, productId = '') {
+            if (!otherUid || otherUid === currentUser?.uid) return;
+            try {
+                const result = await firebaseFunctions.httpsCallable('getOrCreateGoldenChat')({
+                    otherUid,
+                    productId: productId || ''
+                });
+                const snapshot = await firebaseFirestore.collection('goldenChats').doc(result.data.chatId).get();
+                if (!snapshot.exists) throw new Error('The conversation could not be loaded after it was created.');
+                selectGoldenChat(snapshot.id, snapshot.data());
+            } catch (error) {
+                console.error('Unable to open the Buyer–Vendor conversation.', error);
+                showToast(error.message || 'This conversation could not be opened. Check your connection and account roles.', 'error');
+            }
+        }
+
+        function subscribeToGoldenChats() {
+            if (!currentUser) return;
+            const uid = currentUser.uid;
+            if (goldenChatListenerUid === uid && goldenChatListUnsubscribe) return;
+            stopGoldenChatSubscriptions();
+            goldenChatListenerUid = uid;
+            goldenChatListUnsubscribe = firebaseFirestore.collection('goldenChats')
+                .where('participantIds', 'array-contains', uid)
+                .limit(50)
+                .onSnapshot(snapshot => {
+                    if (currentUser?.uid !== uid) return;
+                    renderGoldenChatList(snapshot);
+                }, error => {
+                    console.error('Unable to load Golden Chat conversations.', error);
+                    document.getElementById('chatConversationList').textContent =
+                        'Conversations could not load. Check your connection and Firestore rules.';
+                });
+        }
+
+        function stopGoldenChatSubscriptions() {
+            if (goldenChatListUnsubscribe) goldenChatListUnsubscribe();
+            if (goldenChatMessagesUnsubscribe) goldenChatMessagesUnsubscribe();
+            if (goldenChatProductUnsubscribe) goldenChatProductUnsubscribe();
+            goldenChatListUnsubscribe = null;
+            goldenChatMessagesUnsubscribe = null;
+            goldenChatProductUnsubscribe = null;
+            goldenChatListenerUid = null;
+            activeGoldenChatId = null;
+            activeGoldenChatData = null;
+            releaseGoldenChatMediaUrls();
+        }
+
+        function releaseGoldenChatMediaUrls() {
+            goldenChatMediaUrls.forEach(url => URL.revokeObjectURL(url));
+            goldenChatMediaUrls.clear();
+        }
+
+        function clearUnsentGoldenChatDraft() {
+            pendingChatFiles.forEach(file => URL.revokeObjectURL(file.url));
+            pendingChatFiles = [];
+            pendingChatVoiceBlob = null;
+            document.getElementById('chatMessageInput').value = '';
+            document.getElementById('chatMediaInput').value = '';
+            document.getElementById('chatVoiceRecordStatus').classList.add('hidden');
+            renderPendingChatFiles();
+        }
+
+        function renderGoldenChatList(snapshot) {
+            const list = document.getElementById('chatConversationList');
+            list.replaceChildren();
+            const chats = snapshot.docs
+                .map(document => ({ id: document.id, ...document.data() }))
+                .sort((left, right) => {
+                    const leftTime = left.lastMessageAt?.toMillis?.() || 0;
+                    const rightTime = right.lastMessageAt?.toMillis?.() || 0;
+                    return rightTime - leftTime;
+                });
+            if (!chats.length) {
+                const empty = document.createElement('p');
+                empty.className = 'p-3 text-[10px] leading-relaxed text-gray-500';
+                empty.textContent = 'No conversations yet. Open a Vendor listing or member profile and choose Message to start a private chat.';
+                list.appendChild(empty);
+                return;
+            }
+            chats.forEach(chat => {
+                const otherUid = chat.participantIds.find(uid => uid !== currentUser?.uid);
+                const other = chat.participants?.[otherUid] || {};
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = `w-full rounded-xl border px-3 py-3 text-left ${activeGoldenChatId === chat.id ? 'border-gold/50 bg-gold/10' : 'border-transparent hover:bg-darkBg'}`;
+                const name = document.createElement('span');
+                name.className = 'block truncate text-xs font-bold text-white';
+                name.textContent = other.name || 'Marketplace member';
+                const role = document.createElement('span');
+                role.className = 'block text-[9px] font-semibold uppercase tracking-wide text-gold';
+                role.textContent = other.role || 'Member';
+                const preview = document.createElement('span');
+                preview.className = 'mt-1 block truncate text-[10px] text-gray-400';
+                preview.textContent = chat.product?.title
+                    ? `${chat.product.title} · ${chat.lastMessage || 'Product enquiry'}`
+                    : chat.lastMessage || 'Conversation started';
+                button.append(name, role, preview);
+                button.addEventListener('click', () => selectGoldenChat(chat.id, chat));
+                list.appendChild(button);
+            });
+        }
+
+        function selectGoldenChat(chatId, chatData) {
+            if (chatVoiceRecorder?.state === 'recording' && activeGoldenChatId !== chatId) {
+                showToast('Stop recording the voice note before switching conversations.', 'info');
+                return;
+            }
+            if (chatSendRetry && chatSendRetry.chatId !== chatId) {
+                showToast('Retry the pending message in its conversation before switching chats.', 'info');
+                return;
+            }
+            const hasDraft = activeGoldenChatId !== chatId &&
+                (document.getElementById('chatMessageInput').value.trim() ||
+                    pendingChatFiles.length ||
+                    pendingChatVoiceBlob);
+            if (hasDraft) {
+                if (!window.confirm('Discard the unsent message or media and switch conversations?')) return;
+                clearUnsentGoldenChatDraft();
+            }
+            if (goldenChatMessagesUnsubscribe) goldenChatMessagesUnsubscribe();
+            if (goldenChatProductUnsubscribe) goldenChatProductUnsubscribe();
+            releaseGoldenChatMediaUrls();
+            activeGoldenChatId = chatId;
+            activeGoldenChatData = chatData;
+            const otherUid = chatData.participantIds.find(uid => uid !== currentUser?.uid);
+            const other = chatData.participants?.[otherUid] || {};
+            document.getElementById('chatThreadTitle').textContent = other.name || 'Marketplace member';
+            document.getElementById('chatThreadSubtitle').textContent =
+                `${other.role || 'Member'} · Messages charged to sender only`;
+            document.getElementById('chatComposer').classList.remove('hidden');
+            document.getElementById('chatMessageInput').disabled = Boolean(chatSendRetry && chatSendRetry.chatId !== chatId);
+            renderGoldenChatListFromCurrent();
+            renderGoldenChatProduct(chatData.product || null);
+            if (chatData.productId) subscribeToGoldenChatProduct(chatData.productId);
+            const messages = document.getElementById('chatMessages');
+            messages.textContent = 'Loading secure conversation…';
+            goldenChatMessagesUnsubscribe = firebaseFirestore.collection('goldenChats').doc(chatId)
+                .collection('messages')
+                .orderBy('createdAt', 'asc')
+                .limit(100)
+                .onSnapshot(snapshot => {
+                    if (activeGoldenChatId !== chatId) return;
+                    renderGoldenChatMessages(snapshot, chatId);
+                }, error => {
+                    console.error('Unable to load Golden Chat messages.', error);
+                    messages.textContent = 'Messages could not load. Check your connection and Firestore rules.';
+                });
+        }
+
+        function renderGoldenChatListFromCurrent() {
+            if (!currentUser) return;
+            firebaseFirestore.collection('goldenChats')
+                .where('participantIds', 'array-contains', currentUser.uid)
+                .limit(50)
+                .get()
+                .then(renderGoldenChatList)
+                .catch(error => console.error('Unable to refresh the conversation list.', error));
+        }
+
+        function renderGoldenChatProduct(product) {
+            const status = document.getElementById('chatProductStatus');
+            if (!product) {
+                status.classList.add('hidden');
+                status.textContent = '';
+                return;
+            }
+            status.classList.remove('hidden');
+            status.textContent = `${product.title || 'Product enquiry'} · ${Number(product.stock) > 0
+                ? `${product.stock} listed in stock`
+                : 'Ask the Vendor to confirm current availability'}`;
+        }
+
+        function subscribeToGoldenChatProduct(productId) {
+            goldenChatProductUnsubscribe = firebaseFirestore.collection('products').doc(productId)
+                .onSnapshot(snapshot => {
+                    if (activeGoldenChatData?.productId !== productId) return;
+                    if (!snapshot.exists) {
+                        renderGoldenChatProduct({
+                            title: activeGoldenChatData.product?.title || 'Product listing',
+                            stock: 0
+                        });
+                        return;
+                    }
+                    const product = snapshot.data();
+                    renderGoldenChatProduct({
+                        title: product.title || 'Product listing',
+                        stock: Number.isInteger(product.stock) ? Math.max(0, product.stock) : 0
+                    });
+                }, error => {
+                    console.error('Unable to refresh the linked product availability.', error);
+                });
+        }
+
+        async function renderGoldenChatMessages(snapshot, chatId) {
             const container = document.getElementById('chatMessages');
             container.replaceChildren();
-
-            chatPreviewMessages.forEach(message => {
+            if (snapshot.empty) {
+                const empty = document.createElement('p');
+                empty.className = 'my-6 text-center text-xs text-gray-500';
+                empty.textContent = 'Ask whether the listed product is still available, or send a message to begin.';
+                container.appendChild(empty);
+                return;
+            }
+            for (const document of snapshot.docs) {
+                if (activeGoldenChatId !== chatId) return;
+                const message = document.data();
                 const row = document.createElement('div');
-                row.className = `flex ${message.sender === 'me' ? 'justify-end' : 'justify-start'}`;
+                row.className = `flex ${message.senderUid === currentUser?.uid ? 'justify-end' : 'justify-start'}`;
                 const bubble = document.createElement('div');
-                bubble.className = `max-w-[85%] space-y-2 rounded-2xl border p-3 text-xs ${message.sender === 'me' ? 'border-gold/30 bg-gold/10 text-white' : 'border-darkBorder bg-darkCard text-gray-200'}`;
-
+                bubble.className = `max-w-[85%] space-y-2 rounded-2xl border p-3 text-xs ${message.senderUid === currentUser?.uid ? 'border-gold/30 bg-gold/10 text-white' : 'border-darkBorder bg-darkCard text-gray-200'}`;
                 if (message.text) {
                     const text = document.createElement('p');
                     text.className = 'whitespace-pre-wrap break-words';
                     text.textContent = message.text;
                     bubble.appendChild(text);
                 }
-
-                if (message.voicePreview) {
-                    const voice = document.createElement('div');
-                    voice.className = 'flex items-center gap-2 rounded-lg bg-black/10 px-2 py-2';
-                    voice.innerHTML = '<button type="button" disabled class="text-gray-500" aria-label="Sample voice note, playback unavailable"><i class="fa-solid fa-play"></i></button><div class="flex h-6 flex-1 items-center gap-0.5" aria-hidden="true">' +
-                        [8, 14, 20, 12, 17, 9, 22, 14, 7, 18, 11, 20, 10, 15, 8, 19, 12, 6, 16, 10].map(height =>
-                            `<span class="w-1 rounded-full bg-gold/60" style="height:${height}px"></span>`
-                        ).join('') +
-                        '</div><span class="text-[9px] text-gray-500">0:08 · sample</span>';
-                    bubble.appendChild(voice);
+                if (message.mediaPath) {
+                    const media = document.createElement(message.type === 'voice' ? 'audio' : 'img');
+                    media.className = message.type === 'voice'
+                        ? 'w-full max-w-xs'
+                        : 'max-h-64 max-w-full rounded-lg object-contain';
+                    if (message.type === 'voice') media.controls = true;
+                    else media.alt = 'Photo sent in Golden Chat';
+                    bubble.appendChild(media);
+                    loadGoldenChatMedia(media, message.mediaPath, chatId);
                 }
-
-                (message.files || []).forEach(file => {
-                    const preview = document.createElement(file.type.startsWith('video/') ? 'video' : 'img');
-                    preview.src = file.url;
-                    preview.className = 'max-h-56 max-w-full rounded-lg object-contain';
-                    if (preview.tagName === 'VIDEO') {
-                        preview.controls = true;
-                        preview.playsInline = true;
-                    } else {
-                        preview.alt = `Local preview of ${file.name}`;
-                    }
-                    bubble.appendChild(preview);
-                    const fileName = document.createElement('p');
-                    fileName.className = 'break-all text-[10px] text-gray-400';
-                    fileName.textContent = file.name;
-                    bubble.appendChild(fileName);
-                });
-
-                const status = document.createElement('span');
-                status.className = 'block text-[9px] text-gray-500';
-                status.textContent = message.sender === 'me' ? 'Local preview · not delivered' : 'Sample message';
-                bubble.appendChild(status);
+                const receipt = document.createElement('span');
+                receipt.className = 'block text-[9px] text-gray-500';
+                receipt.textContent = `Sent by ${message.senderName || 'Marketplace member'} · ${message.coinCost || 0} coin${message.coinCost === 1 ? '' : 's'}`;
+                bubble.appendChild(receipt);
                 row.appendChild(bubble);
                 container.appendChild(row);
-            });
+            }
             container.scrollTop = container.scrollHeight;
         }
 
-        function sendPreviewMessage(event) {
+        async function loadGoldenChatMedia(element, path, chatId) {
+            try {
+                let url = goldenChatMediaUrls.get(path);
+                if (!url) {
+                    const blob = await firebaseStorage.ref(path).getBlob();
+                    url = URL.createObjectURL(blob);
+                    goldenChatMediaUrls.set(path, url);
+                }
+                if (activeGoldenChatId === chatId && element.isConnected) element.src = url;
+            } catch (error) {
+                console.error('Unable to load private Golden Chat media.', error);
+                if (element.isConnected) {
+                    element.replaceWith(document.createTextNode('Private media could not be loaded. Check Storage rules and CORS.'));
+                }
+            }
+        }
+
+        async function sendGoldenChatMessage(event) {
             event.preventDefault();
+            if (!activeGoldenChatId || !currentUser || chatSending) {
+                if (!activeGoldenChatId) showToast('Open a Buyer–Vendor conversation before sending a message.', 'info');
+                return;
+            }
+            const chatId = activeGoldenChatId;
+            if (chatSendRetry && chatSendRetry.chatId !== chatId) {
+                showToast('Retry or resolve the pending message in its conversation before sending another.', 'info');
+                return;
+            }
             const input = document.getElementById('chatMessageInput');
             const text = input.value.trim();
-            if (!text && pendingChatFiles.length === 0) return;
-
-            chatPreviewMessages.push({
-                sender: 'me',
-                text,
-                files: pendingChatFiles.map(file => ({
-                    name: file.name,
-                    type: file.type,
-                    url: file.url
-                }))
-            });
-            input.value = '';
-            pendingChatFiles = [];
-            document.getElementById('chatMediaInput').value = '';
-            renderPendingChatFiles();
-            renderChatPreviewMessages();
+            const imageFile = pendingChatFiles[0]?.file || null;
+            const voiceBlob = pendingChatVoiceBlob;
+            if (!text && !imageFile && !voiceBlob) return;
+            const mediaFile = voiceBlob || imageFile;
+            if (mediaFile && text.length > 500) {
+                showToast('Photo and voice-note captions must be 500 characters or fewer.', 'error');
+                return;
+            }
+            const type = voiceBlob ? 'voice' : imageFile ? 'image' : 'text';
+            chatSending = true;
+            const submit = document.querySelector('#chatComposer button[type="submit"]');
+            const originalLabel = submit.textContent;
+            submit.disabled = true;
+            submit.textContent = 'Sending securely…';
+            let payload = chatSendRetry;
+            let uploadAttempted = false;
+            let messageCallStarted = false;
+            try {
+                if (!payload) {
+                    const messageId = firebaseFirestore.collection('goldenChats').doc(chatId)
+                        .collection('messages').doc().id;
+                    payload = { chatId, messageId, type, text };
+                    if (mediaFile) {
+                        payload.mediaPath = `golden-chat-media/${chatId}/${currentUser.uid}/${messageId}`;
+                    }
+                    chatSendRetry = payload;
+                }
+                if (payload.mediaPath) {
+                    if (!payload.mediaReserved) {
+                        await firebaseFunctions.httpsCallable('reserveGoldenChatMedia')({
+                            chatId: payload.chatId,
+                            messageId: payload.messageId,
+                            type: payload.type
+                        });
+                        payload.mediaReserved = true;
+                    }
+                    const mediaRef = firebaseStorage.ref(payload.mediaPath);
+                    if (!payload.mediaUploaded) {
+                        try {
+                            await mediaRef.getMetadata();
+                            payload.mediaUploaded = true;
+                        } catch (error) {
+                            if (error.code !== 'storage/object-not-found') throw error;
+                            uploadAttempted = true;
+                            await mediaRef.put(mediaFile, { contentType: mediaFile.type });
+                            payload.mediaUploaded = true;
+                        }
+                    }
+                }
+                messageCallStarted = true;
+                const result = await firebaseFunctions.httpsCallable('sendGoldenChatMessage')({
+                    chatId: payload.chatId,
+                    messageId: payload.messageId,
+                    type: payload.type,
+                    text: payload.text,
+                    mediaPath: payload.mediaPath || ''
+                });
+                chatSendRetry = null;
+                input.value = '';
+                pendingChatFiles.forEach(file => URL.revokeObjectURL(file.url));
+                pendingChatFiles = [];
+                pendingChatVoiceBlob = null;
+                document.getElementById('chatMediaInput').value = '';
+                document.getElementById('chatVoiceRecordStatus').classList.add('hidden');
+                renderPendingChatFiles();
+                submit.textContent = `Sent · ${result.data.coinsRemaining} coins left`;
+                showToast(`Message sent. ${result.data.coinsRemaining} Golden Chat coins remain.`, 'success');
+            } catch (error) {
+                console.error('Unable to send a Golden Chat message.', error);
+                const definitelyRejected = [
+                    'functions/failed-precondition',
+                    'functions/permission-denied',
+                    'functions/invalid-argument',
+                    'functions/not-found',
+                    'functions/resource-exhausted'
+                ].includes(error.code);
+                if (definitelyRejected) {
+                    if (payload?.mediaPath) {
+                        try {
+                            await firebaseFunctions.httpsCallable('cancelGoldenChatMediaReservation')({
+                                chatId: payload.chatId,
+                                messageId: payload.messageId
+                            });
+                        } catch (cleanupError) {
+                            console.error('Unable to release a rejected Golden Chat media reservation.', cleanupError);
+                        }
+                    }
+                    chatSendRetry = null;
+                } else if (uploadAttempted && payload?.mediaPath) {
+                    try {
+                        await firebaseFunctions.httpsCallable('cancelGoldenChatMediaReservation')({
+                            chatId: payload.chatId,
+                            messageId: payload.messageId
+                        });
+                        chatSendRetry = null;
+                    } catch (cleanupError) {
+                        console.error('Unable to release a failed Golden Chat upload reservation.', cleanupError);
+                    }
+                }
+                const insufficientCoins = error.code === 'functions/failed-precondition' &&
+                    /coin|top up/i.test(error.message || '');
+                showToast(error.message || 'The message could not be sent. Check your connection and try again.', 'error');
+                if (insufficientCoins) openChatCoinStore();
+                else if (!definitelyRejected && messageCallStarted) {
+                    showToast('Delivery status is uncertain. Retry in this conversation; the same message will not be charged twice.', 'info');
+                } else if (uploadAttempted && !chatSendRetry) {
+                    showToast('The media upload failed. Its reserved coins were returned; please try again.', 'info');
+                } else if (!definitelyRejected) {
+                    showToast('The operation could not be confirmed. Retry here; the same media reservation will not deduct coins twice.', 'info');
+                }
+                submit.textContent = chatSendRetry ? 'Retry send' : originalLabel;
+            } finally {
+                chatSending = false;
+                submit.disabled = false;
+                if (!chatSendRetry) submit.textContent = originalLabel;
+            }
         }
+
+        let chatSending = false;
 
         function previewChatFiles(event) {
             const files = Array.from(event.target.files || []);
-            files.forEach(file => {
-                if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
-                    showToast(`${file.name} is not an image or video file.`, 'error');
-                    return;
-                }
-                pendingChatFiles.push({
-                    name: file.name,
-                    type: file.type,
-                    url: URL.createObjectURL(file)
-                });
-            });
+            if (!files.length) return;
+            const file = files[0];
+            if (!file.type.startsWith('image/')) {
+                showToast(`${file.name} is not an image. Golden Chat accepts photos and voice notes here.`, 'error');
+                event.target.value = '';
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                showToast('Golden Chat photos must be 5 MB or smaller.', 'error');
+                event.target.value = '';
+                return;
+            }
+            if (pendingChatVoiceBlob) {
+                showToast('Remove the recorded voice note before selecting a photo.', 'info');
+                event.target.value = '';
+                return;
+            }
+            pendingChatFiles.forEach(item => URL.revokeObjectURL(item.url));
+            pendingChatFiles = [{
+                name: file.name,
+                type: file.type,
+                file,
+                url: URL.createObjectURL(file)
+            }];
             renderPendingChatFiles();
+        }
+
+        async function toggleChatVoiceRecording() {
+            if (!activeGoldenChatId) {
+                showToast('Open a conversation before recording a voice note.', 'info');
+                return;
+            }
+            if (chatVoiceRecorder?.state === 'recording') {
+                chatVoiceRecorder.stop();
+                return;
+            }
+            if (pendingChatFiles.length) {
+                showToast('Remove the selected photo before recording a voice note.', 'info');
+                return;
+            }
+            if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+                showToast('Voice-note recording is not supported by this browser.', 'error');
+                return;
+            }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const mimeType = typeof MediaRecorder.isTypeSupported === 'function'
+                    ? ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus']
+                        .find(type => MediaRecorder.isTypeSupported(type))
+                    : '';
+                chatVoiceRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+                chatVoiceChunks = [];
+                chatVoiceRecordedBytes = 0;
+                chatVoiceRecorder.addEventListener('dataavailable', event => {
+                    if (event.data.size) {
+                        chatVoiceChunks.push(event.data);
+                        chatVoiceRecordedBytes += event.data.size;
+                    }
+                    if (chatVoiceRecordedBytes >= MAX_GOLDEN_CHAT_VOICE_BYTES &&
+                        chatVoiceRecorder?.state === 'recording') {
+                        showToast('The voice note reached the 25 MB limit and recording has stopped.', 'info');
+                        chatVoiceRecorder.stop();
+                    }
+                });
+                chatVoiceRecorder.addEventListener('error', event => {
+                    console.error('Golden Chat voice recording failed.', event.error);
+                    showToast('The voice note could not be recorded.', 'error');
+                });
+                chatVoiceRecorder.addEventListener('stop', () => {
+                    stream.getTracks().forEach(track => track.stop());
+                    const button = document.getElementById('chatVoiceRecordButton');
+                    button.classList.remove('border-red-500', 'text-red-400');
+                    button.setAttribute('aria-label', 'Record a voice note');
+                    if (discardChatVoiceOnStop) {
+                        discardChatVoiceOnStop = false;
+                        chatVoiceRecorder = null;
+                        chatVoiceChunks = [];
+                        chatVoiceRecordedBytes = 0;
+                        pendingChatVoiceBlob = null;
+                        return;
+                    }
+                    const blob = new Blob(chatVoiceChunks, { type: chatVoiceRecorder.mimeType || 'audio/webm' });
+                    chatVoiceRecorder = null;
+                    chatVoiceChunks = [];
+                    chatVoiceRecordedBytes = 0;
+                    if (!blob.size) {
+                        showToast('The voice note was empty and could not be saved.', 'error');
+                        return;
+                    }
+                    if (blob.size > MAX_GOLDEN_CHAT_VOICE_BYTES) {
+                        showToast('Voice notes must be 25 MB or smaller.', 'error');
+                        return;
+                    }
+                    pendingChatVoiceBlob = blob;
+                    const status = document.getElementById('chatVoiceRecordStatus');
+                    status.textContent = `Voice note ready · ${Math.ceil(blob.size / 1024)} KB · 3 coins`;
+                    status.classList.remove('hidden');
+                    renderPendingChatFiles();
+                }, { once: true });
+                chatVoiceRecorder.start(1000);
+                const button = document.getElementById('chatVoiceRecordButton');
+                button.classList.add('border-red-500', 'text-red-400');
+                button.setAttribute('aria-label', 'Stop recording voice note');
+                document.getElementById('chatVoiceRecordStatus').textContent = 'Recording… tap the microphone again to stop (25 MB maximum).';
+                document.getElementById('chatVoiceRecordStatus').classList.remove('hidden');
+            } catch (error) {
+                console.error('Unable to start Golden Chat voice recording.', error);
+                showToast('Microphone access was denied or could not start. Check browser permissions.', 'error');
+            }
         }
 
         function renderPendingChatFiles() {
             const container = document.getElementById('chatPendingFiles');
             container.replaceChildren();
-            container.classList.toggle('hidden', pendingChatFiles.length === 0);
-            pendingChatFiles.forEach((file, index) => {
-                const item = document.createElement('div');
-                item.className = 'mb-2 flex items-center justify-between gap-2 rounded-lg border border-darkBorder bg-darkBg px-3 py-2 text-[10px] text-gray-300';
-                const name = document.createElement('span');
-                name.className = 'truncate';
-                name.textContent = `${file.type.startsWith('video/') ? 'Video' : 'Image'} preview: ${file.name}`;
+            const hasPending = pendingChatFiles.length > 0 || Boolean(pendingChatVoiceBlob);
+            container.classList.toggle('hidden', !hasPending);
+            const pending = [
+                ...pendingChatFiles.map((file, index) => ({ kind: 'photo', file, index })),
+                ...(pendingChatVoiceBlob ? [{ kind: 'voice', file: { name: 'Voice note' }, index: -1 }] : [])
+            ];
+            pending.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'mb-2 flex items-center justify-between gap-2 rounded-lg border border-darkBorder bg-darkBg px-3 py-2 text-[10px] text-gray-300';
+                const label = document.createElement('span');
+                label.className = 'truncate';
+                label.textContent = item.kind === 'voice'
+                    ? 'Recorded voice note · 3 coins'
+                    : `Photo ready · 2 coins · ${item.file.name}`;
                 const remove = document.createElement('button');
                 remove.type = 'button';
                 remove.className = 'flex-shrink-0 text-red-400 hover:text-red-300';
-                remove.setAttribute('aria-label', `Remove ${file.name}`);
+                remove.setAttribute('aria-label', `Remove ${label.textContent}`);
                 remove.innerHTML = '<i class="fa-solid fa-xmark"></i>';
                 remove.addEventListener('click', () => {
-                    URL.revokeObjectURL(file.url);
-                    pendingChatFiles.splice(index, 1);
+                    if (item.kind === 'voice') {
+                        pendingChatVoiceBlob = null;
+                        document.getElementById('chatVoiceRecordStatus').classList.add('hidden');
+                    } else {
+                        URL.revokeObjectURL(item.file.url);
+                        pendingChatFiles.splice(item.index, 1);
+                        document.getElementById('chatMediaInput').value = '';
+                    }
                     renderPendingChatFiles();
                 });
-                item.append(name, remove);
-                container.appendChild(item);
+                row.append(label, remove);
+                container.appendChild(row);
             });
         }
 
@@ -2757,14 +3704,48 @@ document.addEventListener("DOMContentLoaded", () => {
             input.selectionStart = input.selectionEnd = start + text.length;
         }
 
+        function openChatCoinStore() {
+            if (!currentUser) {
+                showToast('Sign in before buying Golden Chat coins.', 'info');
+                openAuthModal('signin');
+                return;
+            }
+            const modal = document.getElementById('chatCoinStoreModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeChatCoinStore() {
+            const modal = document.getElementById('chatCoinStoreModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
         function showChatBackendNotice(feature) {
-            showToast(`${feature} is unavailable in this preview. Nothing was recorded or connected.`, 'info');
+            showToast(`${feature} will be available after a calling provider is configured. No coins are charged.`, 'info');
         }
 
         function openAuthModal(tab = 'signin') {
+            const password = document.getElementById('authPassword');
+            password.type = 'password';
+            document.getElementById('toggleAuthPasswordButton').setAttribute('aria-label', 'Show password');
+            document.getElementById('toggleAuthPasswordButton').setAttribute('aria-pressed', 'false');
+            document.getElementById('toggleAuthPasswordIcon').className = 'fa-solid fa-eye';
             setAuthMethod('email');
             setAuthTab(tab);
             document.getElementById('authModal').classList.remove('hidden');
+        }
+
+        function toggleAuthPasswordVisibility() {
+            const password = document.getElementById('authPassword');
+            const button = document.getElementById('toggleAuthPasswordButton');
+            const icon = document.getElementById('toggleAuthPasswordIcon');
+            const isVisible = password.type === 'text';
+            password.type = isVisible ? 'password' : 'text';
+            button.setAttribute('aria-label', isVisible ? 'Show password' : 'Hide password');
+            button.setAttribute('aria-pressed', String(!isVisible));
+            icon.className = `fa-solid ${isVisible ? 'fa-eye' : 'fa-eye-slash'}`;
+            password.focus();
         }
 
         function closeAuthModal() {
@@ -2922,6 +3903,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
         async function handleAuthSubmit(event) {
             event.preventDefault();
+            const submitButton = document.getElementById('authSubmitBtn');
+            if (submitButton.disabled) return;
+            submitButton.disabled = true;
+            const status = document.getElementById('authStatusMessage');
+            status.textContent = currentAuthMethod === 'phone'
+                ? (phoneConfirmationResult ? 'Verifying your code…' : 'Sending verification code…')
+                : (currentAuthTab === 'register' ? 'Creating your account…' : 'Signing in…');
+            status.classList.remove('hidden');
             document.getElementById('authErrorMessage').classList.add('hidden');
 
             try {
@@ -2975,6 +3964,10 @@ document.addEventListener("DOMContentLoaded", () => {
             } catch (error) {
                 allowUnverifiedEmailSession = false;
                 showAuthError(getAuthErrorMessage(error));
+            } finally {
+                submitButton.disabled = false;
+                status.classList.add('hidden');
+                updateAuthMethodFields();
             }
         }
 
@@ -3802,7 +4795,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                     : `<span class="max-w-[150px] truncate"><i class="fa-solid fa-store text-gold mr-1"></i>${escapeHtml(prod.vendorName)}</span>`}
                                 <span class="text-yellow-400 font-bold"><i class="fa-solid fa-star text-xs"></i> ${Number(prod.rating) || 5.0}</span>
                             </div>
-                            ${renderVendorFollowButton(prod)}
+                            ${renderMemberFollowButton({ ...prod, role: 'Vendor' })}
 
                             <div class="flex items-center justify-between gap-2">
                                 <div>
@@ -3856,16 +4849,19 @@ document.addEventListener("DOMContentLoaded", () => {
             return media;
         }
 
-        function renderVendorFollowButton(product) {
-            const vendorUid = product.ownerUid;
-            if (typeof vendorUid !== 'string' || !vendorUid || vendorUid === currentUser?.uid) return '';
-            const following = followedVendorIds.has(vendorUid);
+        function renderMemberFollowButton(member) {
+            const memberUid = member.ownerUid || member.uid;
+            if (typeof memberUid !== 'string' || !memberUid || memberUid === currentUser?.uid) return '';
+            const memberName = member.name || member.vendorName || 'Marketplace member';
+            const memberRole = member.role === 'Vendor' ? 'Vendor' : 'Buyer';
+            const following = followedMemberIds.has(memberUid);
             return `
                 <button type="button"
-                    onclick="toggleVendorFollow(this.dataset.vendorUid, this.dataset.vendorName)"
-                    data-vendor-follow
-                    data-vendor-uid="${escapeHtml(vendorUid)}"
-                    data-vendor-name="${escapeHtml(product.vendorName || 'Vendor')}"
+                    onclick="toggleMemberFollow(this.dataset.memberUid, this.dataset.memberName, this.dataset.memberRole)"
+                    data-member-follow
+                    data-member-uid="${escapeHtml(memberUid)}"
+                    data-member-name="${escapeHtml(memberName)}"
+                    data-member-role="${memberRole}"
                     aria-pressed="${following}"
                     class="mb-3 inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-bold transition ${
                         following
@@ -3873,14 +4869,14 @@ document.addEventListener("DOMContentLoaded", () => {
                             : 'border-darkBorder bg-darkBg text-gray-200 hover:border-gold/50 hover:text-gold'
                     }">
                     <i class="fa-solid ${following ? 'fa-user-check' : 'fa-user-plus'}"></i>
-                    <span>${following ? 'Following' : 'Follow vendor'}</span>
+                    <span>${following ? 'Following' : 'Follow ${memberRole.toLowerCase()}'}</span>
                 </button>
             `;
         }
 
-        function updateVendorFollowButtons() {
-            document.querySelectorAll('[data-vendor-follow]').forEach(button => {
-                const following = followedVendorIds.has(button.dataset.vendorUid);
+        function updateMemberFollowButtons() {
+            document.querySelectorAll('[data-member-follow]').forEach(button => {
+                const following = followedMemberIds.has(button.dataset.memberUid);
                 button.setAttribute('aria-pressed', String(following));
                 button.classList.toggle('border-gold/50', following);
                 button.classList.toggle('bg-gold/10', following);
@@ -3889,13 +4885,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 button.classList.toggle('bg-darkBg', !following);
                 button.classList.toggle('text-gray-200', !following);
                 button.querySelector('i').className = `fa-solid ${following ? 'fa-user-check' : 'fa-user-plus'}`;
-                button.querySelector('span').textContent = following ? 'Following' : 'Follow vendor';
+                button.querySelector('span').textContent = following
+                    ? 'Following'
+                    : `Follow ${button.dataset.memberRole.toLowerCase()}`;
             });
         }
 
         function subscribeToFollowedVendors() {
             if (followingUnsubscribe) followingUnsubscribe();
             followingUnsubscribe = null;
+            followedMemberIds = new Set();
             followedVendorIds = new Set();
             if (!currentUser) {
                 if (selectedProductFeed === 'following') selectedProductFeed = 'all';
@@ -3907,33 +4906,38 @@ document.addEventListener("DOMContentLoaded", () => {
             followingUnsubscribe = firebaseFirestore
                 .collection('users').doc(currentUser.uid).collection('following')
                 .onSnapshot(snapshot => {
-                    followedVendorIds = new Set(snapshot.docs.map(doc => doc.id));
+                    followedMemberIds = new Set(snapshot.docs.map(doc => doc.id));
+                    followedVendorIds = new Set(snapshot.docs
+                        .filter(doc => doc.data().memberRole === 'Vendor' ||
+                            (doc.data().vendorUid === doc.id && !doc.data().memberRole))
+                        .map(doc => doc.id));
                     renderFeedTabs();
                     renderProducts();
-                    updateVendorFollowButtons();
+                    updateMemberFollowButtons();
                 }, error => {
                     console.error('Unable to load followed vendors.', error);
                     showToast('Your following list could not load. Check Firebase setup and Firestore rules.', 'error');
                 });
         }
 
-        async function toggleVendorFollow(vendorUid, vendorName) {
+        async function toggleMemberFollow(memberUid, memberName, memberRole) {
             if (!currentUser) {
-                showToast('Sign in to follow vendors and personalize your FYP.', 'info');
+                showToast('Sign in to follow marketplace members.', 'info');
                 openAuthModal('signin');
                 return;
             }
-            if (!vendorUid || vendorUid === currentUser.uid) return;
+            if (!memberUid || memberUid === currentUser.uid) return;
+            const role = memberRole === 'Vendor' ? 'Vendor' : 'Buyer';
 
             const followRef = firebaseFirestore.collection('users').doc(currentUser.uid)
-                .collection('following').doc(vendorUid);
-            const followerRef = firebaseFirestore.collection('users').doc(vendorUid)
+                .collection('following').doc(memberUid);
+            const followerRef = firebaseFirestore.collection('users').doc(memberUid)
                 .collection('followers').doc(currentUser.uid);
             try {
                 await firebaseFirestore.runTransaction(async transaction => {
                     const followingSnapshot = await transaction.get(followRef);
                     const followerSnapshot = await transaction.get(followerRef);
-                    if (followedVendorIds.has(vendorUid)) {
+                    if (followedMemberIds.has(memberUid)) {
                         transaction.delete(followRef);
                         transaction.delete(followerRef);
                         return;
@@ -3942,8 +4946,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     const timestamp = firebase.firestore.FieldValue.serverTimestamp();
                     if (!followingSnapshot.exists) {
                         transaction.set(followRef, {
-                            vendorUid,
-                            vendorName: typeof vendorName === 'string' ? vendorName.slice(0, 120) : 'Vendor',
+                            memberUid,
+                            memberName: typeof memberName === 'string' ? memberName.slice(0, 120) : 'Marketplace member',
+                            memberRole: role,
                             createdAt: timestamp
                         });
                     }
@@ -3957,7 +4962,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                 });
             } catch (error) {
-                console.error('Unable to update followed vendors.', error);
+                console.error('Unable to update followed member.', error);
                 showToast('Your follow preference could not be saved. Check your connection and Firebase setup.', 'error');
             }
         }
@@ -4013,7 +5018,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             <div class="flex justify-between"><span class="text-gray-400">Contact / Order Hotline:</span> <span class="text-gold font-bold">${escapeHtml(prod.vendorContact || 'Direct Eagle Desk')}</span></div>
                             <div class="flex justify-between"><span class="text-gray-400">Availability:</span> <span class="text-green-400 font-semibold">${Number(prod.stock)} Units in stock</span></div>
                         </div>
-                        ${renderVendorFollowButton(prod)}
+                        ${renderMemberFollowButton({ ...prod, role: 'Vendor' })}
 
                         <div class="mb-4">
                             <h4 class="text-xs font-bold text-gray-300 uppercase tracking-wider mb-1">Product Description</h4>
@@ -4022,6 +5027,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     </div>
 
                     <div class="space-y-2 pt-3 border-t border-darkBorder">
+                        ${currentUser?.role === 'Buyer' && prod.ownerUid
+                            ? `<button type="button" onclick="closeDetailModal(); openChatPage(this.dataset.vendorUid, this.dataset.productId)" data-vendor-uid="${escapeHtml(prod.ownerUid)}" data-product-id="${escapeHtml(prod.id)}" class="w-full rounded-xl border border-gold/40 bg-darkBg py-3 text-sm font-bold text-gold hover:bg-gold/10"><i class="fa-solid fa-message mr-2"></i>Ask Vendor if this is available · 1 coin/message</button>`
+                            : ''}
                         <button onclick="addToCart(this.dataset.productId)" data-product-id="${escapeHtml(prod.id)}" class="w-full py-3 gold-gradient-bg font-extrabold text-black rounded-xl text-sm gold-glow hover:opacity-95 transition flex items-center justify-center gap-2">
                             <i class="fa-solid fa-cart-plus"></i> Add to Cart
                         </button>
@@ -4156,7 +5164,7 @@ document.addEventListener("DOMContentLoaded", () => {
         function subscribeToQuizAccount() {
             if (quizWalletUnsubscribe) quizWalletUnsubscribe();
             quizWalletUnsubscribe = null;
-            quizWallet = { likes: 0, loves: 0, hates: 0 };
+            quizWallet = { likes: 0, loves: 0, hates: 0, coins: 0 };
             quizDailyStatus = null;
             renderQuizWallet();
             if (!currentUser) return;
@@ -4169,7 +5177,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     quizWallet = {
                         likes: Number.isInteger(wallet.likes) && wallet.likes >= 0 ? wallet.likes : 0,
                         loves: Number.isInteger(wallet.loves) && wallet.loves >= 0 ? wallet.loves : 0,
-                        hates: Number.isInteger(wallet.hates) && wallet.hates >= 0 ? wallet.hates : 0
+                        hates: Number.isInteger(wallet.hates) && wallet.hates >= 0 ? wallet.hates : 0,
+                        coins: Number.isInteger(wallet.coins) && wallet.coins >= 0 ? wallet.coins : 0
                     };
                     renderQuizWallet();
                 }, error => {
@@ -4184,6 +5193,7 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById('quizWalletLikes').textContent = quizWallet.likes;
             document.getElementById('quizWalletLoves').textContent = quizWallet.loves;
             document.getElementById('quizWalletHates').textContent = quizWallet.hates;
+            document.getElementById('chatCoinBalance').textContent = quizWallet.coins;
             const status = document.getElementById('quizDailyStatus');
             if (!currentUser) {
                 status.textContent = 'Sign in to view your balance and daily reward plays.';
@@ -4192,7 +5202,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 purchaseButton.classList.remove('opacity-50');
                 purchaseButton.setAttribute('aria-disabled', 'false');
                 document.getElementById('quizPlayPackAvailability').textContent =
-                    'One pack per UTC day · resets at 00:00 UTC';
+                    'Five additional plays do not award likes · resets at 00:00 UTC';
                 return;
             }
             if (!quizDailyStatus) {
@@ -4202,18 +5212,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 purchaseButton.classList.remove('opacity-50');
                 purchaseButton.setAttribute('aria-disabled', 'false');
                 document.getElementById('quizPlayPackAvailability').textContent =
-                    'One pack per UTC day · resets at 00:00 UTC';
+                    'Five additional plays do not award likes · resets at 00:00 UTC';
                 return;
             }
             const { rewardAttemptsUsed, rewardAttemptsLimit, rewardAttemptsRemaining, extraPackPurchased, extraPackInProgress } = quizDailyStatus;
-            status.textContent = `Reward plays used today: ${rewardAttemptsUsed}/${rewardAttemptsLimit}. ${rewardAttemptsRemaining} remaining. Daily plays reset at 00:00 UTC. Perfect reward plays earn 20 likes; free practice is unlimited.`;
+            status.textContent = `Reward plays used today: ${rewardAttemptsUsed}/${rewardAttemptsLimit}. ${rewardAttemptsRemaining} remaining. The first 2 free reward plays each earn 10 likes when completed, regardless of score. Additional paid plays do not award likes. Daily plays reset at 00:00 UTC; practice is unlimited.`;
             const purchaseButton = document.getElementById('buyQuizPlayPackButton');
             if (purchaseButton) {
                 purchaseButton.disabled = extraPackPurchased;
                 purchaseButton.classList.toggle('opacity-50', purchaseButton.disabled);
                 purchaseButton.setAttribute('aria-disabled', String(purchaseButton.disabled));
                 document.getElementById('quizPlayPackAvailability').textContent = extraPackPurchased
-                    ? 'Extra plays purchased today · resets at 00:00 UTC'
+                    ? 'Extra plays purchased today · no likes awarded · resets at 00:00 UTC'
                     : extraPackInProgress
                         ? 'Checkout started · resume or complete it today'
                         : 'One pack per UTC day · resets at 00:00 UTC';
@@ -4248,11 +5258,40 @@ document.addEventListener("DOMContentLoaded", () => {
             refreshDailyQuizStatus();
         }
 
-        function closeQuizStore() {
-            stopQuizTimer();
+        async function closeQuizStore() {
+            if (quizStarting) {
+                showToast('Wait for the quiz to finish loading before exiting.', 'info');
+                return;
+            }
+            if (quizAttemptId) {
+                if (!window.confirm('Exit this quiz? This started play will be used and will not award likes.')) return;
+                stopQuizTimer();
+                quizSubmitting = true;
+                const attemptId = quizAttemptId;
+                try {
+                    const result = await firebaseFunctions.httpsCallable('cancelTimedQuiz')({ attemptId });
+                    quizAttemptId = null;
+                    if (result.data?.complete) {
+                        showToast('The quiz was already completed before it could be exited.', 'info');
+                        refreshDailyQuizStatus();
+                    } else {
+                        showToast('Quiz exited. This started play will not award likes.', 'info');
+                    }
+                } catch (error) {
+                    console.error('Unable to safely exit the timed quiz.', error);
+                    quizSubmitting = false;
+                    quizTimerSeconds = Math.max(1, quizTimerSeconds);
+                    startQuizTimer();
+                    showToast(error.message || 'The quiz could not be exited securely. Please try again.', 'error');
+                    return;
+                }
+            }
+            quizSubmitting = false;
             document.getElementById('quizStoreModal').classList.add('hidden');
             document.getElementById('quizStoreModal').classList.remove('flex');
             document.getElementById('timedQuizSection').classList.add('hidden');
+            activeQuizQuestions = [];
+            activeQuizQuestionCount = 0;
         }
 
         async function loadReactionStoreExchangeRate() {
@@ -4283,7 +5322,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         async function startWalletPurchase(product) {
             if (!currentUser) {
-                showToast('Sign in before purchasing reaction credits or extra quiz plays.', 'info');
+                showToast('Sign in before purchasing chat coins, reaction credits, or extra quiz plays.', 'info');
                 openAuthModal('signin');
                 return;
             }
@@ -4317,7 +5356,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             try {
                 await firebaseFunctions.httpsCallable('verifyWalletPayment')({ txRef, transactionId });
-                showToast('Payment verified. Your balance or daily quiz plays have been updated.', 'success');
+                showToast('Payment verified. Your wallet balance has been updated.', 'success');
                 refreshDailyQuizStatus();
             } catch (error) {
                 console.error('Unable to verify the Flutterwave return.', error);
@@ -4326,17 +5365,22 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         async function startTimedQuiz(mode = 'reward') {
+            if (quizStarting || quizAttemptId) return;
             if (!currentUser) {
                 openAuthModal('signin');
                 return;
             }
             const status = document.getElementById('timedQuizStatus');
             status.textContent = 'Loading quiz questions…';
+            quizStarting = true;
             try {
                 const result = await firebaseFunctions.httpsCallable('startTimedQuiz')({ mode });
+                quizStarting = false;
                 quizAttemptId = result.data.attemptId;
                 activeQuizRewardEligible = result.data.rewardEligible === true;
+                activeQuizLikeRewardEligible = result.data.likeRewardEligible === true;
                 activeQuizQuestions = [result.data.question];
+                activeQuizQuestionCount = result.data.questionCount;
                 quizQuestionIndex = result.data.questionIndex;
                 quizCurrentAnswer = -1;
                 quizTimerSeconds = result.data.durationSeconds;
@@ -4345,6 +5389,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 startQuizTimer();
                 refreshDailyQuizStatus();
             } catch (error) {
+                quizStarting = false;
                 console.error('Unable to start the timed quiz.', error);
                 status.textContent = error.message || 'The quiz could not start. Check your connection and try again.';
                 if (error.code === 'functions/failed-precondition' ||
@@ -4366,7 +5411,7 @@ document.addEventListener("DOMContentLoaded", () => {
             group.className = 'rounded-xl border border-darkBorder bg-darkBg p-3';
             const legend = document.createElement('legend');
             legend.className = 'px-1 text-sm font-bold text-white';
-            legend.textContent = `Question ${quizQuestionIndex + 1} of 5: ${question.question}`;
+            legend.textContent = `Question ${quizQuestionIndex + 1} of ${activeQuizQuestionCount}: ${question.question}`;
             group.appendChild(legend);
             question.options.forEach((option, optionIndex) => {
                 const label = document.createElement('label');
@@ -4388,12 +5433,14 @@ document.addEventListener("DOMContentLoaded", () => {
             submit.type = 'submit';
             submit.id = 'submitTimedQuizButton';
             submit.className = 'rounded-lg gold-gradient-bg px-4 py-2.5 text-xs font-bold text-black';
-            submit.textContent = quizQuestionIndex === 4 ? 'Finish quiz' : 'Submit answer';
+            submit.textContent = quizQuestionIndex === activeQuizQuestionCount - 1 ? 'Finish quiz' : 'Submit answer';
             form.appendChild(submit);
             document.getElementById('timedQuizStatus').textContent =
-                `Choose an answer within 30 seconds. ${activeQuizRewardEligible
-                    ? 'A perfect score earns 20 likes.'
-                    : 'This is free practice and does not award likes.'}`;
+                `Choose an answer within 30 seconds. ${activeQuizLikeRewardEligible
+                    ? 'Complete all questions to earn 10 likes, regardless of your score.'
+                    : activeQuizRewardEligible
+                        ? 'This reward play does not include a like reward.'
+                        : 'This is free practice and does not award likes.'}`;
             section.classList.remove('hidden');
             section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
@@ -4420,6 +5467,23 @@ document.addEventListener("DOMContentLoaded", () => {
                 `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         }
 
+        function showQuizAnswerFeedback(question, wasCorrect, correctOption, continueQuiz) {
+            const form = document.getElementById('timedQuizForm');
+            form.replaceChildren();
+            const feedback = document.createElement('p');
+            feedback.className = 'rounded-xl border border-darkBorder bg-darkBg p-3 text-sm text-gray-200';
+            feedback.textContent = wasCorrect
+                ? 'Correct answer!'
+                : `Incorrect or unanswered. Correct answer: ${question.options[correctOption]}`;
+            form.appendChild(feedback);
+            const next = document.createElement('button');
+            next.type = 'button';
+            next.className = 'rounded-lg gold-gradient-bg px-4 py-2.5 text-xs font-bold text-black';
+            next.textContent = 'Continue';
+            next.addEventListener('click', continueQuiz, { once: true });
+            form.appendChild(next);
+        }
+
         async function submitTimedQuiz(event) {
             if (event) event.preventDefault();
             if (!quizAttemptId || quizSubmitting) return;
@@ -4435,33 +5499,52 @@ document.addEventListener("DOMContentLoaded", () => {
                     questionIndex: quizQuestionIndex,
                     answer: quizCurrentAnswer
                 });
+                if (!quizAttemptId) return;
                 if (!result.data.complete) {
-                    activeQuizQuestions = [result.data.question];
-                    quizQuestionIndex = result.data.questionIndex;
-                    quizCurrentAnswer = -1;
-                    quizTimerSeconds = result.data.durationSeconds;
-                    quizSubmitting = false;
-                    renderTimedQuiz();
-                    startQuizTimer();
+                    const answeredQuestion = activeQuizQuestions[0];
+                    const nextQuestionReceivedAt = Date.now();
+                    status.textContent = 'Answer recorded.';
+                    showQuizAnswerFeedback(
+                        answeredQuestion,
+                        result.data.wasCorrect === true,
+                        result.data.correctOption,
+                        () => {
+                            if (!quizAttemptId) return;
+                            activeQuizQuestions = [result.data.question];
+                            quizQuestionIndex = result.data.questionIndex;
+                            quizCurrentAnswer = -1;
+                            quizTimerSeconds = Math.max(
+                                1,
+                                result.data.durationSeconds -
+                                    Math.ceil((Date.now() - nextQuestionReceivedAt) / 1000)
+                            );
+                            quizSubmitting = false;
+                            renderTimedQuiz();
+                            startQuizTimer();
+                        }
+                    );
                     return;
                 }
-                if (result.data.awardedLikes === 20) {
-                    status.textContent = 'Perfect score! 20 likes have been added to your store.';
-                    showToast('Perfect quiz! 20 likes added to your store.', 'success');
-                } else if (result.data.perfect && !result.data.rewardEligible) {
-                    status.textContent = 'Perfect practice score! Free practice does not award likes.';
-                    showToast('Perfect practice score! Play a reward quiz to earn likes.', 'info');
+                const finalQuestion = activeQuizQuestions[0];
+                const finalFeedback = result.data.wasCorrect === false
+                    ? `Incorrect or unanswered. Correct answer: ${finalQuestion.options[result.data.correctOption]} `
+                    : '';
+                if (result.data.awardedLikes === 10) {
+                    status.textContent = `${finalFeedback}Quiz complete! 10 likes have been added to your store.`;
+                    showToast('Quiz complete! 10 likes added to your store.', 'success');
                 } else {
-                    status.textContent = result.data.rewardEligible
-                        ? 'Reward play recorded. All five answers must be correct to earn 20 likes.'
-                        : 'Practice recorded. Free practice does not award likes.';
+                    status.textContent = `${finalFeedback}${result.data.rewardEligible
+                        ? 'Reward play complete. This play did not include a like reward.'
+                        : 'Practice complete. No likes are awarded for practice.'}`;
                     showToast(result.data.rewardEligible
-                        ? 'Quiz recorded. A perfect reward play earns 20 likes.'
+                        ? 'Reward play complete.'
                         : 'Practice recorded. No likes are awarded for practice.', 'info');
                 }
                 quizAttemptId = null;
+                quizSubmitting = false;
                 refreshDailyQuizStatus();
             } catch (error) {
+                if (!quizAttemptId) return;
                 console.error('Unable to record quiz answers.', error);
                 status.textContent = error.message || 'Your answers could not be recorded. Please contact support if this continues.';
                 const retryButton = document.getElementById('submitTimedQuizButton');
