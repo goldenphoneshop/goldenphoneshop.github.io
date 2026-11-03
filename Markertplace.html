@@ -1523,133 +1523,71 @@ document.addEventListener("DOMContentLoaded", () => {
             console.warn("Product ID " + targetProductId + " not found in system.");
         }
     }
-});
+})
 
-        function initializeFirebaseAuth() {
-            firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-                .catch(error => showToast(getAuthErrorMessage(error), 'error'));
+function initializeFirebaseAuth() {
+    firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+        .catch(error => showToast(getAuthErrorMessage(error), 'error'));
 
-            firebaseAuth.onAuthStateChanged(async user => {
-                if (user && user.providerData.some(provider => provider.providerId === 'password') && !user.emailVerified) {
-                    if (chatVoiceRecorder?.state === 'recording') {
-                        discardChatVoiceOnStop = true;
-                        chatVoiceRecorder.stop();
-                    }
-                    stopGoldenChatSubscriptions();
-                    if (followingUnsubscribe) followingUnsubscribe();
-                    followingUnsubscribe = null;
-                    if (accountConnectionsUnsubscribe) accountConnectionsUnsubscribe();
-                    accountConnectionsUnsubscribe = null;
-                    followedMemberIds = new Set();
-                    followedVendorIds = new Set();
-                    currentUser = null;
-                    subscribeToQuizAccount();
-                    chatSendRetry = null;
-                    clearUnsentGoldenChatDraft();
-                    if (!document.getElementById('accountPage').classList.contains('hidden')) {
-                        showMarketplacePage();
-                    }
-                    if (!document.getElementById('chatPage').classList.contains('hidden')) {
-                        showMarketplacePage();
-                    }
-                    renderAuthNav();
-                    renderFeedTabs();
-                    renderCommunityPosts();
-                    loadCommunityDownloadPermissions();
-                    renderProducts();
-                    if (!allowUnverifiedEmailSession) {
-                        firebaseAuth.signOut().catch(error => showToast(getAuthErrorMessage(error), 'error'));
-                    }
-                    return;
-                }
-
-                let profile = user ? loadAccountProfile(user.uid) : null;
-                let isAdmin = false;
-                if (user) {
-                    const [remoteProfile, tokenResult] = await Promise.all([
-                        loadOrCreateRemoteAccountProfile(user).catch(error => {
-                            console.error('Unable to load the account role from Firebase.', error);
-                            showToast('Account role could not be verified online. Product posting may be unavailable.', 'error');
-                            return profile;
-                        }),
-                        user.getIdTokenResult().catch(error => {
-                            console.error('Unable to verify quiz administrator access.', error);
-                            return null;
-                        })
-                    ]);
-                    profile = remoteProfile || profile;
-                    isAdmin = tokenResult?.claims.admin === true;
-                }
-                const profileName = typeof profile?.name === 'string' && profile.name.trim()
-                    ? profile.name.trim()
-                    : '';
-                const profileRole = profile?.role === 'Vendor' || profile?.role === 'Buyer'
-                    ? profile.role
-                    : 'Buyer';
-                currentUser = user ? {
-                    uid: user.uid,
-                    name: profileName || user.displayName || user.email || user.phoneNumber || 'Marketplace User',
-                    email: user.email || '',
-                    phoneNumber: user.phoneNumber || '',
-                    role: profileRole,
-                    profilePhotoPath: profile?.profilePhotoPath || '',
-                    allowMediaDownloads: profile?.allowMediaDownloads === true,
-                    location: profile?.location || '',
-                    gender: profile?.gender || '',
-                    ageRange: profile?.ageRange || '',
-                    description: profile?.description || '',
-                    isAdmin
-                } : null;
-                if (currentUser) {
-                    startPresenceHeartbeat(currentUser.uid);
-                    if (memberDirectoryInitializationUid !== currentUser.uid) {
-                        memberDirectoryInitializationUid = currentUser.uid;
-                        firebaseFunctions.httpsCallable('ensureMyMemberDirectoryEntry')()
-                            .catch(error => console.error('Unable to prepare your profile for member search.', error));
-                    }
-                } else {
-                    stopPresenceHeartbeat();
-                }
-                if (!currentUser) {
-                    if (chatVoiceRecorder?.state === 'recording') {
-                        discardChatVoiceOnStop = true;
-                        chatVoiceRecorder.stop();
-                    }
-                    stopGoldenChatSubscriptions();
-                    chatSendRetry = null;
-                    clearUnsentGoldenChatDraft();
-                    if (!document.getElementById('chatPage').classList.contains('hidden')) {
-                        showMarketplacePage();
-                    }
-                }
-                subscribeToFollowedVendors();
-                subscribeToQuizAccount();
-                if (!currentUser) {
-                    clearProfilePhotoCache();
-                    if (accountConnectionsUnsubscribe) accountConnectionsUnsubscribe();
-                    accountConnectionsUnsubscribe = null;
-                    if (!document.getElementById('accountPage').classList.contains('hidden')) {
-                        showMarketplacePage();
-                    }
-                }
-                renderAuthNav();
-                renderFeedTabs();
-                updateAccountPageHeader();
-                if (currentUser && activeAccountSection === 'edit' &&
-                    !document.getElementById('profileSettingsSection').classList.contains('hidden')) {
-                    populateProfileSettings();
-                }
-                updateDiscussionComposer();
-                updateMemberFollowButtons();
-                if (currentUser?.isAdmin && activeAccountSection === 'app') loadQuizAdminQuestions();
-                if (currentUser) confirmFlutterwaveReturn();
-                renderProducts();
-                if (discussionProductId) subscribeToMyProductReaction();
-                if (currentUser?.role === 'Vendor') {
-                    migrateLegacyVendorProducts(currentUser);
-                }
-            });
+    firebaseAuth.onAuthStateChanged(async (user) => {
+        if (!user) {
+            if (chatVoiceRecorder?.state === 'recording') {
+                discardChatVoiceOnStop = true;
+                chatVoiceRecorder.stop();
+            }
+            stopGoldenChatSubscriptions();
+            if (followingUnsubscribe) followingUnsubscribe();
+            followingUnsubscribe = null;
+            if (accountConnectionsUnsubscribe) accountConnectionsUnsubscribe();
+            accountConnectionsUnsubscribe = null;
+            followedMemberIds = new Set();
+            followedVendorIds = new Set();
+            currentUser = null;
+            subscribeToQuizAccount();
+            chatSendRetry = null;
+            clearUnsentGoldenChatDraft();
+            if (!document.getElementById('accountPage').classList.contains('hidden')) {
+                showMarketplacePage();
+            }
+            stopPresenceHeartbeat();
+            return;
         }
+
+        // 1. INSTANT UI FEEDBACK: Set user session immediately without waiting
+        currentUser = {
+            uid: user.uid,
+            email: user.email || '',
+            name: user.displayName || user.email?.split('@')[0] || 'Marketplace User'
+        };
+
+        if (typeof renderProducts === 'function') {
+            renderProducts();
+        }
+
+        // 2. BACKGROUND SYNC: Fetch heavy profile data quietly behind the scenes
+        try {
+            const remoteProfile = await loadOrCreateRemoteProfile(user);
+            if (remoteProfile) {
+                profile = remoteProfile;
+            }
+        } catch (error) {
+            console.warn('Background profile sync skipped:', error);
+        }
+
+        // 3. BACKGROUND ADMIN CHECK
+        user.getIdTokenResult().then(tokenResult => {
+            isAdmin = tokenResult?.claims?.admin === true;
+        }).catch(() => {});
+
+        // 4. PRESENCE & MEMBER DIRECTORY SYNC
+        startPresenceHeartbeat(currentUser.uid);
+        if (memberDirectoryInitializationUid !== currentUser.uid) {
+            memberDirectoryInitializationUid = currentUser.uid;
+            firebaseFunctions.httpsCallable('ensureMyMemberDirectoryEntry')()
+                .catch(error => console.error('Unable to prepare your profile for member search.', error));
+        }
+    });
+}
 
         function subscribeSharedProducts() {
             firebaseFirestore.collection('products')
