@@ -6266,5 +6266,56 @@ function initializeFirebaseAuth() {
                 .replace(/'/g, "&#039;");
         }
     </script>
+    <script type="module">
+  // Import Firebase modules using official CDN links
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getAuth } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+  import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
+
+  // Your web app's Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyAuEIGypz6qdSHFtYUsg4nS-CloXcqDGGc",
+    authDomain: "golden-eagle-marketplace.firebaseapp.com",
+    projectId: "golden-eagle-marketplace",
+    storageBucket: "golden-eagle-marketplace.firebasestorage.app",
+    messagingSenderId: "120512676475",
+    appId: "1:120512676475:web:9f451f54ff3d36771258de",
+    measurementId: "G-M8S05C406W"
+  };
+
+  // Initialize Firebase first
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+
+  // Initialize Auth and Firestore services
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  console.log("Firebase initialized successfully!");
+</script> 
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+// Initialize Firebase first
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
+// Initialize Auth and Firestore services and make them global
+window.auth = getAuth(app);
+window.db = getFirestore(app);
+window.app = app;
+
+console.log("Firebase initialized successfully!");
+// Initialize Firebase first
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
+// Initialize Auth and Firestore services and make them global
+window.auth = getAuth(app);
+window.db = getFirestore(app);
+window.app = app;
+
+console.log("Firebase initialized successfully!");
 </body>
 </html>

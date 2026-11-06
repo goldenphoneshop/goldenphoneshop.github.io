@@ -1,0 +1,122 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function verifiedAccount() {
+      return request.auth != null
+        && (request.auth.token.firebase.sign_in_provider == 'phone'
+          || request.auth.token.email_verified == true);
+    }
+
+    function vendorAccount(userId) {
+      return verifiedAccount()
+        && request.auth.uid == userId
+        && firestore.get(/databases/(default)/documents/users/$(userId)).data.role == 'Vendor';
+    }
+
+    function marketplaceAccount(userId) {
+      return verifiedAccount()
+        && request.auth.uid == userId
+        && firestore.get(/databases/(default)/documents/users/$(userId)).data.role in ['Buyer', 'Vendor'];
+    }
+
+    function buyerAccount(userId) {
+      return marketplaceAccount(userId)
+        && firestore.get(/databases/(default)/documents/users/$(userId)).data.role == 'Buyer';
+    }
+
+    match /profile-photos/{userId}/{fileName} {
+      allow read: if verifiedAccount();
+      allow create: if verifiedAccount()
+        && request.auth.uid == userId
+        && fileName.matches('^[A-Za-z0-9_-]+$')
+        && request.resource.size > 0
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('^image/(jpeg|png|webp|gif)$');
+      allow update: if false;
+      allow delete: if verifiedAccount() && request.auth.uid == userId;
+    }
+
+    match /product-discussions/{productId}/voice/{userId}/{fileName} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size > 0
+        && request.resource.size <= 25 * 1024 * 1024
+        && request.resource.contentType.matches('audio/.*');
+      allow update: if false;
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /golden-chat-media/{chatId}/{userId}/{messageId} {
+      function isParticipant() {
+        return verifiedAccount()
+          && request.auth.uid in firestore.get(
+            /databases/(default)/documents/goldenChats/$(chatId)
+          ).data.participantIds;
+      }
+
+      function mediaReservation() {
+        return firestore.get(
+          /databases/(default)/documents/goldenChatMediaReservations/$(chatId)/messages/$(messageId)
+        ).data;
+      }
+
+      allow read: if isParticipant();
+      allow create: if isParticipant()
+        && request.auth.uid == userId
+        && chatId.matches('^chat_[a-f0-9]{40}$')
+        && messageId.matches('^[A-Za-z0-9_-]{20}$')
+        && firestore.exists(
+          /databases/(default)/documents/goldenChatMediaReservations/$(chatId)/messages/$(messageId)
+        )
+        && mediaReservation().uid == request.auth.uid
+        && mediaReservation().chatId == chatId
+        && mediaReservation().messageId == messageId
+        && mediaReservation().status == 'pending'
+        && request.time < mediaReservation().expiresAt
+        && request.resource.size > 0
+        && ((request.resource.contentType.matches('^image/(jpeg|png|webp|gif)$')
+            && mediaReservation().type == 'image'
+            && request.resource.size <= 5 * 1024 * 1024)
+          || (request.resource.contentType.matches(
+              '^audio/(webm|ogg|mp4|mpeg|wav|x-wav)(;.*)?$'
+            )
+            && mediaReservation().type == 'voice'
+            && request.resource.size <= 25 * 1024 * 1024));
+      allow update, delete: if false;
+    }
+
+    match /products/{userId}/{productId}/{fileName} {
+      allow read: if true;
+      allow create: if vendorAccount(userId)
+        && productId.matches('^prod-[A-Za-z0-9_-]+$')
+        && fileName.matches('^[A-Za-z0-9_-]+\\.(jpg|jpeg|png|webp|gif|mp4|webm|mov)$')
+        && request.resource.size > 0
+        && ((request.resource.contentType.matches('^image/(jpeg|png|webp|gif)$')
+            && request.resource.size <= 5 * 1024 * 1024)
+          || (request.resource.contentType.matches('^video/(mp4|webm|quicktime)$')
+            && request.resource.size <= 50 * 1024 * 1024));
+      allow update: if false;
+      allow delete: if vendorAccount(userId);
+    }
+
+    match /community-media/{userId}/{postId}/{fileName} {
+      allow read: if true;
+      allow create: if marketplaceAccount(userId)
+        && postId.matches('^[A-Za-z0-9_-]+$')
+        && fileName.matches('^[A-Za-z0-9_-]+\\.(jpg|jpeg|png|webp|gif|mp4|webm|mov)$')
+        && request.resource.size > 0
+        && ((request.resource.contentType.matches('^image/(jpeg|png|webp|gif)$')
+            && request.resource.size <= 5 * 1024 * 1024)
+          || (buyerAccount(userId)
+            && request.resource.contentType.matches('^video/(mp4|webm|quicktime)$')
+            && request.resource.size <= 500 * 1024 * 1024)
+          || (vendorAccount(userId)
+            && request.resource.contentType.matches('^video/(mp4|webm|quicktime)$')
+            && request.resource.size <= 50 * 1024 * 1024));
+      allow update: if false;
+      allow delete: if marketplaceAccount(userId);
+    }
+  }
+}

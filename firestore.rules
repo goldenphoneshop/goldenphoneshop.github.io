@@ -1,0 +1,421 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function verifiedAccount() {
+      return signedIn()
+        && (request.auth.token.firebase.sign_in_provider == 'phone'
+          || request.auth.token.email_verified == true);
+    }
+
+    function isVendor() {
+      return verifiedAccount()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Vendor';
+    }
+
+    function isGoldenChatParticipant(chatId) {
+      return verifiedAccount()
+        && request.auth.uid in get(
+          /databases/$(database)/documents/goldenChats/$(chatId)
+        ).data.participantIds;
+    }
+
+    function validUserProfile(data) {
+      return data.keys().hasOnly([
+          'uid',
+          'name',
+          'role',
+          'createdAt',
+          'profilePhotoPath',
+          'allowMediaDownloads',
+          'location',
+          'gender',
+          'ageRange',
+          'description'
+        ])
+        && data.uid == request.auth.uid
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 120
+        && data.role in ['Buyer', 'Vendor']
+        && (!data.keys().hasAny(['allowMediaDownloads'])
+          || data.allowMediaDownloads is bool)
+        && (!data.keys().hasAny(['profilePhotoPath'])
+          || (data.profilePhotoPath is string
+            && data.profilePhotoPath.size() <= 180
+            && (data.profilePhotoPath == ''
+              || data.profilePhotoPath.matches(
+                '^profile-photos/' + request.auth.uid + '/[A-Za-z0-9_-]+$'
+              ))))
+        && (!data.keys().hasAny(['location'])
+          || (data.location is string && data.location.size() <= 160))
+        && (!data.keys().hasAny(['gender'])
+          || data.gender in ['', 'Woman', 'Man', 'Non-binary', 'Prefer not to say'])
+        && (!data.keys().hasAny(['ageRange'])
+          || data.ageRange in ['', 'Under 18', '18-24', '25-34', '35-44', '45-54', '55+'])
+        && (!data.keys().hasAny(['description'])
+          || (data.description is string && data.description.size() <= 1000));
+    }
+
+    function validProduct(data) {
+      return data.keys().hasOnly([
+          'ownerUid',
+          'id',
+          'title',
+          'category',
+          'price',
+          'stock',
+          'imageUrl',
+          'imageUrls',
+          'videoUrl',
+          'shortDesc',
+          'fullDesc',
+          'vendorName',
+          'vendorLocation',
+          'vendorContact',
+          'rating',
+          'createdAt'
+        ])
+        && data.ownerUid is string
+        && data.id is string
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 160
+        && data.category is string
+        && data.price is number
+        && data.price > 0
+        && data.stock is int
+        && data.stock >= 0
+        && data.imageUrl is string
+        && data.imageUrl.size() <= 2048
+        && (!data.keys().hasAny(['imageUrls'])
+          || data.imageUrls is list)
+        && (!data.keys().hasAny(['videoUrl'])
+          || (data.videoUrl is string && data.videoUrl.size() <= 2048))
+        && (data.imageUrl.size() > 0
+          || (data.keys().hasAny(['imageUrls'])
+            && data.imageUrls is list && data.imageUrls.size() > 0)
+          || (data.keys().hasAny(['videoUrl']) && data.videoUrl.size() > 0))
+        && data.shortDesc is string
+        && data.shortDesc.size() <= 500
+        && data.fullDesc is string
+        && data.fullDesc.size() <= 3000
+        && data.vendorName is string
+        && data.vendorName.size() <= 120
+        && data.vendorLocation is string
+        && data.vendorLocation.size() <= 200
+        && data.vendorContact is string
+        && data.vendorContact.size() <= 80
+        && data.rating is number
+        && data.createdAt is string;
+    }
+
+    match /users/{userId} {
+      allow get: if verifiedAccount();
+      allow list: if false;
+      allow create: if verifiedAccount()
+        && request.auth.uid == userId
+        && validUserProfile(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update: if verifiedAccount()
+        && request.auth.uid == userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name',
+          'profilePhotoPath',
+          'allowMediaDownloads',
+          'location',
+          'gender',
+          'ageRange',
+          'description'
+        ])
+        && validUserProfile(request.resource.data)
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+
+      match /following/{memberId} {
+        allow get, list: if verifiedAccount() && request.auth.uid == userId;
+        allow create: if verifiedAccount()
+          && request.auth.uid == userId
+          && memberId != request.auth.uid
+          && exists(/databases/$(database)/documents/users/$(memberId))
+          && get(/databases/$(database)/documents/users/$(memberId)).data.role in ['Buyer', 'Vendor']
+          && (
+            (request.resource.data.keys().hasOnly([
+              'memberUid',
+              'memberName',
+              'memberRole',
+              'createdAt'
+            ])
+              && request.resource.data.keys().hasAll([
+                'memberUid',
+                'memberName',
+                'memberRole',
+                'createdAt'
+              ])
+              && request.resource.data.memberUid == memberId
+              && request.resource.data.memberName is string
+              && request.resource.data.memberName.size() > 0
+              && request.resource.data.memberName.size() <= 120
+              && request.resource.data.memberRole
+                == get(/databases/$(database)/documents/users/$(memberId)).data.role)
+            || (request.resource.data.keys().hasOnly([
+              'vendorUid',
+              'vendorName',
+              'createdAt'
+            ])
+              && request.resource.data.vendorUid == memberId
+              && get(/databases/$(database)/documents/users/$(memberId)).data.role == 'Vendor'
+              && request.resource.data.vendorName is string
+              && request.resource.data.vendorName.size() > 0
+              && request.resource.data.vendorName.size() <= 120)
+          )
+          && request.resource.data.createdAt == request.time;
+        allow update: if false;
+        allow delete: if verifiedAccount() && request.auth.uid == userId;
+      }
+
+      match /followers/{followerId} {
+        allow get: if verifiedAccount()
+          && (request.auth.uid == userId || request.auth.uid == followerId);
+        allow list: if verifiedAccount() && request.auth.uid == userId;
+        allow create: if verifiedAccount()
+          && request.auth.uid == followerId
+          && userId != request.auth.uid
+          && get(/databases/$(database)/documents/users/$(userId)).data.role in ['Buyer', 'Vendor']
+          && request.resource.data.keys().hasOnly([
+            'followerUid',
+            'followerName',
+            'followerRole',
+            'createdAt'
+          ])
+          && request.resource.data.followerUid == request.auth.uid
+          && request.resource.data.followerName
+            == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
+          && request.resource.data.followerRole
+            == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+          && request.resource.data.followerRole in ['Buyer', 'Vendor']
+          && request.resource.data.createdAt == request.time;
+        allow update: if false;
+        allow delete: if verifiedAccount() && request.auth.uid == followerId;
+      }
+    }
+
+    match /presence/{userId}/sessions/{sessionId} {
+      allow get, list: if true;
+      allow create, update: if verifiedAccount()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['active', 'lastSeen'])
+        && request.resource.data.keys().hasAll(['active', 'lastSeen'])
+        && request.resource.data.active is bool
+        && request.resource.data.lastSeen == request.time;
+      allow delete: if verifiedAccount() && request.auth.uid == userId;
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if isVendor()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.id == productId
+        && validProduct(request.resource.data);
+      allow update: if isVendor()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'title',
+          'category',
+          'price',
+          'stock',
+          'imageUrl',
+          'imageUrls',
+          'shortDesc',
+          'fullDesc',
+          'vendorName',
+          'vendorLocation',
+          'vendorContact'
+        ])
+        && validProduct(request.resource.data);
+      allow delete: if isVendor() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    function validCommunityPost(data, postId) {
+      return data.keys().hasOnly([
+          'id',
+          'ownerUid',
+          'ownerName',
+          'caption',
+          'imageUrls',
+          'videoUrl',
+          'mediaOwnerUid',
+          'mediaOwnerName',
+          'repostOf',
+          'repostOwnerUid',
+          'createdAt'
+        ])
+        && data.id == postId
+        && data.ownerUid == request.auth.uid
+        && data.ownerName is string
+        && data.ownerName.size() > 0
+        && data.ownerName.size() <= 120
+        && data.caption is string
+        && data.caption.size() <= 1000
+        && data.imageUrls is list
+        && data.videoUrl is string
+        && data.videoUrl.size() <= 2048
+        && data.mediaOwnerUid is string
+        && data.mediaOwnerName is string
+        && data.mediaOwnerName.size() <= 120
+        && data.createdAt is timestamp
+        && (data.imageUrls.size() > 0 || data.videoUrl.size() > 0);
+    }
+
+    match /communityPosts/{postId} {
+      allow read: if true;
+      allow create: if verifiedAccount()
+        && validCommunityPost(request.resource.data, postId)
+        && ((!request.resource.data.keys().hasAny(['repostOf'])
+            && request.resource.data.mediaOwnerUid == request.auth.uid)
+          || (request.resource.data.keys().hasAny(['repostOf'])
+            && request.resource.data.repostOf is string
+            && request.resource.data.repostOwnerUid is string
+            && exists(/databases/$(database)/documents/communityPosts/$(request.resource.data.repostOf))
+            && request.resource.data.repostOwnerUid
+              == get(/databases/$(database)/documents/communityPosts/$(request.resource.data.repostOf)).data.ownerUid
+            && request.resource.data.mediaOwnerUid
+              == get(/databases/$(database)/documents/communityPosts/$(request.resource.data.repostOf)).data.mediaOwnerUid
+            && request.resource.data.imageUrls
+              == get(/databases/$(database)/documents/communityPosts/$(request.resource.data.repostOf)).data.imageUrls
+            && request.resource.data.videoUrl
+              == get(/databases/$(database)/documents/communityPosts/$(request.resource.data.repostOf)).data.videoUrl));
+      allow update: if false;
+      allow delete: if verifiedAccount() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /communityPosts/{postId}/comments/{commentId} {
+      allow read: if true;
+      allow create: if verifiedAccount()
+        && exists(/databases/$(database)/documents/communityPosts/$(postId))
+        && request.resource.data.keys().hasOnly([
+          'authorUid',
+          'authorName',
+          'text',
+          'createdAt'
+        ])
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.authorName is string
+        && request.resource.data.authorName.size() > 0
+        && request.resource.data.authorName.size() <= 120
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 2000
+        && request.resource.data.createdAt == request.time;
+      allow update: if false;
+      allow delete: if verifiedAccount() && resource.data.authorUid == request.auth.uid;
+    }
+
+    match /productDiscussionStats/{productId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /quizWallets/{userId} {
+      allow get: if verifiedAccount() && request.auth.uid == userId;
+      allow list: if false;
+      allow write: if false;
+    }
+
+    match /quizQuestions/{questionId} {
+      allow read, write: if false;
+    }
+
+    match /quizDailyUsage/{usageId} {
+      allow read, write: if false;
+    }
+
+    match /quizAttempts/{attemptId} {
+      allow read, write: if false;
+    }
+
+    match /goldenChats/{chatId} {
+      allow get, list: if verifiedAccount()
+        && request.auth.uid in resource.data.participantIds;
+      allow create, update, delete: if false;
+
+      match /messages/{messageId} {
+        allow get, list: if isGoldenChatParticipant(chatId);
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /goldenChatMediaReservations/{chatId}/messages/{messageId} {
+      allow read, write: if false;
+    }
+
+    match /quizQuestionCycles/{userId} {
+      allow read, write: if false;
+
+      match /questions/{questionId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /quizDailyAwards/{awardId} {
+      allow read, write: if false;
+    }
+
+    match /walletPurchases/{purchaseId} {
+      allow read, write: if false;
+    }
+
+    match /memberDirectory/{userId} {
+      allow read, write: if false;
+    }
+
+    match /memberSearchLimits/{userId} {
+      allow read, write: if false;
+    }
+
+    match /productDiscussions/{productId}/reactions/{userId} {
+      allow get: if verifiedAccount() && request.auth.uid == userId;
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    match /productDiscussions/{productId}/comments/{commentId} {
+      allow read: if true;
+      allow create: if verifiedAccount()
+        && request.resource.data.keys().hasOnly([
+          'authorUid',
+          'authorName',
+          'text',
+          'voicePath',
+          'createdAt'
+        ])
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.authorName is string
+        && request.resource.data.authorName.size() > 0
+        && request.resource.data.authorName.size() <= 120
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 2000
+        && request.resource.data.voicePath is string
+        && request.resource.data.createdAt == request.time
+        && (request.resource.data.voicePath == ''
+          || request.resource.data.voicePath.matches(
+            '^product-discussions/' + productId + '/voice/' + request.auth.uid + '/[A-Za-z0-9_-]+$'
+          ))
+        && (request.resource.data.text.size() > 0
+          || request.resource.data.voicePath.size() > 0);
+      allow update: if false;
+      allow delete: if verifiedAccount() && resource.data.authorUid == request.auth.uid;
+    }
+
+    match /_reactionEvents/{eventId} {
+      allow read, write: if false;
+    }
+  }
+}
