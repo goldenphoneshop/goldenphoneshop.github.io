@@ -590,6 +590,10 @@
                 <button type="button" onclick="showMarketplacePage()" class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-darkBorder text-gray-300 hover:text-gold" aria-label="Back to marketplace">
                     <i class="fa-solid fa-arrow-left"></i>
                 </button>
+                <button id="accountSignOutButton" type="button" onclick="handleSignOut(this)" class="flex h-10 items-center gap-2 rounded-lg border border-red-500/30 px-3 text-xs font-bold text-red-300 hover:bg-red-500/10 hover:text-red-200" aria-label="Sign out of your account">
+                    <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>
+                    <span>Sign out</span>
+                </button>
             </header>
 
             <nav class="flex flex-wrap gap-2 border-b border-darkBorder p-4" aria-label="Account sections">
@@ -1368,6 +1372,8 @@
         // Global State variables
         let products = [];
         let currentUser = null;
+        let authStateRevision = 0;
+        let authPersistenceReady = Promise.resolve(true);
         let quizWallet = { likes: 0, loves: 0, hates: 0, coins: 0 };
         let quizDailyStatus = null;
         let quizWalletUnsubscribe = null;
@@ -1526,10 +1532,16 @@ document.addEventListener("DOMContentLoaded", () => {
 })
 
 function initializeFirebaseAuth() {
-    firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-        .catch(error => showToast(getAuthErrorMessage(error), 'error'));
+    authPersistenceReady = firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+        .then(() => true)
+        .catch(error => {
+            console.error('Unable to enable persistent sign-in.', error);
+            showToast('This browser could not save your sign-in session. Check browser storage settings and try again.', 'error');
+            return false;
+        });
 
     firebaseAuth.onAuthStateChanged(async (user) => {
+        const revision = ++authStateRevision;
         if (!user) {
             if (chatVoiceRecorder?.state === 'recording') {
                 discardChatVoiceOnStop = true;
@@ -1543,6 +1555,7 @@ function initializeFirebaseAuth() {
             followedMemberIds = new Set();
             followedVendorIds = new Set();
             currentUser = null;
+            renderAuthNav();
             subscribeToQuizAccount();
             chatSendRetry = null;
             clearUnsentGoldenChatDraft();
@@ -1550,41 +1563,84 @@ function initializeFirebaseAuth() {
                 showMarketplacePage();
             }
             stopPresenceHeartbeat();
+            memberDirectoryInitializationUid = null;
+            return;
+        }
+        if (user.email && !user.emailVerified) {
+            currentUser = null;
+            renderAuthNav();
+            subscribeToQuizAccount();
+            stopPresenceHeartbeat();
+            if (!allowUnverifiedEmailSession) {
+                showToast('Verify your email before using your marketplace account. A verification link can be sent when you sign in.', 'info');
+                try {
+                    await firebaseAuth.signOut();
+                } catch (error) {
+                    console.error('Unable to end an unverified email session.', error);
+                    showToast('This email is not verified, and the temporary session could not be closed. Sign out and try again.', 'error');
+                }
+            }
             return;
         }
 
-        // 1. INSTANT UI FEEDBACK: Set user session immediately without waiting
+        const localProfile = loadAccountProfile(user.uid);
         currentUser = {
             uid: user.uid,
             email: user.email || '',
-            name: user.displayName || user.email?.split('@')[0] || 'Marketplace User'
+            phoneNumber: user.phoneNumber || '',
+            name: user.displayName || localProfile?.name || user.email?.split('@')[0] ||
+                user.phoneNumber || 'Marketplace User',
+            role: localProfile?.role === 'Vendor' ? 'Vendor' : 'Buyer',
+            ...getAccountProfileFields(localProfile),
+            isAdmin: false
         };
-
+        renderAuthNav();
+        updateAccountPageHeader();
+        subscribeToQuizAccount();
         if (typeof renderProducts === 'function') {
             renderProducts();
         }
 
-        // 2. BACKGROUND SYNC: Fetch heavy profile data quietly behind the scenes
         try {
-            const remoteProfile = await loadOrCreateRemoteProfile(user);
-            if (remoteProfile) {
-                profile = remoteProfile;
+            const remoteProfile = await loadOrCreateRemoteAccountProfile(user);
+            if (revision !== authStateRevision || firebaseAuth.currentUser?.uid !== user.uid) return;
+            let isAdmin = false;
+            try {
+                const tokenResult = await user.getIdTokenResult();
+                isAdmin = tokenResult?.claims?.admin === true;
+            } catch (error) {
+                console.error('Unable to verify the account role claims.', error);
             }
+            if (revision !== authStateRevision || firebaseAuth.currentUser?.uid !== user.uid) return;
+            currentUser = {
+                ...currentUser,
+                ...remoteProfile,
+                isAdmin
+            };
+            saveAccountProfile(user.uid, remoteProfile);
+            renderAuthNav();
+            updateAccountPageHeader();
+            updateMemberFollowButtons();
+            if (activeAccountSection === 'profile' &&
+                !document.getElementById('accountPage').classList.contains('hidden') &&
+                (!viewedProfileUid || viewedProfileUid === user.uid)) {
+                viewedProfileUid = user.uid;
+                renderMemberProfile(currentUser, user.uid);
+            }
+            renderProducts();
         } catch (error) {
-            console.warn('Background profile sync skipped:', error);
+            if (revision !== authStateRevision || firebaseAuth.currentUser?.uid !== user.uid) return;
+            console.error('Unable to load or save the signed-in member profile.', error);
+            showToast('You are signed in, but your profile could not sync. Check your connection and Firestore rules, then reopen My profile.', 'error');
         }
 
-        // 3. BACKGROUND ADMIN CHECK
-        user.getIdTokenResult().then(tokenResult => {
-            isAdmin = tokenResult?.claims?.admin === true;
-        }).catch(() => {});
-
-        // 4. PRESENCE & MEMBER DIRECTORY SYNC
-        startPresenceHeartbeat(currentUser.uid);
-        if (memberDirectoryInitializationUid !== currentUser.uid) {
-            memberDirectoryInitializationUid = currentUser.uid;
-            firebaseFunctions.httpsCallable('ensureMyMemberDirectoryEntry')()
-                .catch(error => console.error('Unable to prepare your profile for member search.', error));
+        if (revision === authStateRevision && firebaseAuth.currentUser?.uid === user.uid) {
+            startPresenceHeartbeat(user.uid);
+            if (memberDirectoryInitializationUid !== user.uid) {
+                memberDirectoryInitializationUid = user.uid;
+                firebaseFunctions.httpsCallable('ensureMyMemberDirectoryEntry')()
+                    .catch(error => console.error('Unable to prepare your profile for member search.', error));
+            }
         }
     });
 }
@@ -1689,7 +1745,11 @@ function initializeFirebaseAuth() {
         }
 
         function saveAccountProfile(uid, profile) {
-            localStorage.setItem(`goldenEagle_profile_${uid}`, JSON.stringify(profile));
+            try {
+                localStorage.setItem(`goldenEagle_profile_${uid}`, JSON.stringify(profile));
+            } catch (error) {
+                console.warn('The local profile cache could not be saved.', error);
+            }
         }
 
         function initializeAppSettings() {
@@ -1902,6 +1962,7 @@ function initializeFirebaseAuth() {
         }
 
         function getAccountProfileFields(profile = {}) {
+            if (!profile || typeof profile !== 'object') profile = {};
             return {
                 profilePhotoPath: typeof profile.profilePhotoPath === 'string' ? profile.profilePhotoPath : '',
                 allowMediaDownloads: profile.allowMediaDownloads === true,
@@ -2158,9 +2219,12 @@ function initializeFirebaseAuth() {
 
         function updateAccountPageHeader() {
             if (!currentUser) return;
-            document.getElementById('accountPageName').textContent = currentUser.name;
-            document.getElementById('accountPageRole').textContent = currentUser.role;
-            document.getElementById('accountAvatar').textContent = currentUser.name.charAt(0).toUpperCase();
+            const name = typeof currentUser.name === 'string' && currentUser.name.trim()
+                ? currentUser.name.trim()
+                : 'Marketplace member';
+            document.getElementById('accountPageName').textContent = name;
+            document.getElementById('accountPageRole').textContent = currentUser.role || 'Buyer';
+            document.getElementById('accountAvatar').textContent = name.charAt(0).toUpperCase();
             const image = document.getElementById('accountAvatarImage');
             image.dataset.localPreview = 'false';
             loadProfilePhotoInto(image, currentUser.profilePhotoPath, currentUser.uid);
@@ -2910,13 +2974,16 @@ function initializeFirebaseAuth() {
             const code = typeof error?.code === 'string' ? error.code.toLowerCase() : '';
             if (stage === 'photo upload') {
                 if (code === 'storage/unauthorized' || code === 'storage/unauthenticated') {
-                    return 'Photo upload was rejected. Verify this account and deploy the latest Storage rules.';
+                    return 'Photo upload was rejected. Sign in with a verified account, confirm your Buyer/Vendor profile exists in Firestore, and deploy the latest Storage rules.';
                 }
                 if (code === 'storage/canceled') {
                     return 'Photo upload was canceled. Choose the photo again and retry.';
                 }
+                if (code === 'storage/bucket-not-found') {
+                    return 'The configured Cloud Storage bucket was not found. Confirm the bucket name in Firebase Console and in the app Firebase configuration.';
+                }
                 if (code.includes('network') || code === 'storage/retry-limit-exceeded' || code === 'storage/unknown') {
-                    return 'Photo upload could not reach Storage. Check your connection and apply the Storage CORS settings for this website.';
+                    return 'Photo upload could not reach Storage. Open the app on its HTTPS website or localhost (not as a file), check your connection, and apply Storage CORS settings for this exact origin.';
                 }
                 return 'Photo upload failed. Check the image type and size, Storage bucket, deployed Storage rules, and CORS settings.';
             }
@@ -2940,6 +3007,12 @@ function initializeFirebaseAuth() {
             const status = document.getElementById('profileSettingsStatus');
             const button = document.getElementById('saveProfileSettingsButton');
             status.classList.add('hidden');
+            if (window.location.protocol === 'file:') {
+                status.textContent = 'This page was opened as a local file, which Firebase does not support for profile saving or photo uploads. Open the HTTPS marketplace or serve the app from an authorized localhost address.';
+                status.className = 'text-xs text-red-400';
+                status.classList.remove('hidden');
+                return;
+            }
             if (!name || name.length > 120) {
                 status.textContent = 'Enter a display name between 1 and 120 characters.';
                 status.className = 'text-xs text-red-400';
@@ -3054,7 +3127,8 @@ function initializeFirebaseAuth() {
                 }
             } catch (error) {
                 console.error('Unable to update account profile settings or upload profile photo.', error);
-                status.textContent = `Your profile could not be saved: ${getProfileSaveErrorMessage(error, saveStage)}`;
+                const errorCode = typeof error?.code === 'string' ? ` (${error.code})` : '';
+                status.textContent = `Your profile could not be saved: ${getProfileSaveErrorMessage(error, saveStage)}${errorCode}`;
                 status.className = 'text-xs text-red-400';
                 status.classList.remove('hidden');
             } finally {
@@ -3820,6 +3894,8 @@ function initializeFirebaseAuth() {
                 'auth/email-already-in-use': 'That email already has an account. Try signing in instead.',
                 'auth/invalid-email': 'Enter a valid email address.',
                 'auth/missing-email': 'Enter the email address for your account.',
+                'auth/missing-password': 'Enter your password.',
+                'auth/invalid-login-credentials': 'The email or password is incorrect. Check your details or reset your password.',
                 'auth/invalid-phone-number': 'Enter a valid phone number with country code, for example +2348012345678.',
                 'auth/invalid-app-credential': 'Phone verification could not complete. Check the authorized website domain and reCAPTCHA settings in Firebase.',
                 'auth/internal-error': 'Firebase could not start phone verification. Open this app on localhost or HTTPS (not file://), enable Phone Authentication, and authorize the website domain in Firebase Console.',
@@ -3828,7 +3904,11 @@ function initializeFirebaseAuth() {
                 'auth/user-not-found': 'No account was found. Check your details or create an account.',
                 'auth/wrong-password': 'The password is incorrect.',
                 'auth/weak-password': 'Choose a password with at least 8 characters.',
+                'auth/user-disabled': 'This account has been disabled. Contact marketplace support.',
                 'auth/too-many-requests': 'Too many attempts. Wait a while and try again.',
+                'auth/network-request-failed': 'Could not reach Firebase Authentication. Check your internet connection and try again.',
+                'auth/web-storage-unsupported': 'This browser cannot save your sign-in session. Enable cookies/site storage or try another browser.',
+                'auth/popup-blocked': 'Your browser blocked the sign-in window. Allow pop-ups and try again.',
                 'auth/operation-not-allowed': 'This sign-in method is not enabled in Firebase Authentication yet.',
                 'auth/unauthorized-domain': 'This website domain is not authorized in Firebase Authentication. Add the domain in Firebase Console.',
                 'auth/captcha-check-failed': 'The reCAPTCHA check failed. Please try again.',
@@ -3852,6 +3932,10 @@ function initializeFirebaseAuth() {
             document.getElementById('authErrorMessage').classList.add('hidden');
 
             try {
+                if (!await authPersistenceReady) {
+                    showAuthError('Sign-in could not continue because this browser could not save your session. Enable site storage and reload the page.');
+                    return;
+                }
                 if (currentAuthMethod === 'phone') {
                     if (!phoneConfirmationResult) {
                         await sendPhoneCode();
@@ -3866,11 +3950,25 @@ function initializeFirebaseAuth() {
                 if (currentAuthTab === 'register') {
                     const name = document.getElementById('authName').value.trim();
                     const selectedRole = document.querySelector('input[name="userRole"]:checked')?.value || 'Buyer';
+                    if (!name || name.length > 120 || !['Buyer', 'Vendor'].includes(selectedRole)) {
+                        showAuthError('Enter a display name and choose Buyer or Vendor.');
+                        return;
+                    }
                     allowUnverifiedEmailSession = true;
                     try {
                         const credential = await firebaseAuth.createUserWithEmailAndPassword(identifier, password);
                         await credential.user.updateProfile({ displayName: name });
-                        saveAccountProfile(credential.user.uid, { name, role: selectedRole });
+                        const profile = {
+                            uid: credential.user.uid,
+                            name,
+                            role: selectedRole,
+                            ...getAccountProfileFields()
+                        };
+                        await firebaseFirestore.collection('users').doc(credential.user.uid).set({
+                            ...profile,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        saveAccountProfile(credential.user.uid, profile);
                         await credential.user.sendEmailVerification();
                         await firebaseAuth.signOut();
                     } finally {
@@ -5309,6 +5407,11 @@ function initializeFirebaseAuth() {
                 return;
             }
             const status = document.getElementById('timedQuizStatus');
+            if (window.location.protocol === 'file:') {
+                status.textContent = 'This page was opened as a local file, which Firebase does not support. Open the HTTPS marketplace or serve the app from an authorized localhost address.';
+                showToast('Open the marketplace on its HTTPS website or localhost before starting the quiz.', 'error');
+                return;
+            }
             status.textContent = 'Loading quiz questions…';
             quizStarting = true;
             try {
@@ -5329,13 +5432,25 @@ function initializeFirebaseAuth() {
             } catch (error) {
                 quizStarting = false;
                 console.error('Unable to start the timed quiz.', error);
-                status.textContent = error.message || 'The quiz could not start. Check your connection and try again.';
-                if (error.code === 'functions/failed-precondition' ||
-                    error.code === 'functions/resource-exhausted') {
-                    showToast(error.message, 'info');
+                const code = typeof error?.code === 'string' ? error.code : '';
+                const details = typeof error?.message === 'string' ? error.message : '';
+                if (code === 'functions/failed-precondition' ||
+                    code === 'functions/resource-exhausted') {
+                    status.textContent = details || 'The quiz is not ready or today’s reward plays have been used.';
+                    showToast(status.textContent, 'info');
                     refreshDailyQuizStatus();
+                } else if (code === 'functions/unauthenticated') {
+                    status.textContent = 'Sign in with a verified account to start a quiz.';
+                    showToast(status.textContent, 'error');
+                } else if (code === 'functions/not-found' || code === 'functions/unimplemented') {
+                    status.textContent = 'The quiz service is not deployed. Deploy the latest Cloud Functions, then try again.';
+                    showToast(status.textContent, 'error');
+                } else if (code === 'functions/unavailable' || code === 'functions/deadline-exceeded') {
+                    status.textContent = 'The quiz service could not be reached. Check your connection and try again.';
+                    showToast(status.textContent, 'error');
                 } else {
-                    showToast('The quiz could not start. Check your connection and Firebase setup.', 'error');
+                    status.textContent = `${details || 'The quiz could not start. Check Firebase setup and Cloud Function logs.'}${code ? ` (${code})` : ''}`;
+                    showToast(status.textContent, 'error');
                 }
             }
         }
@@ -5510,7 +5625,7 @@ function initializeFirebaseAuth() {
             const list = document.getElementById('quizAdminQuestionList');
             list.replaceChildren();
             if (!currentAdminQuestions.length) {
-                list.textContent = 'No quiz questions yet. Add at least five questions using the form above to enable quizzes.';
+                list.textContent = 'No quiz questions yet. Add at least one enabled question using the form above to enable quizzes.';
                 return;
             }
             currentAdminQuestions.forEach(question => {
@@ -6266,33 +6381,5 @@ function initializeFirebaseAuth() {
                 .replace(/'/g, "&#039;");
         }
     </script>
-    <script type="module">
-  // Import Firebase modules using official CDN links
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-  import { getAuth } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-  import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
-
-  // Your web app's Firebase configuration
-  const firebaseConfig = {
-    apiKey: "AIzaSyAuEIGypz6qdSHFtYUsg4nS-CloXcqDGGc",
-    authDomain: "golden-eagle-marketplace.firebaseapp.com",
-    projectId: "golden-eagle-marketplace",
-    storageBucket: "golden-eagle-marketplace.firebasestorage.app",
-    messagingSenderId: "120512676475",
-    appId: "1:120512676475:web:9f451f54ff3d36771258de",
-    measurementId: "G-M8S05C406W"
-  };
-
-  // Initialize Firebase first
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-        
-// Initialize Auth and Firestore services
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-console.log("Firebase initialized successfully!");
-</script>
 </body>
 </html>
