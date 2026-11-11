@@ -1508,7 +1508,6 @@
             window.addEventListener('pagehide', markPresenceInactive);
             subscribeSharedProducts();
             subscribeCommunityPosts();
-            initializeFirebaseAuth();
         };
 
         // --- AUTO-DETECT ORDER LINK FROM WEBSITE ---
@@ -1644,6 +1643,8 @@ function initializeFirebaseAuth() {
         }
     });
 }
+
+window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
         function subscribeSharedProducts() {
             firebaseFirestore.collection('products')
@@ -2370,11 +2371,22 @@ function initializeFirebaseAuth() {
                     const body = document.createElement('p');
                     body.className = 'whitespace-pre-wrap break-words text-xs text-gray-200';
                     body.textContent = comment.text || '';
+                    const likeButton = document.createElement('button');
+                    likeButton.type = 'button';
+                    likeButton.className = 'mt-1 rounded-lg border border-darkBorder px-2.5 py-1 text-[10px] font-semibold text-gray-300 hover:border-gold/50 hover:text-gold disabled:cursor-not-allowed disabled:opacity-60';
+                    likeButton.setAttribute('aria-pressed', 'false');
+                    likeButton.textContent = `👍 Like · ${Number.isSafeInteger(comment.likesCount) ? comment.likesCount : 0}`;
+                    likeButton.dataset.postId = postId;
+                    likeButton.dataset.commentId = commentDoc.id;
+                    likeButton.dataset.authorUid = comment.authorUid || '';
+                    likeButton.dataset.likeCount = String(Number.isSafeInteger(comment.likesCount) ? comment.likesCount : 0);
+                    likeButton.addEventListener('click', () => toggleCommunityCommentLike(likeButton));
                     const date = document.createElement('p');
                     date.className = 'mt-1 text-[9px] text-gray-500';
                     const createdAt = comment.createdAt?.toDate?.();
                     date.textContent = createdAt ? createdAt.toLocaleString() : 'Just now';
-                    row.append(author, body, date);
+                    row.append(author, body, likeButton, date);
+                    loadCommunityCommentLikeState(likeButton);
                     if (currentUser?.uid === comment.authorUid) {
                         const remove = document.createElement('button');
                         remove.type = 'button';
@@ -2393,6 +2405,70 @@ function initializeFirebaseAuth() {
                     container.appendChild(row);
                 });
             });
+        }
+
+        function setCommunityCommentLikeButton(button, liked, count) {
+            button.dataset.liked = String(liked);
+            button.dataset.likeCount = String(count);
+            button.setAttribute('aria-pressed', String(liked));
+            button.textContent = `${liked ? '👍 Liked' : '👍 Like'} · ${count}`;
+            button.classList.toggle('border-gold/50', liked);
+            button.classList.toggle('text-gold', liked);
+        }
+
+        async function loadCommunityCommentLikeState(button) {
+            const uid = currentUser?.uid;
+            if (!uid || uid === button.dataset.authorUid) {
+                button.disabled = uid === button.dataset.authorUid;
+                if (button.disabled) button.title = 'You cannot like your own comment.';
+                return;
+            }
+            button.disabled = true;
+            try {
+                const likeSnapshot = await firebaseFirestore.collection('communityPosts')
+                    .doc(button.dataset.postId).collection('comments').doc(button.dataset.commentId)
+                    .collection('likes').doc(uid).get();
+                if (!button.isConnected || currentUser?.uid !== uid) return;
+                const count = Number(button.dataset.likeCount) || 0;
+                setCommunityCommentLikeButton(button, likeSnapshot.exists, count);
+            } catch (error) {
+                console.error('Unable to load your community comment reaction.', error);
+                button.title = 'Your current like could not be loaded. Clicking will still update it securely.';
+            } finally {
+                if (button.isConnected && currentUser?.uid === uid) button.disabled = false;
+            }
+        }
+
+        async function toggleCommunityCommentLike(button) {
+            if (!currentUser) {
+                showToast('Sign in to like comments.', 'info');
+                openAuthModal('signin');
+                return;
+            }
+            if (button.dataset.authorUid === currentUser.uid) {
+                showToast('You cannot like your own comment.', 'info');
+                return;
+            }
+            const uid = currentUser.uid;
+            button.disabled = true;
+            try {
+                const result = await firebaseFunctions.httpsCallable('toggleCommunityCommentLike')({
+                    postId: button.dataset.postId,
+                    commentId: button.dataset.commentId
+                });
+                if (!button.isConnected || currentUser?.uid !== uid) return;
+                if (typeof result.data?.liked !== 'boolean' ||
+                    !Number.isSafeInteger(result.data?.likesCount) ||
+                    result.data.likesCount < 0) {
+                    throw new Error('The server returned an invalid comment-like result.');
+                }
+                setCommunityCommentLikeButton(button, result.data.liked, result.data.likesCount);
+                button.disabled = false;
+            } catch (error) {
+                console.error('Unable to update the community comment like.', error);
+                showToast(error.message || 'Your comment like could not be saved. Check your connection and try again.', 'error');
+                button.disabled = false;
+            }
         }
 
         function renderCommunityPostCommentsError(postId) {
