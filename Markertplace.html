@@ -6287,35 +6287,15 @@ function initializeFirebaseAuth() {
   // Initialize Firebase first
   const app = initializeApp(firebaseConfig);
   const analytics = getAnalytics(app);
-
-  // Initialize Auth and Firestore services
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-
-  console.log("Firebase initialized successfully!");
-</script> 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
 // Initialize Firebase first
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 
-// Initialize Auth and Firestore services and make them global
-window.auth = getAuth(app);
-window.db = getFirestore(app);
-window.app = app;
+// Initialize Auth and Firestore services
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 console.log("Firebase initialized successfully!");
-// Initialize Firebase first
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-
-// Initialize Auth and Firestore services and make them global
-window.auth = getAuth(app);
-window.db = getFirestore(app);
-window.app = app;
-
-console.log("Firebase initialized successfully!");
+</script>
 </body>
 </html>
