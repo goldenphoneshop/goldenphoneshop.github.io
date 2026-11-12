@@ -420,9 +420,21 @@
                             <i class="fa-solid fa-arrow-left"></i>
                         </button>
                     </div>
-                    <div class="flex items-center justify-between gap-2 border-b border-darkBorder p-3">
-                        <p class="text-xs font-bold text-gray-300"><i class="fa-solid fa-coins mr-1 text-gold"></i><span id="chatCoinBalance">0</span> coins</p>
-                        <button type="button" onclick="openChatCoinStore()" class="rounded-lg gold-gradient-bg px-3 py-2 text-[10px] font-extrabold text-black">Buy coins</button>
+                    <div class="border-b border-darkBorder p-3">
+                        <section class="rounded-xl border border-gold/30 bg-gold/5 p-3" aria-labelledby="chatCoinWalletHeading">
+                            <div class="flex items-center justify-between gap-2">
+                                <h2 id="chatCoinWalletHeading" class="text-[10px] font-extrabold uppercase tracking-wide text-gold">
+                                    <i class="fa-solid fa-coins mr-1"></i>Golden Chat wallet
+                                </h2>
+                                <button type="button" onclick="refreshGoldenChatCoinBalance()" class="text-[10px] font-semibold text-gray-400 hover:text-gold" aria-label="Refresh Golden Chat coin balance">
+                                    <i class="fa-solid fa-rotate-right mr-1"></i>Refresh
+                                </button>
+                            </div>
+                            <p class="mt-2 text-2xl font-black text-white"><span id="chatCoinBalance">0</span><span class="ml-1 text-xs font-semibold text-gray-400">available coins</span></p>
+                            <p id="chatCoinBalanceStatus" class="mt-1 text-[10px] text-gray-400" role="status" aria-live="polite">Sign in to view your coin balance.</p>
+                            <button type="button" onclick="openChatCoinStore()" class="mt-2 w-full rounded-lg gold-gradient-bg px-3 py-2 text-[10px] font-extrabold text-black">Buy Golden Chat coins</button>
+                            <button type="button" onclick="openCoinPurchaseRestore()" class="mt-2 w-full text-[10px] font-semibold text-gray-400 hover:text-gold">Coins missing? Verify a purchase</button>
+                        </section>
                     </div>
                     <h2 class="px-4 pb-2 pt-4 text-[10px] font-bold uppercase tracking-wider text-gray-500">Conversations</h2>
                     <div id="chatConversationList" class="max-h-[55vh] space-y-1 overflow-y-auto px-2 pb-3" aria-live="polite">
@@ -497,6 +509,11 @@
                 </div>
                 <button type="button" onclick="closeChatCoinStore()" class="rounded-lg p-2 text-gray-400 hover:text-white" aria-label="Close coin store"><i class="fa-solid fa-xmark"></i></button>
             </header>
+            <div class="mt-4 rounded-xl border border-gold/30 bg-gold/5 p-3">
+                <p class="text-[10px] font-bold uppercase tracking-wide text-gold">Your available balance</p>
+                <p class="mt-1 text-lg font-extrabold text-white"><span id="chatCoinStoreBalance">0</span> Golden Chat coins</p>
+                <p id="chatCoinStoreBalanceStatus" class="mt-1 text-[10px] text-gray-400" role="status">Sign in to view your coin balance.</p>
+            </div>
             <div class="mt-4 rounded-xl border border-darkBorder bg-darkBg p-3">
                 <p class="mb-2 text-[10px] font-bold uppercase tracking-wide text-gray-400">What messages cost</p>
                 <div class="grid grid-cols-1 gap-2 text-[11px] text-gray-300 sm:grid-cols-3">
@@ -520,7 +537,33 @@
             <button type="button" onclick="openGoldenCoinUtilities()" class="mt-4 w-full rounded-xl border border-darkBorder bg-darkBg px-3 py-2.5 text-xs font-bold text-gold hover:border-gold">
                 Explore Golden Coin utilities
             </button>
+            <button type="button" onclick="openCoinPurchaseRestore()" class="mt-2 w-full text-[10px] font-semibold text-gray-400 hover:text-gold">Already paid but coins are missing? Verify your purchase</button>
             <p class="mt-3 text-[10px] leading-relaxed text-gray-500">*Calls are not active until a calling provider is configured. You will not be charged for calls while they are unavailable. Payments are credited only after Flutterwave verifies them.</p>
+        </section>
+    </div>
+
+    <div id="coinPurchaseRestoreModal" class="fixed inset-0 z-[80] hidden items-center justify-center overflow-y-auto bg-black/80 p-4" role="dialog" aria-modal="true" aria-labelledby="coinPurchaseRestoreHeading" onclick="if (event.target === this) closeCoinPurchaseRestore()">
+        <section class="my-8 w-full max-w-md rounded-2xl border border-gold/40 bg-darkCard p-5 shadow-2xl">
+            <header class="flex items-start justify-between gap-3">
+                <div>
+                    <h2 id="coinPurchaseRestoreHeading" class="text-lg font-extrabold text-white">Verify missing coins</h2>
+                    <p class="mt-1 text-xs text-gray-400">Enter the reference and transaction ID shown on your Flutterwave receipt. We’ll verify the purchase against your signed-in account before updating your balance.</p>
+                </div>
+                <button type="button" onclick="closeCoinPurchaseRestore()" class="rounded-lg p-2 text-gray-400 hover:text-white" aria-label="Close purchase verification"><i class="fa-solid fa-xmark"></i></button>
+            </header>
+            <form class="mt-4 space-y-3" onsubmit="restoreGoldenChatCoinPurchase(event)">
+                <label class="block text-xs font-semibold text-gray-300" for="coinRestoreReference">Payment reference (tx_ref)
+                    <input id="coinRestoreReference" required maxlength="160" autocomplete="off" class="mt-1 w-full rounded-lg border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white focus:border-gold focus:outline-none">
+                </label>
+                <label class="block text-xs font-semibold text-gray-300" for="coinRestoreTransactionId">Flutterwave transaction ID
+                    <input id="coinRestoreTransactionId" required maxlength="80" autocomplete="off" class="mt-1 w-full rounded-lg border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white focus:border-gold focus:outline-none">
+                </label>
+                <p id="coinRestoreStatus" class="hidden text-xs" role="status" aria-live="polite"></p>
+                <div class="flex justify-end gap-2">
+                    <button type="button" onclick="closeCoinPurchaseRestore()" class="rounded-lg border border-darkBorder px-3 py-2 text-xs text-gray-300">Cancel</button>
+                    <button id="coinRestoreSubmitButton" type="submit" class="rounded-lg gold-gradient-bg px-4 py-2 text-xs font-bold text-black">Verify & restore coins</button>
+                </div>
+            </form>
         </section>
     </div>
 
@@ -1388,8 +1431,11 @@
         let authStateRevision = 0;
         let authPersistenceReady = Promise.resolve(true);
         let quizWallet = { likes: 0, loves: 0, hates: 0, coins: 0 };
+        let quizWalletLoaded = false;
+        let quizWalletStatus = 'Sign in to view your coin balance.';
         let quizDailyStatus = null;
         let quizWalletUnsubscribe = null;
+        let walletPaymentReturnPromise = null;
         let quizAttemptId = null;
         let activeQuizRewardEligible = false;
         let activeQuizLikeRewardEligible = false;
@@ -1669,6 +1715,7 @@ function initializeFirebaseAuth() {
         }
 
         if (revision === authStateRevision && firebaseAuth.currentUser?.uid === user.uid) {
+            void confirmFlutterwaveReturn();
             startPresenceHeartbeat(user.uid);
             if (memberDirectoryInitializationUid !== user.uid) {
                 memberDirectoryInitializationUid = user.uid;
@@ -4187,6 +4234,83 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             modal.classList.add('flex');
         }
 
+        function openCoinPurchaseRestore() {
+            if (!currentUser) {
+                showToast('Sign in to verify a Golden Chat coin purchase.', 'info');
+                openAuthModal('signin');
+                return;
+            }
+            const modal = document.getElementById('coinPurchaseRestoreModal');
+            const status = document.getElementById('coinRestoreStatus');
+            status.classList.add('hidden');
+            status.textContent = '';
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeCoinPurchaseRestore() {
+            const modal = document.getElementById('coinPurchaseRestoreModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        async function restoreGoldenChatCoinPurchase(event) {
+            event.preventDefault();
+            if (!currentUser) {
+                showToast('Sign in with the account used for the purchase, then try again.', 'info');
+                openAuthModal('signin');
+                return;
+            }
+
+            const referenceInput = document.getElementById('coinRestoreReference');
+            const transactionInput = document.getElementById('coinRestoreTransactionId');
+            const status = document.getElementById('coinRestoreStatus');
+            const button = document.getElementById('coinRestoreSubmitButton');
+            const txRef = referenceInput.value.trim();
+            const transactionId = transactionInput.value.trim();
+            if (!txRef.startsWith('wallet-') || txRef.length > 160 || !transactionId || transactionId.length > 80) {
+                status.textContent = 'Enter the wallet payment reference and Flutterwave transaction ID from your receipt.';
+                status.className = 'text-xs text-red-300';
+                status.classList.remove('hidden');
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = 'Verifying payment…';
+            status.textContent = 'Checking the payment with Flutterwave…';
+            status.className = 'text-xs text-gray-300';
+            status.classList.remove('hidden');
+            try {
+                const result = await firebaseFunctions.httpsCallable('verifyWalletPayment')({
+                    txRef,
+                    transactionId,
+                    expectedProduct: 'goldenChatCoins'
+                });
+                if (result.data?.verified !== true) {
+                    throw new Error('The payment has not been verified. No coins were added.');
+                }
+                if (!['chatCoins12', 'chatCoins50', 'chatCoins350'].includes(result.data?.product)) {
+                    throw new Error('This receipt is not for a Golden Chat coin pack. Check the balance for the product you purchased.');
+                }
+                const balanceRefreshed = await refreshGoldenChatCoinBalance();
+                referenceInput.value = '';
+                transactionInput.value = '';
+                closeCoinPurchaseRestore();
+                showToast(balanceRefreshed
+                    ? 'Payment verified. Your Golden Chat wallet has been refreshed.'
+                    : 'Payment verified. Your coins are safe; refresh your balance when your connection is restored.',
+                balanceRefreshed ? 'success' : 'info');
+            } catch (error) {
+                console.error('Unable to verify the Golden Chat coin purchase.', error);
+                status.textContent = error.message || 'The payment could not be verified. No coins were added.';
+                status.className = 'text-xs text-red-300';
+                status.classList.remove('hidden');
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Verify & restore coins';
+            }
+        }
+
         function openGoldenCoinUtilities() {
             const modal = document.getElementById('goldenCoinUtilitiesModal');
             modal.classList.remove('hidden');
@@ -5668,6 +5792,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             if (quizWalletUnsubscribe) quizWalletUnsubscribe();
             quizWalletUnsubscribe = null;
             quizWallet = { likes: 0, loves: 0, hates: 0, coins: 0 };
+            quizWalletLoaded = false;
+            quizWalletStatus = currentUser ? 'Loading your Golden Chat wallet…' : 'Sign in to view your coin balance.';
             quizDailyStatus = null;
             renderQuizWallet();
             if (!currentUser) return;
@@ -5683,10 +5809,15 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         hates: Number.isInteger(wallet.hates) && wallet.hates >= 0 ? wallet.hates : 0,
                         coins: Number.isInteger(wallet.coins) && wallet.coins >= 0 ? wallet.coins : 0
                     };
+                    quizWalletLoaded = true;
+                    quizWalletStatus = 'Balance synced to your account.';
                     renderQuizWallet();
                 }, error => {
                     console.error('Unable to load reaction-store balance.', error);
-                    showToast('Your reaction balance could not load. Check Firestore rules and connection.', 'error');
+                    quizWalletLoaded = false;
+                    quizWalletStatus = 'Balance unavailable. Check your connection or tap Refresh.';
+                    renderQuizWallet();
+                    showToast('Your wallet balance could not load. Check Firestore rules and connection.', 'error');
                 });
 
             refreshDailyQuizStatus();
@@ -5695,7 +5826,17 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         function renderQuizWallet() {
             document.getElementById('quizWalletLikes').textContent = quizWallet.likes;
             document.getElementById('quizWalletHates').textContent = quizWallet.hates;
-            document.getElementById('chatCoinBalance').textContent = quizWallet.coins;
+            document.getElementById('chatCoinBalance').textContent = quizWalletLoaded
+                ? quizWallet.coins.toLocaleString()
+                : currentUser ? '…' : '0';
+            const storeBalance = document.getElementById('chatCoinStoreBalance');
+            if (storeBalance) storeBalance.textContent = quizWalletLoaded
+                ? quizWallet.coins.toLocaleString()
+                : currentUser ? '…' : '0';
+            const coinStatus = document.getElementById('chatCoinBalanceStatus');
+            if (coinStatus) coinStatus.textContent = quizWalletStatus;
+            const storeCoinStatus = document.getElementById('chatCoinStoreBalanceStatus');
+            if (storeCoinStatus) storeCoinStatus.textContent = quizWalletStatus;
             const status = document.getElementById('quizDailyStatus');
             if (!currentUser) {
                 status.textContent = 'Sign in to view your balance and daily reward plays.';
@@ -5729,6 +5870,41 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     : extraPackInProgress
                         ? 'Checkout started · resume or complete it today'
                         : 'One pack per UTC day · resets at 00:00 UTC';
+            }
+        }
+
+        async function refreshGoldenChatCoinBalance() {
+            if (!currentUser) {
+                showToast('Sign in to view your Golden Chat coin balance.', 'info');
+                openAuthModal('signin');
+                return;
+            }
+            const uid = currentUser.uid;
+            const status = document.getElementById('chatCoinBalanceStatus');
+            const refreshButton = document.querySelector('[aria-label="Refresh Golden Chat coin balance"]');
+            if (refreshButton) refreshButton.disabled = true;
+            if (status) status.textContent = 'Refreshing balance from your account…';
+            try {
+                const snapshot = await firebaseFirestore.collection('quizWallets').doc(uid).get({
+                    source: 'server'
+                });
+                if (currentUser?.uid !== uid) return;
+                const wallet = snapshot.exists ? snapshot.data() : {};
+                quizWallet.coins = Number.isSafeInteger(wallet.coins) && wallet.coins >= 0
+                    ? wallet.coins
+                    : 0;
+                quizWalletLoaded = true;
+                quizWalletStatus = 'Balance synced to your account.';
+                renderQuizWallet();
+                return true;
+            } catch (error) {
+                console.error('Unable to refresh the Golden Chat coin balance.', error);
+                quizWalletStatus = 'Balance unavailable. Check your connection and try again.';
+                renderQuizWallet();
+                showToast('Your Golden Chat balance could not be refreshed. Check your connection and try again.', 'error');
+                return false;
+            } finally {
+                if (refreshButton?.isConnected) refreshButton.disabled = false;
             }
         }
 
@@ -5843,26 +6019,56 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         }
 
         async function confirmFlutterwaveReturn() {
-            const url = new URL(window.location.href);
-            const txRef = url.searchParams.get('tx_ref');
-            const transactionId = url.searchParams.get('transaction_id');
-            if (!txRef && !transactionId) return;
-            url.searchParams.delete('tx_ref');
-            url.searchParams.delete('transaction_id');
-            url.searchParams.delete('status');
-            window.history.replaceState({}, document.title, url.toString());
-            if (!txRef || !transactionId) {
-                showToast('Payment returned without a verification reference. Contact support with your Flutterwave receipt.', 'error');
-                return;
-            }
-            try {
-                await firebaseFunctions.httpsCallable('verifyWalletPayment')({ txRef, transactionId });
-                showToast('Payment verified. Your wallet balance has been updated.', 'success');
-                refreshDailyQuizStatus();
-            } catch (error) {
-                console.error('Unable to verify the Flutterwave return.', error);
-                showToast(error.message || 'Payment is not verified yet. Your account has not been credited.', 'error');
-            }
+            if (walletPaymentReturnPromise) return walletPaymentReturnPromise;
+            walletPaymentReturnPromise = (async () => {
+                const url = new URL(window.location.href);
+                const txRef = url.searchParams.get('tx_ref');
+                const transactionId = url.searchParams.get('transaction_id');
+                const paymentStatus = url.searchParams.get('status');
+                if (!txRef && !transactionId) return;
+                if (!currentUser) return;
+
+                if (paymentStatus && paymentStatus.toLowerCase() !== 'successful') {
+                    url.searchParams.delete('tx_ref');
+                    url.searchParams.delete('transaction_id');
+                    url.searchParams.delete('status');
+                    window.history.replaceState({}, document.title, url.toString());
+                    quizWalletStatus = 'Payment was not completed; no coins were added.';
+                    renderQuizWallet();
+                    showToast('The payment was not completed, so your wallet was not credited.', 'info');
+                    return;
+                }
+                if (!txRef || !transactionId) {
+                    quizWalletStatus = 'Payment needs verification. Keep your receipt and contact support.';
+                    renderQuizWallet();
+                    showToast('The payment return is missing a verification reference. No coins were added; keep your receipt and contact support.', 'error');
+                    return;
+                }
+
+                quizWalletStatus = 'Verifying your payment…';
+                renderQuizWallet();
+                try {
+                    await firebaseFunctions.httpsCallable('verifyWalletPayment')({ txRef, transactionId });
+                    url.searchParams.delete('tx_ref');
+                    url.searchParams.delete('transaction_id');
+                    url.searchParams.delete('status');
+                    window.history.replaceState({}, document.title, url.toString());
+                    const balanceRefreshed = await refreshGoldenChatCoinBalance();
+                    refreshDailyQuizStatus();
+                    showToast(balanceRefreshed
+                        ? 'Payment verified. Your Golden Chat coin balance has been updated.'
+                        : 'Payment verified. Your coins are safe; refresh your balance when your connection is restored.',
+                    balanceRefreshed ? 'success' : 'info');
+                } catch (error) {
+                    console.error('Unable to verify the Flutterwave return.', error);
+                    quizWalletStatus = 'Payment verification is pending. Reload this page to retry.';
+                    renderQuizWallet();
+                    showToast(error.message || 'Payment is not verified yet. Your account has not been credited.', 'error');
+                }
+            })().finally(() => {
+                walletPaymentReturnPromise = null;
+            });
+            return walletPaymentReturnPromise;
         }
 
         async function startTimedQuiz(mode = 'reward') {
