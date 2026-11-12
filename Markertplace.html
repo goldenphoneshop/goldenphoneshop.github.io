@@ -504,7 +504,7 @@
                     <span>Photo · <strong class="text-gold">2 coins</strong></span>
                     <span>Voice note · <strong class="text-gold">3 coins</strong></span>
                 </div>
-                <p class="mt-2 text-[10px] leading-relaxed text-gray-500">Only the sender pays when a message is sent. Calls are not available and do not use coins. Chat coins are separate from quiz likes and Love/Hate reaction credits.</p>
+                <p class="mt-2 text-[10px] leading-relaxed text-gray-500">Only the sender pays when a message is sent. Calls are not available and do not use coins. Chat coins are separate from quiz likes and product Like/Hate reactions.</p>
             </div>
             <div class="mt-4 space-y-2">
                 <button type="button" onclick="startWalletPurchase('chatCoins12')" class="flex w-full items-center justify-between gap-3 rounded-xl border border-gold/30 bg-darkBg p-3 text-left hover:border-gold">
@@ -1015,9 +1015,6 @@
                         <button type="button" onclick="toggleProductReaction('like')" class="rounded-lg border border-darkBorder px-3 py-2 text-xs text-gray-200 hover:border-gold/50" aria-label="Like this product">
                             <i class="fa-regular fa-thumbs-up mr-1"></i> Like <span id="productLikeCount">0</span>
                         </button>
-                        <button type="button" onclick="toggleProductReaction('love')" class="rounded-lg border border-darkBorder px-3 py-2 text-xs text-gray-200 hover:border-pink-400/50" aria-label="Love this product">
-                            <i class="fa-regular fa-heart mr-1"></i> Love <span id="productLoveCount">0</span>
-                        </button>
                         <button type="button" onclick="toggleProductReaction('hate')" class="rounded-lg border border-darkBorder px-3 py-2 text-xs text-gray-200 hover:border-red-400/50" aria-label="Hate this product">
                             <i class="fa-regular fa-face-angry mr-1"></i> Hate <span id="productHateCount">0</span>
                         </button>
@@ -1027,7 +1024,7 @@
                     <p class="text-xs text-gray-500">Loading discussion…</p>
                 </div>
                 <div id="productDiscussionLogin" class="hidden mt-4 rounded-xl border border-darkBorder bg-darkBg p-4 text-center">
-                    <p class="mb-3 text-xs text-gray-300">Sign in to like, love, or comment on this product.</p>
+                    <p class="mb-3 text-xs text-gray-300">Sign in to like, dislike, or comment on this product.</p>
                     <button type="button" onclick="openAuthModal('signin')" class="rounded-lg gold-gradient-bg px-4 py-2 text-xs font-bold text-black">Sign in to join the discussion</button>
                 </div>
                 <form id="productDiscussionComposer" class="hidden mt-4 space-y-2" onsubmit="postProductComment(event)">
@@ -1072,9 +1069,8 @@
             </div>
             <div class="mt-4 rounded-xl border border-gold/30 bg-gold/5 p-4">
                 <p class="text-xs font-bold uppercase tracking-wide text-gold">Your reaction balance</p>
-                <div class="mt-2 grid grid-cols-3 gap-2 text-center">
+                <div class="mt-2 grid grid-cols-2 gap-2 text-center">
                     <p class="rounded-lg bg-darkBg p-2 text-sm font-bold text-white"><span id="quizWalletLikes">0</span><span class="block text-[10px] font-medium text-gray-400">Likes</span></p>
-                    <p class="rounded-lg bg-darkBg p-2 text-sm font-bold text-white"><span id="quizWalletLoves">0</span><span class="block text-[10px] font-medium text-gray-400">Loves</span></p>
                     <p class="rounded-lg bg-darkBg p-2 text-sm font-bold text-white"><span id="quizWalletHates">0</span><span class="block text-[10px] font-medium text-gray-400">Hates</span></p>
                 </div>
                 <p id="quizDailyStatus" class="mt-3 text-xs text-gray-300" role="status">Sign in to view your daily reward plays.</p>
@@ -1092,10 +1088,6 @@
                     <i class="fa-solid fa-plus mr-1 text-gold"></i> 5 extra reward plays · ₦1,000
                     <span id="quizPlayPackUsd" class="mt-1 block text-[10px] font-medium text-gray-400">USD estimate loading…</span>
                     <span id="quizPlayPackAvailability" class="mt-1 block text-[10px] font-medium text-gray-500">Five additional plays do not award likes · resets at 00:00 UTC</span>
-                </button>
-                <button type="button" onclick="startWalletPurchase('lovePack')" class="rounded-xl border border-pink-400/40 bg-darkBg p-3 text-left text-sm font-bold text-white hover:border-pink-300">
-                    <i class="fa-regular fa-heart mr-1 text-pink-300"></i> 10 loves · ₦500
-                    <span id="lovePackUsd" class="mt-1 block text-[10px] font-medium text-gray-400">USD estimate loading…</span>
                 </button>
                 <button type="button" onclick="startWalletPurchase('hatePack')" class="rounded-xl border border-red-400/40 bg-darkBg p-3 text-left text-sm font-bold text-white hover:border-red-300">
                     <i class="fa-regular fa-face-angry mr-1 text-red-300"></i> 5 hates · ₦500
@@ -1453,6 +1445,10 @@
         const communityCommentDocs = new Map();
         const communityCommentErrors = new Set();
         const openCommunityCommentPostIds = new Set();
+        const communityPostLikeUnsubscribers = new Map();
+        const communityCommentVoiceStates = new Map();
+        const communityCommentAudioUrls = new Map();
+        const communityCommentDrafts = new Map();
         const communityMediaObjectUrls = new Set();
         const communityDownloadPermissionCache = new Map();
         let communityPostSubmitting = false;
@@ -1462,6 +1458,7 @@
         const MAX_BUYER_COMMUNITY_VIDEO_BYTES = 500 * 1024 * 1024;
         const MAX_PRODUCT_VIDEO_SECONDS = 10;
         const MAX_GOLDEN_CHAT_VOICE_BYTES = 25 * 1024 * 1024;
+        const MAX_COMMUNITY_COMMENT_VOICE_BYTES = 25 * 1024 * 1024;
         let cartItems = [];
         let activeGoldenChatId = null;
         let activeGoldenChatData = null;
@@ -1479,7 +1476,7 @@
         let discardChatVoiceOnStop = false;
         const attemptedLegacyProductMigrations = new Set();
         let discussionProductId = null;
-        let discussionCounts = { likes: 0, loves: 0, hates: 0 };
+        let discussionCounts = { likes: 0, hates: 0 };
         let myProductReaction = null;
         let discussionCommentsUnsubscribe = null;
         let discussionStatsUnsubscribe = null;
@@ -1526,7 +1523,10 @@
             document.getElementById('profileGenderInput').addEventListener('change', updateProfileCompletionStatus);
             document.getElementById('profileAgeRangeInput').addEventListener('change', updateProfileCompletionStatus);
             document.addEventListener('visibilitychange', handlePresenceVisibilityChange);
-            window.addEventListener('pagehide', markPresenceInactive);
+            window.addEventListener('pagehide', () => {
+                markPresenceInactive();
+                clearAllCommunityCommentVoices();
+            });
             subscribeSharedProducts();
             subscribeCommunityPosts();
         };
@@ -1563,6 +1563,8 @@ function initializeFirebaseAuth() {
     firebaseAuth.onAuthStateChanged(async (user) => {
         const revision = ++authStateRevision;
         if (!user) {
+            clearAllCommunityCommentVoices();
+            communityCommentDrafts.clear();
             if (chatVoiceRecorder?.state === 'recording') {
                 discardChatVoiceOnStop = true;
                 chatVoiceRecorder.stop();
@@ -1575,6 +1577,8 @@ function initializeFirebaseAuth() {
             followedMemberIds = new Set();
             followedVendorIds = new Set();
             currentUser = null;
+            renderCommunityPosts();
+            refreshCommunityPostLikeSubscriptions();
             renderAuthNav();
             subscribeToQuizAccount();
             chatSendRetry = null;
@@ -1587,7 +1591,11 @@ function initializeFirebaseAuth() {
             return;
         }
         if (user.email && !user.emailVerified) {
+            clearAllCommunityCommentVoices();
+            communityCommentDrafts.clear();
             currentUser = null;
+            renderCommunityPosts();
+            refreshCommunityPostLikeSubscriptions();
             renderAuthNav();
             subscribeToQuizAccount();
             stopPresenceHeartbeat();
@@ -1604,6 +1612,10 @@ function initializeFirebaseAuth() {
         }
 
         const localProfile = loadAccountProfile(user.uid);
+        if (currentUser?.uid && currentUser.uid !== user.uid) {
+            clearAllCommunityCommentVoices();
+            communityCommentDrafts.clear();
+        }
         currentUser = {
             uid: user.uid,
             email: user.email || '',
@@ -1614,6 +1626,8 @@ function initializeFirebaseAuth() {
             ...getAccountProfileFields(localProfile),
             isAdmin: false
         };
+        renderCommunityPosts();
+        refreshCommunityPostLikeSubscriptions();
         renderAuthNav();
         updateAccountPageHeader();
         subscribeToQuizAccount();
@@ -1663,6 +1677,12 @@ function initializeFirebaseAuth() {
             }
         }
     });
+}
+
+function refreshCommunityPostLikeSubscriptions() {
+    communityPostLikeUnsubscribers.forEach((_, postId) =>
+        subscribeToCommunityPostLikes(postId)
+    );
 }
 
 window.addEventListener('load', initializeFirebaseAuth, { once: true });
@@ -2277,12 +2297,30 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         }
 
         function renderCommunityPostCards(posts, container, emptyState) {
+            container.querySelectorAll('form[data-post-id]').forEach(form => {
+                const input = form.querySelector('textarea');
+                if (input) communityCommentDrafts.set(form.dataset.postId, input.value);
+            });
             container.replaceChildren();
             const empty = posts.length === 0;
             if (emptyState) emptyState.classList.toggle('hidden', !empty);
-            if (empty) return;
+            if (empty) {
+                cleanupCommunityPostLikeSubscriptions();
+                return;
+            }
             container.innerHTML = posts.map(renderCommunityPostCard).join('');
             posts.forEach(post => {
+                subscribeToCommunityPostLikes(post.id);
+                const form = [...container.querySelectorAll('form[data-post-id]')]
+                    .find(item => item.dataset.postId === post.id);
+                if (form) {
+                    const input = form.querySelector('textarea');
+                    input.value = communityCommentDrafts.get(post.id) || '';
+                    input.addEventListener('input', () =>
+                        communityCommentDrafts.set(post.id, input.value)
+                    );
+                    syncCommunityCommentVoiceComposer(post.id);
+                }
                 if (!openCommunityCommentPostIds.has(post.id)) return;
                 if (communityCommentDocs.has(post.id)) {
                     renderCommunityPostComments(post.id, communityCommentDocs.get(post.id));
@@ -2290,6 +2328,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     renderCommunityPostCommentsError(post.id);
                 }
             });
+            cleanupCommunityPostLikeSubscriptions();
         }
 
         function renderCommunityPostCard(post) {
@@ -2318,6 +2357,11 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 ? `<button type="button" onclick="downloadCommunityPostMedia(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] text-gray-300 hover:border-gold/50 hover:text-gold"><i class="fa-solid fa-download mr-1"></i>Download</button>`
                 : '';
             const commentsOpen = openCommunityCommentPostIds.has(post.id);
+            const voiceState = communityCommentVoiceStates.get(post.id);
+            const isRecording = voiceState?.recorder?.state === 'recording';
+            const voiceStatus = isRecording
+                ? 'Recording voice note…'
+                : voiceState?.blob ? 'Voice note ready to post.' : '';
             return `
                 <article data-community-post-id="${escapeHtml(post.id)}" class="overflow-hidden rounded-2xl border border-darkBorder bg-darkCard p-3 shadow-lg">
                     <div class="mb-3 flex items-center justify-between gap-2">${profileAction}<span class="text-[10px] text-gray-500">${formatCommunityPostDate(post.createdAt)}</span></div>
@@ -2325,6 +2369,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     ${media ? `<div class="space-y-2">${media}</div>` : '<p class="rounded-lg bg-darkBg p-4 text-xs text-gray-400">This media is unavailable.</p>'}
                     ${post.caption ? `<p class="mt-3 whitespace-pre-wrap break-words text-sm text-gray-200">${escapeHtml(post.caption)}</p>` : ''}
                     <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-darkBorder pt-3">
+                        <button type="button" onclick="toggleCommunityPostLike(this)" data-post-id="${escapeHtml(post.id)}" data-liked="false" data-like-count="0" aria-pressed="false" class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] font-bold text-gray-200 hover:border-gold/50 hover:text-gold"><i class="fa-regular fa-thumbs-up mr-1"></i><span data-community-post-like-label>Like</span> · <span data-community-post-like-count>0</span></button>
                         <button type="button" onclick="reshareCommunityPost(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="rounded-lg border border-gold/30 px-3 py-1.5 text-[10px] font-bold text-gold hover:bg-gold/10"><i class="fa-solid fa-retweet mr-1"></i>Reshare</button>
                         <button type="button" onclick="toggleCommunityComments(this, this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" aria-expanded="${commentsOpen}" class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] font-bold text-gray-200 hover:border-gold/50 hover:text-gold"><i class="fa-regular fa-comment mr-1"></i>Comments</button>
                         ${downloadButton}
@@ -2334,14 +2379,120 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                             ${commentsOpen ? '<p class="text-xs text-gray-500">Loading comments…</p>' : ''}
                         </div>
                         <form class="mt-3 space-y-2" data-post-id="${escapeHtml(post.id)}" onsubmit="postCommunityComment(event, this.dataset.postId)">
-                            <textarea aria-label="Write a comment" maxlength="2000" rows="2" placeholder="Write a comment…" class="w-full resize-y rounded-xl border border-darkBorder bg-darkBg px-3 py-2 text-xs text-white placeholder:text-gray-500 focus:border-gold focus:outline-none"></textarea>
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="text-[10px] text-gray-500">Be respectful. Up to 2,000 characters.</span>
+                            <textarea aria-label="Write a comment" required maxlength="2000" rows="2" placeholder="Write a comment…" class="w-full resize-y rounded-xl border border-darkBorder bg-darkBg px-3 py-2 text-xs text-white placeholder:text-gray-500 focus:border-gold focus:outline-none"></textarea>
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] text-gray-500">Text required; voice optional.</span>
+                                    <button type="button" onclick="startCommunityCommentVoiceRecording(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="${isRecording ? 'hidden' : ''} rounded-lg border border-darkBorder px-2.5 py-1.5 text-[10px] font-semibold text-gray-300 hover:border-gold/50 hover:text-gold"><i class="fa-solid fa-microphone mr-1"></i>Record voice</button>
+                                    <button type="button" onclick="stopCommunityCommentVoiceRecording(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="${isRecording ? '' : 'hidden'} rounded-lg border border-red-400/40 px-2.5 py-1.5 text-[10px] font-semibold text-red-300"><i class="fa-solid fa-stop mr-1"></i>Stop</button>
+                                    <button type="button" onclick="clearCommunityCommentVoice(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="${voiceState?.blob ? '' : 'hidden'} rounded-lg border border-darkBorder px-2.5 py-1.5 text-[10px] text-gray-400 hover:text-white">Remove voice</button>
+                                    <span data-community-voice-status class="text-[10px] text-gray-400">${voiceStatus}</span>
+                                </div>
                                 <button type="submit" class="rounded-lg gold-gradient-bg px-3 py-1.5 text-[10px] font-bold text-black">Post comment</button>
                             </div>
+                            <audio data-community-voice-preview controls preload="metadata" class="${voiceState?.blob ? 'mt-2 h-9 w-full' : 'hidden'}" ${voiceState?.url ? `src="${escapeHtml(voiceState.url)}"` : ''}></audio>
                         </form>
                     </section>
                 </article>`;
+        }
+
+        function subscribeToCommunityPostLikes(postId) {
+            let subscription = communityPostLikeUnsubscribers.get(postId);
+            if (!subscription) {
+                subscription = { stats: null, liked: null, uid: null };
+                subscription.stats = firebaseFirestore.collection('communityPostStats').doc(postId)
+                    .onSnapshot(snapshot => {
+                        const count = Number.isSafeInteger(snapshot.data()?.likes) && snapshot.data().likes >= 0
+                            ? snapshot.data().likes
+                            : 0;
+                        document.querySelectorAll('[data-community-post-id] [data-post-id]').forEach(button => {
+                            if (button.dataset.postId === postId &&
+                                button.hasAttribute('data-community-post-like-count')) {
+                                setCommunityPostLikeButton(button, button.dataset.liked === 'true', count);
+                            }
+                        });
+                    }, error => {
+                        console.error('Unable to load community post likes.', error);
+                    });
+                communityPostLikeUnsubscribers.set(postId, subscription);
+            }
+            const uid = currentUser?.uid || null;
+            if (subscription.uid === uid) return;
+            if (subscription.liked) subscription.liked();
+            subscription.liked = null;
+            subscription.uid = uid;
+            if (!uid) {
+                document.querySelectorAll('[data-community-post-id] [data-post-id]').forEach(button => {
+                    if (button.dataset.postId === postId &&
+                        button.hasAttribute('data-community-post-like-count')) {
+                        setCommunityPostLikeButton(button, false, Number(button.dataset.likeCount) || 0);
+                    }
+                });
+                return;
+            }
+            subscription.liked = firebaseFirestore.collection('communityPosts').doc(postId)
+                .collection('likes').doc(uid).onSnapshot(snapshot => {
+                    document.querySelectorAll('[data-community-post-id] [data-post-id]').forEach(button => {
+                        if (button.dataset.postId === postId &&
+                            button.hasAttribute('data-community-post-like-count')) {
+                            setCommunityPostLikeButton(button, snapshot.exists, Number(button.dataset.likeCount) || 0);
+                        }
+                    });
+                }, error => {
+                    console.error('Unable to load your community post like.', error);
+                });
+        }
+
+        function cleanupCommunityPostLikeSubscriptions() {
+                const renderedPostIds = new Set(
+                    [...document.querySelectorAll('[data-community-post-id]')]
+                        .map(article => article.dataset.communityPostId)
+                );
+                communityPostLikeUnsubscribers.forEach((subscription, postId) => {
+                    if (renderedPostIds.has(postId)) return;
+                    subscription.stats?.();
+                    subscription.liked?.();
+                    communityPostLikeUnsubscribers.delete(postId);
+                });
+        }
+
+        function setCommunityPostLikeButton(button, liked, count) {
+            button.dataset.liked = String(liked);
+            button.dataset.likeCount = String(count);
+            button.setAttribute('aria-pressed', String(liked));
+            const countLabel = button.querySelector('[data-community-post-like-count]');
+            const likeLabel = button.querySelector('[data-community-post-like-label]');
+            if (countLabel) countLabel.textContent = count;
+            if (likeLabel) likeLabel.textContent = liked ? 'Liked' : 'Like';
+            button.classList.toggle('border-gold/50', liked);
+            button.classList.toggle('text-gold', liked);
+        }
+
+        async function toggleCommunityPostLike(button) {
+            if (!currentUser) {
+                showToast('Sign in to like community posts.', 'info');
+                openAuthModal('signin');
+                return;
+            }
+            const uid = currentUser.uid;
+            button.disabled = true;
+            try {
+                const result = await firebaseFunctions.httpsCallable('toggleCommunityPostLike')({
+                    postId: button.dataset.postId
+                });
+                if (!button.isConnected || currentUser?.uid !== uid) return;
+                if (typeof result.data?.liked !== 'boolean' ||
+                    !Number.isSafeInteger(result.data?.likesCount) ||
+                    result.data.likesCount < 0) {
+                    throw new Error('The server returned an invalid post-like result.');
+                }
+                setCommunityPostLikeButton(button, result.data.liked, result.data.likesCount);
+            } catch (error) {
+                console.error('Unable to update the community post like.', error);
+                showToast(error.message || 'Your post like could not be saved. Check your connection and try again.', 'error');
+            } finally {
+                if (button.isConnected) button.disabled = false;
+            }
         }
 
         function toggleCommunityComments(button, postId) {
@@ -2353,6 +2504,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             button.setAttribute('aria-expanded', String(!isOpen));
             if (isOpen) {
                 openCommunityCommentPostIds.delete(postId);
+                clearCommunityCommentVoice(postId);
                 return;
             }
             openCommunityCommentPostIds.add(postId);
@@ -2407,6 +2559,28 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     const createdAt = comment.createdAt?.toDate?.();
                     date.textContent = createdAt ? createdAt.toLocaleString() : 'Just now';
                     row.append(author, body, likeButton, date);
+                    if (comment.voicePath) {
+                        const audio = document.createElement('audio');
+                        audio.controls = true;
+                        audio.preload = 'none';
+                        audio.className = 'mt-2 h-9 w-full';
+                        row.insertBefore(audio, date);
+                        const cachedUrl = communityCommentAudioUrls.get(comment.voicePath);
+                        if (cachedUrl) audio.src = cachedUrl;
+                        else {
+                            firebaseStorage.ref(comment.voicePath).getDownloadURL()
+                                .then(url => {
+                                    communityCommentAudioUrls.set(comment.voicePath, url);
+                                    if (audio.isConnected) audio.src = url;
+                                })
+                                .catch(error => {
+                                    console.error('Unable to load community voice comment.', error);
+                                    if (audio.isConnected) {
+                                        audio.outerHTML = '<p class="mt-2 text-[10px] text-red-300">Voice note unavailable.</p>';
+                                    }
+                                });
+                        }
+                    }
                     loadCommunityCommentLikeState(likeButton);
                     if (currentUser?.uid === comment.authorUid) {
                         const remove = document.createElement('button');
@@ -2522,22 +2696,211 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
             button.disabled = true;
             button.textContent = 'Posting…';
+            const voiceState = communityCommentVoiceStates.get(postId);
+            if (voiceState?.recorder?.state === 'recording') {
+                button.disabled = false;
+                button.textContent = 'Post comment';
+                showToast('Stop recording before posting your comment.', 'info');
+                return;
+            }
+            const voiceBlob = voiceState?.blob || null;
+            if (voiceBlob && voiceBlob.size > MAX_COMMUNITY_COMMENT_VOICE_BYTES) {
+                button.disabled = false;
+                button.textContent = 'Post comment';
+                showToast('The voice note exceeds the 25 MB upload limit.', 'error');
+                return;
+            }
+            let uploadedVoiceRef = null;
             try {
-                await firebaseFirestore.collection('communityPosts').doc(postId)
-                    .collection('comments').add({
-                        authorUid: currentUser.uid,
-                        authorName: currentUser.name || 'Marketplace member',
-                        text,
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                const commentRef = firebaseFirestore.collection('communityPosts').doc(postId)
+                    .collection('comments').doc();
+                const commentData = {
+                    authorUid: currentUser.uid,
+                    authorName: currentUser.name || 'Marketplace member',
+                    text,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                if (voiceBlob) {
+                    const voicePath = `community-comment-voice/${postId}/${commentRef.id}/${currentUser.uid}/voice`;
+                    uploadedVoiceRef = firebaseStorage.ref(voicePath);
+                    await uploadedVoiceRef.put(voiceBlob, {
+                        contentType: voiceBlob.type || 'audio/webm'
                     });
-                input.value = '';
+                    commentData.voicePath = voicePath;
+                }
+                await commentRef.set(commentData);
+                document.querySelectorAll('form[data-post-id]').forEach(commentForm => {
+                    if (commentForm.dataset.postId === postId) {
+                        commentForm.querySelector('textarea').value = '';
+                    }
+                });
+                communityCommentDrafts.delete(postId);
+                clearCommunityCommentVoice(postId);
             } catch (error) {
                 console.error('Unable to post community comment.', error);
+                if (uploadedVoiceRef) {
+                    uploadedVoiceRef.delete().catch(cleanupError =>
+                        console.error('Unable to remove the unposted community voice recording.', cleanupError)
+                    );
+                }
                 showToast('Your comment could not be posted. Check your connection and Firebase setup.', 'error');
             } finally {
                 button.disabled = false;
                 button.textContent = 'Post comment';
             }
+        }
+
+        function syncCommunityCommentVoiceComposer(postId) {
+            const state = communityCommentVoiceStates.get(postId);
+            document.querySelectorAll('form[data-post-id]').forEach(form => {
+                if (form.dataset.postId !== postId) return;
+                const recording = state?.recorder?.state === 'recording';
+                const recordButton = form.querySelector('button[onclick^="startCommunityCommentVoiceRecording"]');
+                const stopButton = form.querySelector('button[onclick^="stopCommunityCommentVoiceRecording"]');
+                const removeButton = form.querySelector('button[onclick^="clearCommunityCommentVoice"]');
+                const status = form.querySelector('[data-community-voice-status]');
+                const preview = form.querySelector('[data-community-voice-preview]');
+                recordButton?.classList.toggle('hidden', recording);
+                stopButton?.classList.toggle('hidden', !recording);
+                removeButton?.classList.toggle('hidden', !state?.blob || recording);
+                if (status) {
+                    status.textContent = recording
+                        ? `Recording voice note… ${Math.floor((Date.now() - state.startedAt) / 1000)}s`
+                        : state?.blob ? 'Voice note ready to post.' : '';
+                }
+                if (preview) {
+                    preview.classList.toggle('hidden', !state?.blob || recording);
+                    if (state?.url && preview.src !== state.url) preview.src = state.url;
+                    if (!state?.url) {
+                        preview.pause();
+                        preview.removeAttribute('src');
+                        preview.load();
+                    }
+                }
+            });
+        }
+
+        async function startCommunityCommentVoiceRecording(postId) {
+            if (!currentUser) {
+                showToast('Sign in to record a voice comment.', 'info');
+                openAuthModal('signin');
+                return;
+            }
+            if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+                showToast('Voice recording is not supported by this browser.', 'error');
+                return;
+            }
+            if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                showToast('Voice recording requires an HTTPS website.', 'error');
+                return;
+            }
+
+            const existingState = communityCommentVoiceStates.get(postId);
+            if (existingState?.recorder?.state === 'recording') return;
+            const recordingUid = currentUser.uid;
+            clearCommunityCommentVoice(postId);
+            const state = { blob: null, url: null, recorder: null, stream: null, chunks: [], startedAt: 0, timer: null, discardOnStop: false };
+            communityCommentVoiceStates.set(postId, state);
+            try {
+                state.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                if (communityCommentVoiceStates.get(postId) !== state ||
+                    currentUser?.uid !== recordingUid) {
+                    state.stream.getTracks().forEach(track => track.stop());
+                    return;
+                }
+                const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+                    .find(type => MediaRecorder.isTypeSupported(type));
+                state.recorder = mimeType
+                    ? new MediaRecorder(state.stream, { mimeType })
+                    : new MediaRecorder(state.stream);
+                state.recorder.addEventListener('dataavailable', event => {
+                    if (event.data.size) state.chunks.push(event.data);
+                    const totalSize = state.chunks.reduce((total, chunk) => total + chunk.size, 0);
+                    if (totalSize >= MAX_COMMUNITY_COMMENT_VOICE_BYTES &&
+                        state.recorder?.state === 'recording') {
+                        showToast('The 25 MB voice note limit was reached. Recording stopped.', 'info');
+                        stopCommunityCommentVoiceRecording(postId);
+                    }
+                });
+                state.recorder.addEventListener('stop', () => {
+                    state.stream?.getTracks().forEach(track => track.stop());
+                    state.stream = null;
+                    clearInterval(state.timer);
+                    state.timer = null;
+                    const blob = new Blob(state.chunks, {
+                        type: state.recorder?.mimeType || 'audio/webm'
+                    });
+                    state.recorder = null;
+                    state.chunks = [];
+                    if (communityCommentVoiceStates.get(postId) !== state) {
+                        if (state.url) URL.revokeObjectURL(state.url);
+                        return;
+                    }
+                    if (state.discardOnStop) {
+                        clearCommunityCommentVoice(postId);
+                        return;
+                    }
+                    if (!blob.size) {
+                        communityCommentVoiceStates.delete(postId);
+                        syncCommunityCommentVoiceComposer(postId);
+                        showToast('No audio was recorded. Please try again.', 'error');
+                        return;
+                    }
+                    if (blob.size > MAX_COMMUNITY_COMMENT_VOICE_BYTES) {
+                        communityCommentVoiceStates.delete(postId);
+                        syncCommunityCommentVoiceComposer(postId);
+                        showToast('The voice note exceeds the 25 MB upload limit.', 'error');
+                        return;
+                    }
+                    state.blob = blob;
+                    state.url = URL.createObjectURL(blob);
+                    syncCommunityCommentVoiceComposer(postId);
+                });
+                state.startedAt = Date.now();
+                state.timer = setInterval(() => syncCommunityCommentVoiceComposer(postId), 1000);
+                state.recorder.start(1000);
+                syncCommunityCommentVoiceComposer(postId);
+            } catch (error) {
+                state.stream?.getTracks().forEach(track => track.stop());
+                clearInterval(state.timer);
+                state.timer = null;
+                if (communityCommentVoiceStates.get(postId) === state) {
+                    communityCommentVoiceStates.delete(postId);
+                    syncCommunityCommentVoiceComposer(postId);
+                }
+                console.error('Unable to start community comment voice recording.', error);
+                showToast(error.name === 'NotAllowedError'
+                    ? 'Allow microphone access in your browser to record a voice comment.'
+                    : 'Voice recording could not start. Check microphone permissions and try again.', 'error');
+            }
+        }
+
+        function stopCommunityCommentVoiceRecording(postId, discard = false) {
+            const state = communityCommentVoiceStates.get(postId);
+            if (!state?.recorder || state.recorder.state !== 'recording') return;
+            state.discardOnStop = discard;
+            state.recorder.stop();
+        }
+
+        function clearCommunityCommentVoice(postId) {
+            const state = communityCommentVoiceStates.get(postId);
+            if (state?.recorder?.state === 'recording') {
+                stopCommunityCommentVoiceRecording(postId, true);
+                return;
+            }
+            if (state?.url) URL.revokeObjectURL(state.url);
+            if (state?.stream) state.stream.getTracks().forEach(track => track.stop());
+            if (state?.timer) clearInterval(state.timer);
+            communityCommentVoiceStates.delete(postId);
+            syncCommunityCommentVoiceComposer(postId);
+        }
+
+        function clearAllCommunityCommentVoices() {
+            [...communityCommentVoiceStates.keys()].forEach(postId => {
+                const state = communityCommentVoiceStates.get(postId);
+                clearCommunityCommentVoice(postId);
+                state?.stream?.getTracks().forEach(track => track.stop());
+            });
         }
 
         async function loadCommunityDownloadPermissions() {
@@ -5208,7 +5571,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             if (myReactionUnsubscribe) myReactionUnsubscribe();
 
             discussionProductId = productId;
-            discussionCounts = { likes: 0, loves: 0, hates: 0 };
+            discussionCounts = { likes: 0, hates: 0 };
             myProductReaction = null;
             updateProductReactionButtons();
             updateDiscussionComposer();
@@ -5230,7 +5593,6 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     const stats = snapshot.exists ? snapshot.data() : {};
                     discussionCounts = {
                         likes: Number.isInteger(stats.likes) ? stats.likes : 0,
-                        loves: Number.isInteger(stats.loves) ? stats.loves : 0,
                         hates: Number.isInteger(stats.hates) ? stats.hates : 0
                     };
                     updateProductReactionButtons();
@@ -5263,15 +5625,11 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
         function updateProductReactionButtons() {
             document.getElementById('productLikeCount').textContent = discussionCounts.likes;
-            document.getElementById('productLoveCount').textContent = discussionCounts.loves;
             document.getElementById('productHateCount').textContent = discussionCounts.hates;
             const likeButton = document.querySelector('[aria-label="Like this product"]');
-            const loveButton = document.querySelector('[aria-label="Love this product"]');
             const hateButton = document.querySelector('[aria-label="Hate this product"]');
             likeButton.classList.toggle('border-gold', myProductReaction === 'like');
             likeButton.classList.toggle('text-gold', myProductReaction === 'like');
-            loveButton.classList.toggle('border-pink-400', myProductReaction === 'love');
-            loveButton.classList.toggle('text-pink-300', myProductReaction === 'love');
             hateButton.classList.toggle('border-red-400', myProductReaction === 'hate');
             hateButton.classList.toggle('text-red-300', myProductReaction === 'hate');
         }
@@ -5336,7 +5694,6 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
         function renderQuizWallet() {
             document.getElementById('quizWalletLikes').textContent = quizWallet.likes;
-            document.getElementById('quizWalletLoves').textContent = quizWallet.loves;
             document.getElementById('quizWalletHates').textContent = quizWallet.hates;
             document.getElementById('chatCoinBalance').textContent = quizWallet.coins;
             const status = document.getElementById('quizDailyStatus');
@@ -5441,7 +5798,6 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
         async function loadReactionStoreExchangeRate() {
             const labels = [
-                ['lovePackUsd', 500],
                 ['hatePackUsd', 500],
                 ['quizPlayPackUsd', 1000]
             ];
