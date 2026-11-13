@@ -661,9 +661,9 @@
             </header>
 
             <nav class="flex flex-wrap gap-2 border-b border-darkBorder p-4" aria-label="Account sections">
-                <button type="button" data-account-section="profile" onclick="showAccountSection('profile')" class="rounded-lg border px-4 py-2 text-xs font-bold">My profile</button>
-                <button type="button" data-account-section="followers" onclick="showAccountSection('followers')" class="rounded-lg border px-4 py-2 text-xs font-bold">Followers</button>
-                <button type="button" data-account-section="following" onclick="showAccountSection('following')" class="rounded-lg border px-4 py-2 text-xs font-bold">Following</button>
+                <button type="button" data-account-section="profile" onclick="openAccountPage('profile')" class="rounded-lg border px-4 py-2 text-xs font-bold">My profile</button>
+                <button type="button" data-account-section="followers" onclick="showAccountSection('followers')" class="rounded-lg border px-4 py-2 text-xs font-bold">Followers <span data-connection-count="followers">—</span></button>
+                <button type="button" data-account-section="following" onclick="showAccountSection('following')" class="rounded-lg border px-4 py-2 text-xs font-bold">Following <span data-connection-count="following">—</span></button>
             </nav>
 
             <section id="memberProfileSection" class="hidden p-4 sm:p-6">
@@ -760,6 +760,25 @@
                     <input id="allowMediaDownloadsToggle" type="checkbox" class="h-5 w-5 flex-shrink-0 accent-yellow-500" onchange="saveMediaDownloadPreference(this.checked)">
                 </label>
                 <p id="mediaDownloadSettingStatus" class="hidden max-w-lg text-xs" role="status" aria-live="polite"></p>
+                <section class="mt-6 max-w-lg border-t border-darkBorder pt-5">
+                    <h3 class="text-sm font-bold text-white">Followers & following privacy</h3>
+                    <p class="mt-1 text-[11px] text-gray-400">Lists are visible to verified members by default. Making a list private hides its members; its total count remains public, and you can always view your own lists. Only you can change these settings.</p>
+                    <label for="followersPrivateToggle" class="mt-3 flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-darkBorder bg-darkBg p-4">
+                        <span>
+                            <span class="block text-sm font-bold text-white">Make my Followers list private</span>
+                            <span class="mt-1 block text-[11px] text-gray-400">Hide the accounts following you. Your follower count remains visible.</span>
+                        </span>
+                        <input id="followersPrivateToggle" type="checkbox" class="h-5 w-5 flex-shrink-0 accent-yellow-500" onchange="saveConnectionPrivacy('followersPrivate', this.checked)">
+                    </label>
+                    <label for="followingPrivateToggle" class="mt-3 flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-darkBorder bg-darkBg p-4">
+                        <span>
+                            <span class="block text-sm font-bold text-white">Make my Following list private</span>
+                            <span class="mt-1 block text-[11px] text-gray-400">Hide the accounts you follow. Your following count remains visible.</span>
+                        </span>
+                        <input id="followingPrivateToggle" type="checkbox" class="h-5 w-5 flex-shrink-0 accent-yellow-500" onchange="saveConnectionPrivacy('followingPrivate', this.checked)">
+                    </label>
+                    <p id="connectionsPrivacyStatus" class="hidden mt-2 text-xs" role="status" aria-live="polite"></p>
+                </section>
                 <section id="quizAdminSection" class="hidden mt-8 max-w-2xl border-t border-darkBorder pt-6">
                     <h3 class="text-base font-bold text-white">Quiz question management</h3>
                     <p class="mb-4 mt-1 text-xs text-gray-400">Admin access is required. Correct answers stay server-side.</p>
@@ -1459,7 +1478,10 @@
         let memberDirectoryInitializationUid = null;
         let activeAccountSection = 'followers';
         let accountBackSection = 'followers';
+        let accountBackProfileUid = null;
         let viewedProfileUid = null;
+        const profileStatsCache = new Map();
+        const profileStatsRequests = new Map();
         let profilePresenceUnsubscribe = null;
         let profilePresenceUid = null;
         let presenceHeartbeatTimer = null;
@@ -1890,6 +1912,56 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
         }
 
+        async function saveConnectionPrivacy(setting, isPrivate) {
+            const toggle = document.getElementById(
+                setting === 'followersPrivate' ? 'followersPrivateToggle' : 'followingPrivateToggle'
+            );
+            const status = document.getElementById('connectionsPrivacyStatus');
+            if (!currentUser || !firebaseAuth.currentUser ||
+                !['followersPrivate', 'followingPrivate'].includes(setting)) {
+                if (toggle) toggle.checked = false;
+                showToast('Sign in to change your follower and following privacy.', 'info');
+                return;
+            }
+            const previousValue = currentUser[setting] === true;
+            toggle.disabled = true;
+            status.classList.add('hidden');
+            try {
+                await firebaseFirestore.collection('users').doc(currentUser.uid).update({
+                    [setting]: Boolean(isPrivate)
+                });
+                currentUser = { ...currentUser, [setting]: Boolean(isPrivate) };
+                saveAccountProfile(currentUser.uid, {
+                    uid: currentUser.uid,
+                    name: currentUser.name,
+                    role: currentUser.role,
+                    ...getAccountProfileFields(currentUser)
+                });
+                const cachedStats = profileStatsCache.get(currentUser.uid);
+                if (cachedStats) {
+                    cachedStats[setting] = Boolean(isPrivate);
+                    profileStatsCache.set(currentUser.uid, cachedStats);
+                }
+                status.textContent = isPrivate
+                    ? `${setting === 'followersPrivate' ? 'Followers' : 'Following'} list is now private. Its count remains public.`
+                    : `${setting === 'followersPrivate' ? 'Followers' : 'Following'} list is now visible to verified members.`;
+                status.className = 'mt-2 text-xs text-green-400';
+                status.classList.remove('hidden');
+                if (viewedProfileUid === currentUser.uid &&
+                    activeAccountSection === (setting === 'followersPrivate' ? 'followers' : 'following')) {
+                    subscribeToAccountConnections(activeAccountSection);
+                }
+            } catch (error) {
+                console.error('Unable to save follower/following privacy.', error);
+                toggle.checked = previousValue;
+                status.textContent = 'Your privacy setting could not be saved. Check your connection and Firestore rules.';
+                status.className = 'mt-2 text-xs text-red-400';
+                status.classList.remove('hidden');
+            } finally {
+                toggle.disabled = false;
+            }
+        }
+
         const PROFILE_PRESENCE_STALE_MS = 75000;
 
         function getCurrentPresenceRef(uid = presenceUserUid) {
@@ -2057,6 +2129,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             return {
                 profilePhotoPath: typeof profile.profilePhotoPath === 'string' ? profile.profilePhotoPath : '',
                 allowMediaDownloads: profile.allowMediaDownloads === true,
+                followersPrivate: profile.followersPrivate === true,
+                followingPrivate: profile.followingPrivate === true,
                 location: typeof profile.location === 'string' ? profile.location : '',
                 gender: typeof profile.gender === 'string' ? profile.gender : '',
                 ageRange: typeof profile.ageRange === 'string' ? profile.ageRange : '',
@@ -3076,6 +3150,10 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 document.getElementById('darkModeToggle').checked = !document.body.classList.contains('light-mode');
                 document.getElementById('allowMediaDownloadsToggle').checked =
                     currentUser.allowMediaDownloads === true;
+                document.getElementById('followersPrivateToggle').checked =
+                    currentUser.followersPrivate === true;
+                document.getElementById('followingPrivateToggle').checked =
+                    currentUser.followingPrivate === true;
                 if (accountConnectionsUnsubscribe) accountConnectionsUnsubscribe();
                 accountConnectionsUnsubscribe = null;
                 if (currentUser.isAdmin) loadQuizAdminQuestions();
@@ -3205,6 +3283,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             accountBackSection = activeAccountSection === 'followers' || activeAccountSection === 'following'
                 ? activeAccountSection
                 : 'profile';
+            accountBackProfileUid = viewedProfileUid || currentUser.uid;
             viewedProfileUid = profileUid;
             showAccountSection('profile');
             if (profileUid === currentUser.uid) {
@@ -3228,6 +3307,75 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
         }
 
+        function updatePublicProfileStats(profileUid, stats, errorMessage = '') {
+            if ((viewedProfileUid || currentUser?.uid) !== profileUid) return;
+            const values = stats ? {
+                likesReceived: stats.likesReceived,
+                quizLikesEarned: stats.quizLikesEarned,
+                quizLikesAvailable: stats.quizLikesAvailable,
+                followersCount: stats.followersCount,
+                followingCount: stats.followingCount
+            } : null;
+            document.querySelectorAll('[data-profile-metric]').forEach(element => {
+                const value = values?.[element.dataset.profileMetric];
+                element.textContent = Number.isSafeInteger(value) && value >= 0
+                    ? value.toLocaleString()
+                    : (errorMessage ? 'Unavailable' : 'Loading…');
+            });
+            document.querySelectorAll('[data-connection-count]').forEach(element => {
+                const key = element.dataset.connectionCount === 'followers'
+                    ? 'followersCount'
+                    : 'followingCount';
+                const value = values?.[key];
+                element.textContent = Number.isSafeInteger(value) && value >= 0
+                    ? value.toLocaleString()
+                    : (errorMessage ? '—' : '…');
+            });
+        }
+
+        async function loadPublicProfileStats(profileUid, forceRefresh = false) {
+            if (!profileUid) return null;
+            if (!forceRefresh && profileStatsCache.has(profileUid)) {
+                const cached = profileStatsCache.get(profileUid);
+                updatePublicProfileStats(profileUid, cached);
+                return cached;
+            }
+            if (profileStatsRequests.has(profileUid)) return profileStatsRequests.get(profileUid);
+            const request = (async () => {
+                try {
+                    const response = await firebaseFunctions.httpsCallable('getPublicProfileStats')({
+                        profileUid
+                    });
+                    const stats = response.data;
+                    profileStatsCache.set(profileUid, stats);
+                    updatePublicProfileStats(profileUid, stats);
+                    return stats;
+                } catch (error) {
+                    console.error('Unable to load public profile statistics.', error);
+                    updatePublicProfileStats(profileUid, null, 'unavailable');
+                    return null;
+                } finally {
+                    profileStatsRequests.delete(profileUid);
+                }
+            })();
+            profileStatsRequests.set(profileUid, request);
+            return request;
+        }
+
+        function appendProfileMetric(container, label, key) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'rounded-xl border border-darkBorder bg-darkCard p-3';
+            const term = document.createElement('dt');
+            term.className = 'text-[10px] font-semibold uppercase tracking-wide text-gray-400';
+            term.textContent = label;
+            const value = document.createElement('dd');
+            value.className = 'mt-1 text-lg font-extrabold text-gold';
+            value.dataset.profileMetric = key;
+            value.textContent = 'Loading…';
+            wrapper.append(term, value);
+            container.appendChild(wrapper);
+        }
+
         function renderMemberProfile(profile, profileUid) {
             clearProfileProductStatsSubscriptions();
             const content = document.getElementById('memberProfileContent');
@@ -3243,7 +3391,10 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 backButton.type = 'button';
                 backButton.className = 'mb-2 rounded-lg border border-darkBorder px-3 py-2 text-xs text-gray-300 hover:text-gold';
                 backButton.textContent = `Back to ${accountBackSection}`;
-                backButton.addEventListener('click', () => showAccountSection(accountBackSection));
+                backButton.addEventListener('click', () => {
+                    viewedProfileUid = accountBackProfileUid || currentUser.uid;
+                    showAccountSection(accountBackSection);
+                });
                 content.appendChild(backButton);
             }
 
@@ -3313,6 +3464,15 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
             card.appendChild(header);
 
+            const metrics = document.createElement('dl');
+            metrics.className = 'mt-6 grid grid-cols-2 gap-3 lg:grid-cols-5';
+            appendProfileMetric(metrics, 'Permanent Likes received', 'likesReceived');
+            appendProfileMetric(metrics, 'Quiz Likes earned', 'quizLikesEarned');
+            appendProfileMetric(metrics, 'Quiz Likes available', 'quizLikesAvailable');
+            appendProfileMetric(metrics, 'Followers', 'followersCount');
+            appendProfileMetric(metrics, 'Following', 'followingCount');
+            card.appendChild(metrics);
+
             const details = document.createElement('dl');
             details.className = 'mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2';
             [
@@ -3354,6 +3514,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             renderCommunityPostsForProfile(profileUid);
             document.getElementById('editOwnProfileButton').classList.toggle('hidden', !isOwnProfile);
             subscribeToProfilePresence(profileUid);
+            loadPublicProfileStats(profileUid, true);
         }
 
         function clearProfileProductStatsSubscriptions() {
@@ -3451,39 +3612,63 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             container.appendChild(wrapper);
         }
 
-        function subscribeToAccountConnections(section) {
+        async function subscribeToAccountConnections(section) {
+            if (!currentUser) return;
             if (accountConnectionsUnsubscribe) accountConnectionsUnsubscribe();
+            accountConnectionsUnsubscribe = null;
             const list = document.getElementById('accountConnectionsList');
             const isFollowers = section === 'followers';
-            const accountUid = currentUser.uid;
-            document.getElementById('accountConnectionsHeading').textContent = isFollowers ? 'Followers' : 'Following';
+            const accountUid = viewedProfileUid || currentUser.uid;
+            const isOwnList = accountUid === currentUser.uid;
+            document.getElementById('accountConnectionsHeading').textContent = isFollowers
+                ? (isOwnList ? 'Your Followers' : 'Followers')
+                : (isOwnList ? 'Accounts You Follow' : 'Following');
             document.getElementById('accountConnectionsHint').textContent = isFollowers
-                ? 'Buyers and Vendors who follow your account.'
-                : 'Buyer and Vendor accounts you follow.';
+                ? (isOwnList ? 'Buyers and Vendors who follow your account.' : 'Buyers and Vendors who follow this member.')
+                : (isOwnList ? 'Buyer and Vendor accounts you follow.' : 'Buyer and Vendor accounts this member follows.');
             list.textContent = 'Loading profiles…';
 
+            const stats = await loadPublicProfileStats(accountUid);
+            if (!currentUser ||
+                accountUid !== (viewedProfileUid || currentUser.uid) ||
+                section !== activeAccountSection ||
+                document.getElementById('accountPage').classList.contains('hidden')) return;
+            const isPrivate = isFollowers ? stats?.followersPrivate : stats?.followingPrivate;
+            if (!isOwnList && !stats) {
+                list.textContent = 'This list could not be checked for privacy. Try again shortly.';
+                return;
+            }
+            if (!isOwnList && isPrivate) {
+                list.textContent = `This member has made their ${isFollowers ? 'Followers' : 'Following'} list private. The total count remains visible.`;
+                return;
+            }
             accountConnectionsUnsubscribe = firebaseFirestore
-                .collection('users').doc(currentUser.uid).collection(section)
+                .collection('users').doc(accountUid).collection(section)
                 .orderBy('createdAt', 'desc')
                 .onSnapshot(snapshot => {
-                    if (currentUser?.uid !== accountUid || section !== activeAccountSection || document.getElementById('accountPage').classList.contains('hidden')) return;
-                    renderAccountConnections(snapshot.docs, isFollowers);
+                    if (!currentUser || (viewedProfileUid || currentUser.uid) !== accountUid ||
+                        section !== activeAccountSection ||
+                        document.getElementById('accountPage').classList.contains('hidden')) return;
+                    renderAccountConnections(snapshot.docs, isFollowers, isOwnList);
                 }, error => {
-                    if (currentUser?.uid !== accountUid || section !== activeAccountSection) return;
+                    if (!currentUser || (viewedProfileUid || currentUser.uid) !== accountUid ||
+                        section !== activeAccountSection) return;
                     console.error(`Unable to load account ${section}.`, error);
-                    list.textContent = `Your ${section} profiles could not load. Check Firebase setup and Firestore rules.`;
+                    list.textContent = `These ${section} profiles could not load. Check your connection and Firestore rules.`;
                 });
         }
 
-        function renderAccountConnections(profileDocs, isFollowers) {
+        function renderAccountConnections(profileDocs, isFollowers, isOwnList) {
             const list = document.getElementById('accountConnectionsList');
             list.replaceChildren();
             if (profileDocs.length === 0) {
                 const empty = document.createElement('p');
                 empty.className = 'rounded-xl border border-darkBorder bg-darkBg p-4 text-sm text-gray-400';
                 empty.textContent = isFollowers
-                    ? 'You do not have any followers yet.'
-                    : 'You are not following any accounts yet. Search for a Buyer or Vendor profile to follow.';
+                    ? (isOwnList ? 'You do not have any followers yet.' : 'This member does not have any followers yet.')
+                    : (isOwnList
+                        ? 'You are not following any accounts yet. Search for a Buyer or Vendor profile to follow.'
+                        : 'This member is not following any accounts yet.');
                 list.appendChild(empty);
                 return;
             }
@@ -3621,6 +3806,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     role: currentUser.role,
                     profilePhotoPath,
                     allowMediaDownloads: currentUser.allowMediaDownloads === true,
+                    followersPrivate: currentUser.followersPrivate === true,
+                    followingPrivate: currentUser.followingPrivate === true,
                     location,
                     gender,
                     ageRange,
@@ -5649,6 +5836,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         });
                     }
                 });
+                if (viewedProfileUid === memberUid) {
+                    loadPublicProfileStats(memberUid, true);
+                } else if (!viewedProfileUid &&
+                    (activeAccountSection === 'followers' || activeAccountSection === 'following')) {
+                    loadPublicProfileStats(currentUser.uid, true);
+                }
             } catch (error) {
                 console.error('Unable to update followed member.', error);
                 showToast('Your follow preference could not be saved. Check your connection and Firebase setup.', 'error');
