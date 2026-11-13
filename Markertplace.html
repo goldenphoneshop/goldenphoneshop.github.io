@@ -331,6 +331,9 @@
                     <button type="button" onclick="openGoldenCoinUtilities()" class="px-5 py-2.5 rounded-xl border border-darkBorder bg-darkCard text-gray-200 font-semibold text-xs sm:text-sm transition hover:text-gold flex items-center gap-2">
                         <i class="fa-solid fa-circle-info"></i> How coins work
                     </button>
+                    <button type="button" onclick="openQuizStore()" class="px-5 py-2.5 rounded-xl border border-gold/40 bg-darkCard text-gold font-semibold text-xs sm:text-sm transition hover:border-gold flex items-center gap-2" aria-label="Open quiz store to see available Likes">
+                        <i class="fa-solid fa-thumbs-up"></i> Quiz Likes Available: <span id="heroQuizLikesAvailable">Sign in</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -664,6 +667,7 @@
                 <button type="button" data-account-section="profile" onclick="openAccountPage('profile')" class="rounded-lg border px-4 py-2 text-xs font-bold">My profile</button>
                 <button type="button" data-account-section="followers" onclick="showAccountSection('followers')" class="rounded-lg border px-4 py-2 text-xs font-bold">Followers <span data-connection-count="followers">—</span></button>
                 <button type="button" data-account-section="following" onclick="showAccountSection('following')" class="rounded-lg border px-4 py-2 text-xs font-bold">Following <span data-connection-count="following">—</span></button>
+                <span class="flex items-center gap-1 rounded-lg border border-darkBorder px-4 py-2 text-xs font-bold text-gray-300" aria-label="Likes received">Likes <span data-profile-likes-count>—</span></span>
             </nav>
 
             <section id="memberProfileSection" class="hidden p-4 sm:p-6">
@@ -3331,6 +3335,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     ? value.toLocaleString()
                     : (errorMessage ? '—' : '…');
             });
+            document.querySelectorAll('[data-profile-likes-count]').forEach(element => {
+                const value = values?.likesReceived;
+                element.textContent = Number.isSafeInteger(value) && value >= 0
+                    ? value.toLocaleString()
+                    : (errorMessage ? '—' : '…');
+            });
         }
 
         async function loadPublicProfileStats(profileUid, forceRefresh = false) {
@@ -3465,12 +3475,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             card.appendChild(header);
 
             const metrics = document.createElement('dl');
-            metrics.className = 'mt-6 grid grid-cols-2 gap-3 lg:grid-cols-5';
-            appendProfileMetric(metrics, 'Permanent Likes received', 'likesReceived');
+            metrics.className = 'mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2';
             appendProfileMetric(metrics, 'Quiz Likes earned', 'quizLikesEarned');
             appendProfileMetric(metrics, 'Quiz Likes available', 'quizLikesAvailable');
-            appendProfileMetric(metrics, 'Followers', 'followersCount');
-            appendProfileMetric(metrics, 'Following', 'followingCount');
             card.appendChild(metrics);
 
             const details = document.createElement('dl');
@@ -6093,6 +6100,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         function renderQuizWallet() {
             document.getElementById('quizWalletLikes').textContent = quizWallet.likes;
             document.getElementById('quizWalletHates').textContent = quizWallet.hates;
+            const heroLikesAvailable = document.getElementById('heroQuizLikesAvailable');
+            if (heroLikesAvailable) {
+                heroLikesAvailable.textContent = quizWalletLoaded
+                    ? quizWallet.likes.toLocaleString()
+                    : currentUser ? '…' : 'Sign in';
+            }
             document.getElementById('chatCoinBalance').textContent = quizWalletLoaded
                 ? quizWallet.coins.toLocaleString()
                 : currentUser ? '…' : '0';
