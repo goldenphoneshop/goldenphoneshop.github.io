@@ -6089,7 +6089,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 quizStarting = false;
                 if (result.data?.ready === false &&
                     result.data?.reason === 'no-enabled-questions') {
-                    status.textContent = 'The quiz has no enabled questions yet. Reward plays and practice will be available after an administrator adds one. Golden Chat messaging and coin purchases are not affected.';
+                    status.textContent = 'The quiz has no enabled questions yet. Reward plays and practice will be available after an administrator enables one. Golden Chat messaging and coin purchases are not affected.';
                     showToast('No quiz questions are enabled yet. Golden Chat remains available.', 'info');
                     return;
                 }
