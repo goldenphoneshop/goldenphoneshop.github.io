@@ -451,7 +451,7 @@
                             <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full gold-gradient-bg text-black"><i class="fa-solid fa-user"></i></span>
                             <div class="min-w-0">
                                 <h2 id="chatThreadTitle" class="truncate text-sm font-bold text-white">Choose a conversation</h2>
-                                <p id="chatThreadSubtitle" class="text-[10px] text-gray-400">Buyer and Vendor private chat</p>
+                                <p id="chatThreadSubtitle" class="text-[10px] text-gray-400">Private member chat · coins per sent message</p>
                             </div>
                         </div>
                         <div class="flex flex-shrink-0 items-center gap-1">
@@ -482,7 +482,7 @@
                     </div>
                     <form id="chatComposer" class="hidden border-t border-darkBorder bg-darkCard p-3 sm:p-4" onsubmit="sendGoldenChatMessage(event)">
                         <label for="chatMessageInput" class="sr-only">Write a message</label>
-                        <textarea id="chatMessageInput" rows="2" maxlength="2000" placeholder="Message the Buyer or Vendor · 1 coin per message" class="w-full resize-y rounded-xl border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-gold focus:outline-none"></textarea>
+                        <textarea id="chatMessageInput" rows="2" maxlength="2000" placeholder="Message your chat partner · 1 coin per text message" class="w-full resize-y rounded-xl border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-gold focus:outline-none"></textarea>
                         <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
                             <div class="flex items-center gap-1">
                                 <label for="chatMediaInput" class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-darkBorder text-gray-300 hover:text-gold" title="Send a photo · 2 coins">
@@ -3463,14 +3463,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     followContainer.firstElementChild.classList.remove('mb-3');
                     header.appendChild(followContainer.firstElementChild);
                 }
-                if (currentUser?.role && currentUser.role !== role) {
-                    const messageButton = document.createElement('button');
-                    messageButton.type = 'button';
-                    messageButton.className = 'rounded-lg gold-gradient-bg px-3 py-2 text-xs font-bold text-black';
-                    messageButton.innerHTML = '<i class="fa-solid fa-message mr-1"></i> Message';
-                    messageButton.addEventListener('click', () => openChatPage(profileUid));
-                    header.appendChild(messageButton);
-                }
+                const messageButton = document.createElement('button');
+                messageButton.type = 'button';
+                messageButton.className = 'rounded-lg gold-gradient-bg px-3 py-2 text-xs font-bold text-black';
+                messageButton.innerHTML = '<i class="fa-solid fa-message mr-1"></i> Message';
+                messageButton.addEventListener('click', () => openChatPage(profileUid));
+                header.appendChild(messageButton);
             }
             card.appendChild(header);
 
@@ -3910,7 +3908,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             unsubscribeFromProfilePresence();
             if (accountConnectionsUnsubscribe) accountConnectionsUnsubscribe();
             accountConnectionsUnsubscribe = null;
-            document.getElementById('chatRoleLabel').textContent = `${currentUser.role} account · coins charged per sent message`;
+            document.getElementById('chatRoleLabel').textContent =
+                `${currentUser.role} account · at least 1 coin to start a new chat · coins per sent message`;
             document.getElementById('marketplaceMain').classList.add('hidden');
             document.getElementById('accountPage').classList.add('hidden');
             document.getElementById('marketplaceFooter').classList.add('hidden');
@@ -3932,8 +3931,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 if (!snapshot.exists) throw new Error('The conversation could not be loaded after it was created.');
                 selectGoldenChat(snapshot.id, snapshot.data());
             } catch (error) {
-                console.error('Unable to open the Buyer–Vendor conversation.', error);
-                showToast(error.message || 'This conversation could not be opened. Check your connection and account roles.', 'error');
+                console.error('Unable to open the member conversation.', error);
+                showToast(error.message || 'This conversation could not be opened. Check your connection, profile, and coin balance.', 'error');
             }
         }
 
@@ -3997,7 +3996,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             if (!chats.length) {
                 const empty = document.createElement('p');
                 empty.className = 'p-3 text-[10px] leading-relaxed text-gray-500';
-                empty.textContent = 'No conversations yet. Open a Vendor listing or member profile and choose Message to start a private chat.';
+                empty.textContent = 'No conversations yet. Open a member profile and choose Message to start a private chat. A coin is required to start a new conversation.';
                 list.appendChild(empty);
                 return;
             }
@@ -4178,7 +4177,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         async function sendGoldenChatMessage(event) {
             event.preventDefault();
             if (!activeGoldenChatId || !currentUser || chatSending) {
-                if (!activeGoldenChatId) showToast('Open a Buyer–Vendor conversation before sending a message.', 'info');
+                if (!activeGoldenChatId) showToast('Open a member conversation before sending a message.', 'info');
                 return;
             }
             const chatId = activeGoldenChatId;
