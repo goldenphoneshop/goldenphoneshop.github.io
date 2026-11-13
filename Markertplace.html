@@ -5938,7 +5938,6 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
         async function closeQuizStore() {
             if (quizStarting) {
-                showToast('Wait for the quiz to finish loading before exiting.', 'info');
                 return;
             }
             if (quizAttemptId) {
