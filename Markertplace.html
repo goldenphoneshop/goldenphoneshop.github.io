@@ -1116,6 +1116,7 @@
                     <p class="rounded-lg bg-darkBg p-2 text-sm font-bold text-white"><span id="quizWalletLikes">0</span><span class="block text-[10px] font-medium text-gray-400">Likes</span></p>
                     <p class="rounded-lg bg-darkBg p-2 text-sm font-bold text-white"><span id="quizWalletHates">0</span><span class="block text-[10px] font-medium text-gray-400">Hates</span></p>
                 </div>
+                <p class="mt-2 text-[10px] text-gray-400">Each Like on a community post or product uses 1 earned Like credit and is permanent. Comment Likes are separate.</p>
                 <p id="quizDailyStatus" class="mt-3 text-xs text-gray-300" role="status">Sign in to view your daily reward plays.</p>
             </div>
             <div class="mt-4 grid gap-3 sm:grid-cols-2">
@@ -1527,6 +1528,7 @@
         let discussionCommentsUnsubscribe = null;
         let discussionStatsUnsubscribe = null;
         let myReactionUnsubscribe = null;
+        const profileProductStatsUnsubscribers = new Map();
         const discussionAudioUrls = new Map();
         let productVoiceRecorder = null;
         let productVoiceStream = null;
@@ -2150,6 +2152,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
         function showMarketplacePage() {
             toggleSideMenu(false);
+            clearProfileProductStatsSubscriptions();
             if (chatVoiceRecorder?.state === 'recording') chatVoiceRecorder.stop();
             stopGoldenChatSubscriptions();
             unsubscribeFromProfilePresence();
@@ -2171,6 +2174,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 return;
             }
             if (chatVoiceRecorder?.state === 'recording') chatVoiceRecorder.stop();
+            clearProfileProductStatsSubscriptions();
             stopGoldenChatSubscriptions();
             document.getElementById('marketplaceMain').classList.add('hidden');
             document.getElementById('chatPage').classList.add('hidden');
@@ -2416,7 +2420,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     ${media ? `<div class="space-y-2">${media}</div>` : '<p class="rounded-lg bg-darkBg p-4 text-xs text-gray-400">This media is unavailable.</p>'}
                     ${post.caption ? `<p class="mt-3 whitespace-pre-wrap break-words text-sm text-gray-200">${escapeHtml(post.caption)}</p>` : ''}
                     <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-darkBorder pt-3">
-                        <button type="button" onclick="toggleCommunityPostLike(this)" data-post-id="${escapeHtml(post.id)}" data-liked="false" data-like-count="0" aria-pressed="false" class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] font-bold text-gray-200 hover:border-gold/50 hover:text-gold"><i class="fa-regular fa-thumbs-up mr-1"></i><span data-community-post-like-label>Like</span> · <span data-community-post-like-count>0</span></button>
+                        <button type="button" onclick="toggleCommunityPostLike(this)" data-post-id="${escapeHtml(post.id)}" data-liked="false" data-like-count="0" aria-pressed="false" title="Spend 1 Like credit. Likes are permanent." class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] font-bold text-gray-200 hover:border-gold/50 hover:text-gold"><i class="fa-regular fa-thumbs-up mr-1"></i><span data-community-post-like-label>Like</span> · <span data-community-post-like-count>0</span></button>
                         <button type="button" onclick="reshareCommunityPost(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="rounded-lg border border-gold/30 px-3 py-1.5 text-[10px] font-bold text-gold hover:bg-gold/10"><i class="fa-solid fa-retweet mr-1"></i>Reshare</button>
                         <button type="button" onclick="toggleCommunityComments(this, this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" aria-expanded="${commentsOpen}" class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] font-bold text-gray-200 hover:border-gold/50 hover:text-gold"><i class="fa-regular fa-comment mr-1"></i>Comments</button>
                         ${downloadButton}
@@ -2507,6 +2511,10 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             button.dataset.liked = String(liked);
             button.dataset.likeCount = String(count);
             button.setAttribute('aria-pressed', String(liked));
+            button.disabled = Boolean(liked && currentUser);
+            button.title = liked
+                ? 'This Like is permanent.'
+                : 'Spend 1 Like credit. Likes are permanent.';
             const countLabel = button.querySelector('[data-community-post-like-count]');
             const likeLabel = button.querySelector('[data-community-post-like-label]');
             if (countLabel) countLabel.textContent = count;
@@ -2533,9 +2541,27 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     result.data.likesCount < 0) {
                     throw new Error('The server returned an invalid post-like result.');
                 }
+                if (!Number.isSafeInteger(result.data?.likesRemaining) ||
+                    result.data.likesRemaining < 0) {
+                    throw new Error('The server returned an invalid Like balance.');
+                }
+                quizWallet.likes = result.data.likesRemaining;
+                quizWalletLoaded = true;
+                renderQuizWallet();
                 setCommunityPostLikeButton(button, result.data.liked, result.data.likesCount);
+                showToast(
+                    result.data.alreadyLiked
+                        ? 'You already liked this post. Likes are permanent.'
+                        : `Like added permanently. ${result.data.likesRemaining} Like credits remaining.`,
+                    result.data.alreadyLiked ? 'info' : 'success'
+                );
             } catch (error) {
                 console.error('Unable to update the community post like.', error);
+                if (error.code === 'functions/failed-precondition') {
+                    showToast(error.message || 'You need an available Like credit. Complete a reward quiz to earn more.', 'info');
+                    openQuizStore();
+                    return;
+                }
                 showToast(error.message || 'Your post like could not be saved. Check your connection and try again.', 'error');
             } finally {
                 if (button.isConnected) button.disabled = false;
@@ -3027,7 +3053,10 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const isProfile = activeAccountSection === 'profile';
             const isEdit = activeAccountSection === 'edit';
             const isAppSettings = activeAccountSection === 'app';
-            if (!isProfile) unsubscribeFromProfilePresence();
+            if (!isProfile) {
+                unsubscribeFromProfilePresence();
+                clearProfileProductStatsSubscriptions();
+            }
             document.getElementById('editOwnProfileButton').classList.toggle('hidden', !isProfile || (viewedProfileUid && viewedProfileUid !== currentUser.uid));
             document.getElementById('accountConnectionsSection').classList.toggle('hidden', !isConnectionList);
             document.getElementById('memberProfileSection').classList.toggle('hidden', !isProfile);
@@ -3200,6 +3229,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         }
 
         function renderMemberProfile(profile, profileUid) {
+            clearProfileProductStatsSubscriptions();
             const content = document.getElementById('memberProfileContent');
             content.replaceChildren();
             communityDownloadPermissionCache.set(profileUid, profile.allowMediaDownloads === true);
@@ -3326,6 +3356,11 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             subscribeToProfilePresence(profileUid);
         }
 
+        function clearProfileProductStatsSubscriptions() {
+            profileProductStatsUnsubscribers.forEach(unsubscribe => unsubscribe());
+            profileProductStatsUnsubscribers.clear();
+        }
+
         async function renderVendorProductsForProfile(uid) {
             const target = document.getElementById(`vendorProductsFor-${uid}`);
             if (!target || !uid) return;
@@ -3355,12 +3390,33 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         <span class="mt-2 block truncate text-sm font-bold text-white">${escapeHtml(product.title)}</span>
                         <span class="mt-1 block text-xs text-gold">₦${Number(product.price).toLocaleString()}</span>
                         <span class="mt-1 block text-[10px] text-gray-400">Stock: ${Number(product.stock) || 0}</span>
+                        <span class="mt-1 block text-[10px] text-gray-300"><i class="fa-solid fa-thumbs-up mr-1 text-gold"></i><span data-profile-product-likes="${escapeHtml(product.id)}">0</span> Likes</span>
                     </button>`;
                 }).join('');
+                profileProducts.forEach(product => subscribeToProfileProductStats(product.id));
             } catch (error) {
                 console.error('Unable to load vendor listings for the profile.', error);
                 if (target.isConnected) target.textContent = 'Vendor product listings could not load. Check your connection and Firestore rules.';
             }
+        }
+
+        function subscribeToProfileProductStats(productId) {
+            const existing = profileProductStatsUnsubscribers.get(productId);
+            if (existing) existing();
+            const unsubscribe = firebaseFirestore.collection('productDiscussionStats').doc(productId)
+                .onSnapshot(snapshot => {
+                    const count = Number.isSafeInteger(snapshot.data()?.likes) && snapshot.data().likes >= 0
+                        ? snapshot.data().likes
+                        : 0;
+                    document.querySelectorAll('[data-profile-product-likes]').forEach(label => {
+                        if (label.dataset.profileProductLikes === productId) {
+                            label.textContent = count.toLocaleString();
+                        }
+                    });
+                }, error => {
+                    console.error('Unable to load product Like count on member profile.', error);
+                });
+            profileProductStatsUnsubscribers.set(productId, unsubscribe);
         }
 
         async function openProfileProductListing(productId) {
@@ -5752,6 +5808,15 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             document.getElementById('productHateCount').textContent = discussionCounts.hates;
             const likeButton = document.querySelector('[aria-label="Like this product"]');
             const hateButton = document.querySelector('[aria-label="Hate this product"]');
+            likeButton.setAttribute('aria-pressed', String(myProductReaction === 'like'));
+            likeButton.disabled = myProductReaction === 'like';
+            likeButton.title = myProductReaction === 'like'
+                ? 'This Like is permanent.'
+                : 'Spend 1 Like credit. Likes are permanent.';
+            hateButton.disabled = myProductReaction === 'like';
+            hateButton.title = myProductReaction === 'like'
+                ? 'This Like is permanent and cannot be changed.'
+                : 'Use a Hate credit to react to this product.';
             likeButton.classList.toggle('border-gold', myProductReaction === 'like');
             likeButton.classList.toggle('text-gold', myProductReaction === 'like');
             hateButton.classList.toggle('border-red-400', myProductReaction === 'hate');
@@ -5771,17 +5836,26 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     productId: discussionProductId,
                     type
                 });
-                if (!result.data.removed) {
-                    showToast(
-                        type === 'like' ? 'Like added from your quiz-earned balance.' : `${type} added from your balance.`,
-                        'success'
-                    );
+                if (type === 'like') {
+                    if (!Number.isSafeInteger(result.data?.likesRemaining) || result.data.likesRemaining < 0) {
+                        throw new Error('The server returned an invalid Like balance.');
+                    }
+                    quizWallet.likes = result.data.likesRemaining;
+                    quizWalletLoaded = true;
+                    renderQuizWallet();
+                    if (result.data.alreadyApplied) {
+                        showToast('You already liked this product. Product Likes are permanent.', 'info');
+                    } else {
+                        showToast(`Product Like added permanently. ${result.data.likesRemaining} Like credits remaining.`, 'success');
+                    }
+                } else if (!result.data.removed) {
+                    showToast(`${type} added from your balance.`, 'success');
                 }
             } catch (error) {
                 console.error('Unable to save product reaction.', error);
                 if (error.code === 'functions/failed-precondition') {
                     showToast(error.message || 'You do not have enough reaction credits.', 'info');
-                    openQuizStore();
+                    if (type === 'like') openQuizStore();
                     return;
                 }
                 showToast('Your reaction could not be saved. Check your connection and sign-in.', 'error');
