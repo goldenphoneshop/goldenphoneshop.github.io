@@ -6088,6 +6088,15 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             try {
                 const result = await firebaseFunctions.httpsCallable('startTimedQuiz')({ mode });
                 quizStarting = false;
+                if (result.data?.ready === false &&
+                    result.data?.reason === 'no-enabled-questions') {
+                    status.textContent = 'The quiz has no enabled questions yet. Reward plays and practice will be available after an administrator adds one. Golden Chat messaging and coin purchases are not affected.';
+                    showToast('No quiz questions are enabled yet. Golden Chat remains available.', 'info');
+                    return;
+                }
+                if (!result.data?.attemptId || !result.data?.question) {
+                    throw new Error('The quiz service returned an incomplete start response. Please try again or contact support.');
+                }
                 quizAttemptId = result.data.attemptId;
                 activeQuizRewardEligible = result.data.rewardEligible === true;
                 activeQuizLikeRewardEligible = result.data.likeRewardEligible === true;
