@@ -307,7 +307,10 @@
                 </button>
                 <button type="button" onclick="openChatPage()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
                     <i class="fa-solid fa-comments w-5 text-center"></i> Golden Chat
-                    <span class="ml-auto rounded-full border border-gold/40 px-2 py-0.5 text-[9px] text-gold">COINS</span>
+                    <span class="ml-auto flex items-center gap-1.5">
+                        <span id="goldenChatMenuUnreadCount" class="hidden rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-extrabold text-white" aria-live="polite"></span>
+                        <span class="rounded-full border border-gold/40 px-2 py-0.5 text-[9px] text-gold">COINS</span>
+                    </span>
                 </button>
                 <button type="button" onclick="toggleSideMenu(false); openGoldenCoinUtilities()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
                     <i class="fa-solid fa-circle-info w-5 text-center"></i> How Golden Coins work
@@ -479,7 +482,10 @@
                         </section>
                     </div>
                     <div class="flex flex-none items-center justify-between gap-2 px-3 pb-2 pt-3">
-                        <h2 class="text-[10px] font-bold uppercase tracking-wider text-gray-500">Conversations</h2>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-[10px] font-bold uppercase tracking-wider text-gray-500">Conversations</h2>
+                            <span id="chatUnreadTotalBadge" class="hidden rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-extrabold text-white" aria-live="polite"></span>
+                        </div>
                         <button type="button" onclick="openChatContactsModal()" class="flex items-center gap-1.5 rounded-lg border border-gold/40 bg-gold/10 px-3 py-2 text-[10px] font-bold text-gold transition hover:bg-gold/20" aria-label="Find followers and following to start a conversation">
                             <i class="fa-solid fa-user-plus" aria-hidden="true"></i><span>Find people</span>
                         </button>
@@ -1611,11 +1617,15 @@
         let cartItems = [];
         let activeGoldenChatId = null;
         let activeGoldenChatData = null;
+        let activeGoldenChatLatestMessageId = null;
         let goldenChatListUnsubscribe = null;
+        let goldenChatUnreadUnsubscribe = null;
         let goldenChatMessagesUnsubscribe = null;
         let goldenChatProductUnsubscribe = null;
         let goldenChatMediaUrls = new Map();
         let goldenChatListenerUid = null;
+        let goldenChatUnreadListenerUid = null;
+        const goldenChatReadRequests = new Map();
         let goldenChatContacts = { followers: [], following: [] };
         let activeChatContactsTab = 'following';
         let goldenChatPreviousBodyOverflow = null;
@@ -1725,6 +1735,7 @@ function initializeFirebaseAuth() {
                 chatVoiceRecorder.stop();
             }
             stopGoldenChatSubscriptions();
+            stopGoldenChatUnreadSubscription();
             if (followingUnsubscribe) followingUnsubscribe();
             followingUnsubscribe = null;
             if (accountConnectionsUnsubscribe) accountConnectionsUnsubscribe();
@@ -1748,6 +1759,7 @@ function initializeFirebaseAuth() {
         if (user.email && !user.emailVerified) {
             clearAllCommunityCommentVoices();
             communityCommentDrafts.clear();
+            stopGoldenChatUnreadSubscription();
             currentUser = null;
             renderCommunityPosts();
             refreshCommunityPostLikeSubscriptions();
@@ -1781,6 +1793,7 @@ function initializeFirebaseAuth() {
             ...getAccountProfileFields(localProfile),
             isAdmin: false
         };
+        subscribeToGoldenChatUnread();
         renderCommunityPosts();
         refreshCommunityPostLikeSubscriptions();
         renderAuthNav();
@@ -4186,6 +4199,63 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
         }
 
+        function getGoldenChatUnreadCount(chat, uid) {
+            const count = chat.unreadCounts?.[uid];
+            return Number.isSafeInteger(count) && count > 0 ? count : 0;
+        }
+
+        function updateGoldenChatUnreadBadges(chats, uid = currentUser?.uid, unavailable = false) {
+            const total = unavailable
+                ? 0
+                : chats.reduce((sum, chat) => Math.min(
+                    Number.MAX_SAFE_INTEGER,
+                    sum + getGoldenChatUnreadCount(chat, uid)
+                ), 0);
+            [
+                document.getElementById('goldenChatMenuUnreadCount'),
+                document.getElementById('chatUnreadTotalBadge')
+            ].forEach(badge => {
+                if (!badge) return;
+                badge.classList.toggle('hidden', !unavailable && total === 0);
+                badge.textContent = unavailable ? '!' : total > 99 ? '99+' : String(total);
+                badge.title = unavailable
+                    ? 'Unread Golden Chat messages could not be loaded.'
+                    : `${total} unread Golden Chat message${total === 1 ? '' : 's'}`;
+                badge.setAttribute('aria-label', badge.title);
+            });
+        }
+
+        function stopGoldenChatUnreadSubscription() {
+            if (goldenChatUnreadUnsubscribe) goldenChatUnreadUnsubscribe();
+            goldenChatUnreadUnsubscribe = null;
+            goldenChatUnreadListenerUid = null;
+            updateGoldenChatUnreadBadges([]);
+        }
+
+        function subscribeToGoldenChatUnread() {
+            if (!currentUser) {
+                stopGoldenChatUnreadSubscription();
+                return;
+            }
+            const uid = currentUser.uid;
+            if (goldenChatUnreadListenerUid === uid && goldenChatUnreadUnsubscribe) return;
+            stopGoldenChatUnreadSubscription();
+            goldenChatUnreadListenerUid = uid;
+            goldenChatUnreadUnsubscribe = firebaseFirestore.collection('goldenChats')
+                .where('participantIds', 'array-contains', uid)
+                .onSnapshot(snapshot => {
+                    if (currentUser?.uid !== uid) return;
+                    updateGoldenChatUnreadBadges(
+                        snapshot.docs.map(document => document.data()),
+                        uid
+                    );
+                }, error => {
+                    if (currentUser?.uid !== uid) return;
+                    console.error('Unable to load Golden Chat unread-message counts.', error);
+                    updateGoldenChatUnreadBadges([], uid, true);
+                });
+        }
+
         function subscribeToGoldenChats() {
             if (!currentUser) return;
             const uid = currentUser.uid;
@@ -4215,6 +4285,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             goldenChatListenerUid = null;
             activeGoldenChatId = null;
             activeGoldenChatData = null;
+            activeGoldenChatLatestMessageId = null;
+            goldenChatReadRequests.clear();
             releaseGoldenChatMediaUrls();
         }
 
@@ -4258,9 +4330,20 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 const button = document.createElement('button');
                 button.type = 'button';
                 button.className = `w-full rounded-xl border px-3 py-3 text-left ${activeGoldenChatId === chat.id ? 'border-gold/50 bg-gold/10' : 'border-transparent hover:bg-darkBg'}`;
+                const titleRow = document.createElement('span');
+                titleRow.className = 'flex items-center justify-between gap-2';
                 const name = document.createElement('span');
-                name.className = 'block truncate text-xs font-bold text-white';
+                name.className = 'min-w-0 truncate text-xs font-bold text-white';
                 name.textContent = other.name || 'Marketplace member';
+                titleRow.appendChild(name);
+                const unreadCount = getGoldenChatUnreadCount(chat, currentUser.uid);
+                if (unreadCount > 0) {
+                    const unreadBadge = document.createElement('span');
+                    unreadBadge.className = 'flex-shrink-0 rounded-full bg-red-500 px-2 py-0.5 text-[9px] font-extrabold text-white';
+                    unreadBadge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+                    unreadBadge.setAttribute('aria-label', `${unreadCount} unread message${unreadCount === 1 ? '' : 's'}`);
+                    titleRow.appendChild(unreadBadge);
+                }
                 const role = document.createElement('span');
                 role.className = 'block text-[9px] font-semibold uppercase tracking-wide text-gold';
                 role.textContent = other.role || 'Member';
@@ -4269,7 +4352,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 preview.textContent = chat.product?.title
                     ? `${chat.product.title} · ${chat.lastMessage || 'Product enquiry'}`
                     : chat.lastMessage || 'Conversation started';
-                button.append(name, role, preview);
+                button.append(titleRow, role, preview);
                 button.addEventListener('click', () => selectGoldenChat(chat.id, chat));
                 list.appendChild(button);
             });
@@ -4298,6 +4381,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             releaseGoldenChatMediaUrls();
             activeGoldenChatId = chatId;
             activeGoldenChatData = chatData;
+            activeGoldenChatLatestMessageId = null;
             const otherUid = chatData.participantIds.find(uid => uid !== currentUser?.uid);
             const other = chatData.participants?.[otherUid] || {};
             document.getElementById('chatThreadTitle').textContent = other.name || 'Marketplace member';
@@ -4312,7 +4396,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             messages.textContent = 'Loading secure conversation…';
             goldenChatMessagesUnsubscribe = firebaseFirestore.collection('goldenChats').doc(chatId)
                 .collection('messages')
-                .orderBy('createdAt', 'asc')
+                .orderBy('createdAt', 'desc')
                 .limit(100)
                 .onSnapshot(snapshot => {
                     if (activeGoldenChatId !== chatId) return;
@@ -4371,13 +4455,14 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const container = document.getElementById('chatMessages');
             container.replaceChildren();
             if (snapshot.empty) {
+                activeGoldenChatLatestMessageId = null;
                 const empty = document.createElement('p');
                 empty.className = 'my-6 text-center text-xs text-gray-500';
                 empty.textContent = 'Ask whether the listed product is still available, or send a message to begin.';
                 container.appendChild(empty);
                 return;
             }
-            for (const document of snapshot.docs) {
+            for (const document of [...snapshot.docs].reverse()) {
                 if (activeGoldenChatId !== chatId) return;
                 const message = document.data();
                 const row = document.createElement('div');
@@ -4411,7 +4496,35 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 container.appendChild(row);
             }
             container.scrollTop = container.scrollHeight;
+            activeGoldenChatLatestMessageId = snapshot.docs[0].id;
+            acknowledgeGoldenChatRead(chatId, activeGoldenChatLatestMessageId);
         }
+
+        function acknowledgeGoldenChatRead(chatId, messageId) {
+            if (!currentUser ||
+                activeGoldenChatId !== chatId ||
+                !messageId ||
+                document.visibilityState !== 'visible' ||
+                document.getElementById('chatPage').classList.contains('hidden') ||
+                goldenChatReadRequests.get(chatId) === messageId) return;
+            goldenChatReadRequests.set(chatId, messageId);
+            firebaseFunctions.httpsCallable('markGoldenChatRead')({ chatId, messageId })
+                .catch(error => {
+                    if (goldenChatReadRequests.get(chatId) === messageId) {
+                        goldenChatReadRequests.delete(chatId);
+                    }
+                    console.error('Unable to mark the Golden Chat conversation as read.', error);
+                    showToast('The unread-message count could not be updated. Check your connection and try again.', 'error');
+                });
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' &&
+                activeGoldenChatId &&
+                activeGoldenChatLatestMessageId) {
+                acknowledgeGoldenChatRead(activeGoldenChatId, activeGoldenChatLatestMessageId);
+            }
+        });
 
         async function loadGoldenChatMedia(element, path, chatId) {
             try {
