@@ -498,6 +498,9 @@
                 <div id="chatThreadPane" class="flex min-h-[65vh] min-w-0 flex-col">
                     <header class="flex items-center justify-between gap-3 border-b border-darkBorder p-3 sm:p-4">
                         <div class="flex min-w-0 items-center gap-3">
+                            <button type="button" onclick="scrollToGoldenChatConversations()" class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-darkBorder text-gray-300 hover:text-gold md:hidden" aria-label="Back to conversations">
+                                <i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
+                            </button>
                             <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full gold-gradient-bg text-black"><i class="fa-solid fa-user"></i></span>
                             <div class="min-w-0">
                                 <h2 id="chatThreadTitle" class="truncate text-sm font-bold text-white">Choose a conversation</h2>
@@ -4013,6 +4016,13 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             setGoldenChatFullscreen(!document.getElementById('chatPage').classList.contains('golden-chat-fullscreen'));
         }
 
+        function scrollToGoldenChatConversations() {
+            document.getElementById('chatSidebar').scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
+        }
+
         function toggleChatWalletDetails() {
             const details = document.getElementById('chatWalletDetails');
             const button = document.getElementById('chatWalletToggle');
@@ -4405,6 +4415,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     console.error('Unable to load Golden Chat messages.', error);
                     messages.textContent = 'Messages could not load. Check your connection and Firestore rules.';
                 });
+            if (window.matchMedia('(max-width: 767px)').matches) {
+                requestAnimationFrame(() => document.getElementById('chatThreadPane').scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                }));
+            }
         }
 
         function renderGoldenChatListFromCurrent() {
@@ -4462,9 +4478,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 container.appendChild(empty);
                 return;
             }
-            for (const document of [...snapshot.docs].reverse()) {
+            for (const messageDoc of [...snapshot.docs].reverse()) {
                 if (activeGoldenChatId !== chatId) return;
-                const message = document.data();
+                const message = messageDoc.data();
                 const row = document.createElement('div');
                 row.className = `flex ${message.senderUid === currentUser?.uid ? 'justify-end' : 'justify-start'}`;
                 const bubble = document.createElement('div');
