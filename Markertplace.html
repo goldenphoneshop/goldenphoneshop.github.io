@@ -154,6 +154,70 @@
             border-color: #ffd700;
             box-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
         }
+        #chatPage {
+            box-sizing: border-box;
+            height: calc(100vh - 220px);
+            height: calc(100dvh - 220px);
+            min-height: 400px;
+        }
+        #chatLayoutSection,
+        #chatLayoutGrid,
+        #chatThreadPane {
+            height: 100%;
+            min-height: 0;
+        }
+        #chatLayoutGrid {
+            grid-template-rows: minmax(0, 1fr);
+        }
+        #chatSidebar {
+            min-height: 0;
+        }
+        #chatConversationList {
+            flex: 1 1 auto;
+            max-height: none;
+            min-height: 0;
+            overflow-y: auto;
+        }
+        #chatMessages {
+            min-height: 0;
+        }
+        #chatPage.golden-chat-fullscreen {
+            background: #0b0f19;
+            height: 100dvh;
+            inset: 0;
+            max-width: none;
+            padding: 0;
+            position: fixed;
+            width: 100vw;
+            z-index: 80;
+        }
+        #chatPage.golden-chat-fullscreen #chatLayoutSection {
+            border: 0;
+            border-radius: 0;
+        }
+        #chatPage.golden-chat-fullscreen #chatLayoutGrid {
+            grid-template-columns: minmax(0, 1fr);
+        }
+        #chatPage.golden-chat-fullscreen #chatSidebar {
+            display: none;
+        }
+        @media (max-width: 767px) {
+            #chatPage {
+                height: calc(100vh - 220px);
+                height: calc(100dvh - 220px);
+                min-height: 340px;
+            }
+            #chatLayoutGrid {
+                grid-template-rows: minmax(200px, 38%) minmax(0, 1fr);
+            }
+        }
+        @media (max-height: 600px) {
+            #chatPage:not(.golden-chat-fullscreen) {
+                height: calc(100vh - 160px);
+                height: calc(100dvh - 160px);
+                min-height: 320px;
+            }
+        }
         /* Custom scrollbar */
         ::-webkit-scrollbar {
             width: 8px;
@@ -411,9 +475,9 @@
 
     <!-- GOLDEN CHAT -->
     <main id="chatPage" class="hidden max-w-7xl mx-auto px-3 sm:px-6 py-4 flex-1 w-full">
-        <section class="min-h-[65vh] overflow-hidden rounded-2xl border border-darkBorder bg-darkCard shadow-xl">
-            <div class="grid min-h-[65vh] grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)]">
-                <aside class="border-b border-darkBorder md:border-b-0 md:border-r">
+        <section id="chatLayoutSection" class="overflow-hidden rounded-2xl border border-darkBorder bg-darkCard shadow-xl">
+            <div id="chatLayoutGrid" class="grid grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)]">
+                <aside id="chatSidebar" class="flex flex-col border-b border-darkBorder md:border-b-0 md:border-r">
                     <div class="flex items-center justify-between border-b border-darkBorder p-4">
                         <div>
                             <h1 class="text-lg font-extrabold text-white">Golden Chat</h1>
@@ -423,29 +487,41 @@
                             <i class="fa-solid fa-arrow-left"></i>
                         </button>
                     </div>
-                    <div class="border-b border-darkBorder p-3">
+                    <div id="chatWalletPanel" class="flex-none border-b border-darkBorder p-3">
                         <section class="rounded-xl border border-gold/30 bg-gold/5 p-3" aria-labelledby="chatCoinWalletHeading">
                             <div class="flex items-center justify-between gap-2">
-                                <h2 id="chatCoinWalletHeading" class="text-[10px] font-extrabold uppercase tracking-wide text-gold">
-                                    <i class="fa-solid fa-coins mr-1"></i>Golden Chat wallet
-                                </h2>
-                                <button type="button" onclick="refreshGoldenChatCoinBalance()" class="text-[10px] font-semibold text-gray-400 hover:text-gold" aria-label="Refresh Golden Chat coin balance">
-                                    <i class="fa-solid fa-rotate-right mr-1"></i>Refresh
+                                <div class="flex min-w-0 items-center gap-2">
+                                    <button id="chatWalletToggle" type="button" onclick="toggleChatWalletDetails()" aria-expanded="false" aria-controls="chatWalletDetails" class="flex min-w-0 items-center gap-2 text-left text-[10px] font-extrabold uppercase tracking-wide text-gold">
+                                        <i class="fa-solid fa-coins" aria-hidden="true"></i>
+                                        <span id="chatCoinWalletHeading">Golden Chat wallet</span>
+                                        <span id="chatCoinMiniBalance" class="rounded-md bg-darkBg px-1.5 py-1 text-[9px] text-gray-300">0 coins</span>
+                                        <i id="chatWalletToggleIcon" class="fa-solid fa-chevron-down text-[8px]" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                                <button type="button" onclick="refreshGoldenChatCoinBalance()" class="flex-shrink-0 text-[10px] font-semibold text-gray-400 hover:text-gold" aria-label="Refresh Golden Chat coin balance">
+                                    <i class="fa-solid fa-rotate-right mr-1"></i><span class="hidden sm:inline">Refresh</span>
                                 </button>
                             </div>
-                            <p class="mt-2 text-2xl font-black text-white"><span id="chatCoinBalance">0</span><span class="ml-1 text-xs font-semibold text-gray-400">available coins</span></p>
-                            <p id="chatCoinBalanceStatus" class="mt-1 text-[10px] text-gray-400" role="status" aria-live="polite">Sign in to view your coin balance.</p>
-                            <button type="button" onclick="openChatCoinStore()" class="mt-2 w-full rounded-lg gold-gradient-bg px-3 py-2 text-[10px] font-extrabold text-black">Buy Golden Chat coins</button>
-                            <button type="button" onclick="openCoinPurchaseRestore()" class="mt-2 w-full text-[10px] font-semibold text-gray-400 hover:text-gold">Coins missing? Verify a purchase</button>
+                            <div id="chatWalletDetails" class="hidden">
+                                <p class="mt-2 text-2xl font-black text-white"><span id="chatCoinBalance">0</span><span class="ml-1 text-xs font-semibold text-gray-400">available coins</span></p>
+                                <p id="chatCoinBalanceStatus" class="mt-1 text-[10px] text-gray-400" role="status" aria-live="polite">Sign in to view your coin balance.</p>
+                                <button type="button" onclick="openChatCoinStore()" class="mt-2 w-full rounded-lg gold-gradient-bg px-3 py-2 text-[10px] font-extrabold text-black">Buy Golden Chat coins</button>
+                                <button type="button" onclick="openCoinPurchaseRestore()" class="mt-2 w-full text-[10px] font-semibold text-gray-400 hover:text-gold">Coins missing? Verify a purchase</button>
+                            </div>
                         </section>
                     </div>
-                    <h2 class="px-4 pb-2 pt-4 text-[10px] font-bold uppercase tracking-wider text-gray-500">Conversations</h2>
-                    <div id="chatConversationList" class="max-h-[55vh] space-y-1 overflow-y-auto px-2 pb-3" aria-live="polite">
+                    <div class="flex flex-none items-center justify-between gap-2 px-3 pb-2 pt-3">
+                        <h2 class="text-[10px] font-bold uppercase tracking-wider text-gray-500">Conversations</h2>
+                        <button type="button" onclick="openChatContactsModal()" class="flex items-center gap-1.5 rounded-lg border border-gold/40 bg-gold/10 px-3 py-2 text-[10px] font-bold text-gold transition hover:bg-gold/20" aria-label="Find followers and following to start a conversation">
+                            <i class="fa-solid fa-user-plus" aria-hidden="true"></i><span>Find people</span>
+                        </button>
+                    </div>
+                    <div id="chatConversationList" class="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 pb-3" aria-live="polite">
                         <p class="p-3 text-[10px] text-gray-500">Your conversations will appear here.</p>
                     </div>
                 </aside>
 
-                <div class="flex min-h-[65vh] min-w-0 flex-col">
+                <div id="chatThreadPane" class="flex min-w-0 flex-col">
                     <header class="flex items-center justify-between gap-3 border-b border-darkBorder p-3 sm:p-4">
                         <div class="flex min-w-0 items-center gap-3">
                             <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full gold-gradient-bg text-black"><i class="fa-solid fa-user"></i></span>
@@ -455,12 +531,18 @@
                             </div>
                         </div>
                         <div class="flex flex-shrink-0 items-center gap-1">
+                            <button type="button" onclick="openChatContactsModal()" title="Find followers and following" class="flex h-9 items-center gap-1.5 rounded-lg border border-gold/40 px-2 text-[10px] font-semibold text-gold hover:bg-gold/10 sm:px-3" aria-label="Find followers and following to start a conversation">
+                                <i class="fa-solid fa-user-plus" aria-hidden="true"></i><span class="hidden sm:inline">New chat</span>
+                            </button>
+                            <button id="chatFullscreenToggle" type="button" onclick="toggleGoldenChatFullscreen()" title="Expand Golden Chat" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-300 hover:text-gold" aria-label="Expand Golden Chat to full screen">
+                                <i id="chatFullscreenIcon" class="fa-solid fa-expand" aria-hidden="true"></i>
+                            </button>
                             <button type="button" onclick="showChatBackendNotice('Voice calls')" title="Voice calling provider is not configured" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-500" aria-label="Voice calls not configured"><i class="fa-solid fa-phone"></i></button>
                             <button type="button" onclick="showChatBackendNotice('Video calls')" title="Video calling provider is not configured" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-500" aria-label="Video calls not configured"><i class="fa-solid fa-video"></i></button>
                         </div>
                     </header>
                     <div id="chatProductStatus" class="hidden border-b border-darkBorder bg-gold/5 px-4 py-2 text-[10px] text-gray-300" aria-live="polite"></div>
-                    <div id="chatMessages" class="flex-1 space-y-3 overflow-y-auto bg-darkBg/50 p-3 sm:p-5" aria-live="polite"></div>
+                    <div id="chatMessages" class="min-h-0 flex-1 space-y-3 overflow-y-auto bg-darkBg/50 p-3 sm:p-5" aria-live="polite"></div>
                     <div id="chatPendingFiles" class="hidden border-t border-darkBorder px-3 pt-3 sm:px-4"></div>
                     <div id="chatEmojiPanel" class="hidden flex-wrap gap-2 border-t border-darkBorder bg-darkBg p-3" aria-label="Emoji and stickers">
                         <div class="flex flex-wrap gap-1.5" aria-label="Emojis">
@@ -502,6 +584,30 @@
             </div>
         </section>
     </main>
+
+    <div id="chatContactsModal" class="fixed inset-0 z-[90] hidden items-center justify-center bg-black/80 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="chatContactsHeading" onclick="if (event.target === this) closeChatContactsModal()">
+        <section class="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-gold/40 bg-darkCard shadow-2xl">
+            <header class="flex items-center justify-between gap-3 border-b border-darkBorder p-4 sm:p-5">
+                <div>
+                    <h2 id="chatContactsHeading" class="text-lg font-extrabold text-white">Start a conversation</h2>
+                    <p class="mt-1 text-xs text-gray-400">Choose someone you follow or a follower.</p>
+                </div>
+                <button type="button" onclick="closeChatContactsModal()" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-300 hover:text-gold" aria-label="Close contacts">
+                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                </button>
+            </header>
+            <div class="space-y-3 border-b border-darkBorder p-4">
+                <label for="chatContactsSearch" class="sr-only">Search followers and following</label>
+                <input id="chatContactsSearch" type="search" oninput="renderChatContacts()" placeholder="Search people…" class="w-full rounded-xl border border-darkBorder bg-darkBg px-3 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-gold focus:outline-none">
+                <div class="flex gap-2" role="tablist" aria-label="Choose a contact list">
+                    <button id="chatFollowingTab" type="button" role="tab" aria-selected="true" onclick="setChatContactsTab('following')" class="rounded-lg border border-gold/50 bg-gold/10 px-4 py-2 text-xs font-bold text-gold">Following</button>
+                    <button id="chatFollowersTab" type="button" role="tab" aria-selected="false" onclick="setChatContactsTab('followers')" class="rounded-lg border border-darkBorder px-4 py-2 text-xs font-bold text-gray-300 hover:text-gold">Followers</button>
+                </div>
+            </div>
+            <p id="chatContactsStatus" class="px-4 pt-3 text-xs text-gray-400" role="status" aria-live="polite">Loading your contacts…</p>
+            <div id="chatContactsList" class="min-h-0 flex-1 space-y-2 overflow-y-auto p-4" role="tabpanel" aria-labelledby="chatFollowingTab"></div>
+        </section>
+    </div>
 
     <div id="chatCoinStoreModal" class="fixed inset-0 z-[70] hidden items-center justify-center overflow-y-auto bg-black/80 p-4" role="dialog" aria-modal="true" aria-labelledby="chatCoinStoreHeading" onclick="if (event.target === this) closeChatCoinStore()">
         <section class="my-8 w-full max-w-lg rounded-2xl border border-gold/40 bg-darkCard p-5 shadow-2xl sm:p-6">
@@ -1542,6 +1648,9 @@
         let goldenChatProductUnsubscribe = null;
         let goldenChatMediaUrls = new Map();
         let goldenChatListenerUid = null;
+        let goldenChatContacts = { followers: [], following: [] };
+        let activeChatContactsTab = 'following';
+        let goldenChatPreviousBodyOverflow = null;
         let chatSendRetry = null;
         let pendingChatFiles = [];
         let pendingChatVoiceBlob = null;
@@ -1641,6 +1750,8 @@ function initializeFirebaseAuth() {
         if (!user) {
             clearAllCommunityCommentVoices();
             communityCommentDrafts.clear();
+            closeChatContactsModal();
+            goldenChatContacts = { followers: [], following: [] };
             if (chatVoiceRecorder?.state === 'recording') {
                 discardChatVoiceOnStop = true;
                 chatVoiceRecorder.stop();
@@ -2232,6 +2343,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
         function showMarketplacePage() {
             toggleSideMenu(false);
+            setGoldenChatFullscreen(false);
+            closeChatContactsModal();
             clearProfileProductStatsSubscriptions();
             if (chatVoiceRecorder?.state === 'recording') chatVoiceRecorder.stop();
             stopGoldenChatSubscriptions();
@@ -2254,6 +2367,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 return;
             }
             if (chatVoiceRecorder?.state === 'recording') chatVoiceRecorder.stop();
+            setGoldenChatFullscreen(false);
+            closeChatContactsModal();
             clearProfileProductStatsSubscriptions();
             stopGoldenChatSubscriptions();
             document.getElementById('marketplaceMain').classList.add('hidden');
@@ -3894,6 +4009,168 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
         }
 
+        function setGoldenChatFullscreen(enabled) {
+            const page = document.getElementById('chatPage');
+            const isFullscreen = page.classList.contains('golden-chat-fullscreen');
+            if (isFullscreen === enabled) return;
+            page.classList.toggle('golden-chat-fullscreen', enabled);
+            const button = document.getElementById('chatFullscreenToggle');
+            const icon = document.getElementById('chatFullscreenIcon');
+            if (enabled) {
+                goldenChatPreviousBodyOverflow = document.body.style.overflow;
+                document.body.style.overflow = 'hidden';
+            } else {
+                document.body.style.overflow = goldenChatPreviousBodyOverflow || '';
+                goldenChatPreviousBodyOverflow = null;
+            }
+            button.setAttribute('aria-label', enabled ? 'Exit Golden Chat full screen' : 'Expand Golden Chat to full screen');
+            button.title = enabled ? 'Exit full screen' : 'Expand Golden Chat';
+            icon.className = `fa-solid ${enabled ? 'fa-compress' : 'fa-expand'}`;
+        }
+
+        function toggleGoldenChatFullscreen() {
+            setGoldenChatFullscreen(!document.getElementById('chatPage').classList.contains('golden-chat-fullscreen'));
+        }
+
+        function toggleChatWalletDetails() {
+            const details = document.getElementById('chatWalletDetails');
+            const button = document.getElementById('chatWalletToggle');
+            const icon = document.getElementById('chatWalletToggleIcon');
+            const expanded = details.classList.toggle('hidden') === false;
+            button.setAttribute('aria-expanded', String(expanded));
+            icon.className = `fa-solid ${expanded ? 'fa-chevron-up' : 'fa-chevron-down'} text-[8px]`;
+        }
+
+        function openChatContactsModal() {
+            if (!currentUser) {
+                showToast('Sign in to find followers and following for a new conversation.', 'info');
+                openAuthModal('signin');
+                return;
+            }
+            const modal = document.getElementById('chatContactsModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.getElementById('chatContactsSearch').value = '';
+            activeChatContactsTab = 'following';
+            setChatContactsTab(activeChatContactsTab);
+            document.getElementById('chatContactsSearch').focus();
+            loadGoldenChatContacts(currentUser.uid);
+        }
+
+        function closeChatContactsModal() {
+            const modal = document.getElementById('chatContactsModal');
+            if (!modal) return;
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        async function loadGoldenChatContacts(uid) {
+            const status = document.getElementById('chatContactsStatus');
+            const list = document.getElementById('chatContactsList');
+            status.textContent = 'Loading your contacts…';
+            list.replaceChildren();
+            try {
+                const userRef = firebaseFirestore.collection('users').doc(uid);
+                const [followingSnapshot, followersSnapshot] = await Promise.all([
+                    userRef.collection('following').get(),
+                    userRef.collection('followers').get()
+                ]);
+                if (currentUser?.uid !== uid ||
+                    document.getElementById('chatContactsModal').classList.contains('hidden')) return;
+                goldenChatContacts.following = followingSnapshot.docs
+                    .filter(contact => contact.id !== uid)
+                    .map(contact => {
+                        const data = contact.data();
+                        return {
+                            uid: contact.id,
+                            name: typeof data.memberName === 'string' ? data.memberName : '',
+                            role: data.memberRole === 'Buyer' ? 'Buyer' : 'Vendor'
+                        };
+                    });
+                goldenChatContacts.followers = followersSnapshot.docs
+                    .filter(contact => contact.id !== uid)
+                    .map(contact => {
+                        const data = contact.data();
+                        return {
+                            uid: contact.id,
+                            name: typeof data.followerName === 'string' ? data.followerName : '',
+                            role: data.followerRole === 'Vendor' ? 'Vendor' : 'Buyer'
+                        };
+                    });
+                renderChatContacts();
+            } catch (error) {
+                if (currentUser?.uid !== uid) return;
+                console.error('Unable to load Golden Chat followers and following.', error);
+                status.textContent = 'Your contacts could not load. Check your connection and Firestore rules, then close and reopen this window to retry.';
+                list.replaceChildren();
+            }
+        }
+
+        function setChatContactsTab(tab) {
+            activeChatContactsTab = tab === 'followers' ? 'followers' : 'following';
+            const followingTab = document.getElementById('chatFollowingTab');
+            const followersTab = document.getElementById('chatFollowersTab');
+            followingTab.setAttribute('aria-selected', String(activeChatContactsTab === 'following'));
+            followersTab.setAttribute('aria-selected', String(activeChatContactsTab === 'followers'));
+            followingTab.className = activeChatContactsTab === 'following'
+                ? 'rounded-lg border border-gold/50 bg-gold/10 px-4 py-2 text-xs font-bold text-gold'
+                : 'rounded-lg border border-darkBorder px-4 py-2 text-xs font-bold text-gray-300 hover:text-gold';
+            followersTab.className = activeChatContactsTab === 'followers'
+                ? 'rounded-lg border border-gold/50 bg-gold/10 px-4 py-2 text-xs font-bold text-gold'
+                : 'rounded-lg border border-darkBorder px-4 py-2 text-xs font-bold text-gray-300 hover:text-gold';
+            renderChatContacts();
+        }
+
+        function renderChatContacts() {
+            const list = document.getElementById('chatContactsList');
+            if (!list) return;
+            const search = document.getElementById('chatContactsSearch').value.trim().toLocaleLowerCase();
+            const contacts = goldenChatContacts[activeChatContactsTab].filter(contact =>
+                contact.name.toLocaleLowerCase().includes(search) ||
+                contact.role.toLocaleLowerCase().includes(search)
+            );
+            const status = document.getElementById('chatContactsStatus');
+            const tab = activeChatContactsTab === 'following' ? 'chatFollowingTab' : 'chatFollowersTab';
+            list.setAttribute('aria-labelledby', tab);
+            list.replaceChildren();
+            status.textContent = `${contacts.length} ${activeChatContactsTab === 'following' ? 'following' : 'followers'} found.`;
+            if (!contacts.length) {
+                const empty = document.createElement('p');
+                empty.className = 'rounded-xl border border-darkBorder bg-darkBg p-4 text-sm text-gray-400';
+                empty.textContent = search
+                    ? 'No contacts match your search.'
+                    : `You do not have any ${activeChatContactsTab} yet.`;
+                list.appendChild(empty);
+                return;
+            }
+            contacts.forEach(contact => {
+                const card = document.createElement('article');
+                card.className = 'flex items-center gap-3 rounded-xl border border-darkBorder bg-darkBg p-3';
+                const avatar = document.createElement('span');
+                avatar.className = 'flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full gold-gradient-bg text-sm font-extrabold text-black';
+                avatar.textContent = (contact.name.trim() || 'M').charAt(0).toUpperCase();
+                const identity = document.createElement('div');
+                identity.className = 'min-w-0 flex-1';
+                const name = document.createElement('p');
+                name.className = 'truncate text-sm font-bold text-white';
+                name.textContent = contact.name.trim() || 'Marketplace member';
+                const role = document.createElement('p');
+                role.className = 'text-[10px] font-semibold uppercase tracking-wide text-gold';
+                role.textContent = contact.role;
+                identity.append(name, role);
+                const message = document.createElement('button');
+                message.type = 'button';
+                message.className = 'flex-shrink-0 rounded-lg gold-gradient-bg px-3 py-2 text-[11px] font-bold text-black hover:opacity-90';
+                message.textContent = 'Message';
+                message.addEventListener('click', () => {
+                    closeChatContactsModal();
+                    startGoldenChat(contact.uid);
+                });
+                card.append(avatar, identity, message);
+                list.appendChild(card);
+            });
+        }
+
         function openChatPage(otherUid = '', productId = '') {
             toggleSideMenu(false);
             if (!currentUser) {
@@ -3916,6 +4193,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             document.getElementById('accountPage').classList.add('hidden');
             document.getElementById('marketplaceFooter').classList.add('hidden');
             document.getElementById('chatPage').classList.remove('hidden');
+            if (!document.getElementById('chatWalletDetails').classList.contains('hidden')) {
+                toggleChatWalletDetails();
+            }
             subscribeToGoldenChats();
             window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -3987,6 +4267,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
         function renderGoldenChatList(snapshot) {
             const list = document.getElementById('chatConversationList');
+            const previousScrollTop = list.scrollTop;
             list.replaceChildren();
             const chats = snapshot.docs
                 .map(document => ({ id: document.id, ...document.data() }))
@@ -4000,6 +4281,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 empty.className = 'p-3 text-[10px] leading-relaxed text-gray-500';
                 empty.textContent = 'No conversations yet. Open a member profile and choose Message to start a private chat. A coin is required to start a new conversation.';
                 list.appendChild(empty);
+                list.scrollTop = previousScrollTop;
                 return;
             }
             chats.forEach(chat => {
@@ -4023,6 +4305,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 button.addEventListener('click', () => selectGoldenChat(chat.id, chat));
                 list.appendChild(button);
             });
+            list.scrollTop = previousScrollTop;
         }
 
         function selectGoldenChat(chatId, chatData) {
@@ -6141,6 +6424,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             document.getElementById('chatCoinBalance').textContent = quizWalletLoaded
                 ? quizWallet.coins.toLocaleString()
                 : currentUser ? '…' : '0';
+            const miniCoinBalance = document.getElementById('chatCoinMiniBalance');
+            if (miniCoinBalance) {
+                miniCoinBalance.textContent = `${quizWalletLoaded
+                    ? quizWallet.coins.toLocaleString()
+                    : currentUser ? '…' : '0'} coins`;
+            }
             const storeBalance = document.getElementById('chatCoinStoreBalance');
             if (storeBalance) storeBalance.textContent = quizWalletLoaded
                 ? quizWallet.coins.toLocaleString()
