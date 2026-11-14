@@ -154,38 +154,13 @@
             border-color: #ffd700;
             box-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
         }
-        #chatPage {
-            box-sizing: border-box;
-            height: calc(100vh - 220px);
-            height: calc(100dvh - 220px);
-            min-height: 400px;
-        }
-        #chatLayoutSection,
-        #chatLayoutGrid,
-        #chatThreadPane {
-            height: 100%;
-            min-height: 0;
-        }
-        #chatLayoutGrid {
-            grid-template-rows: minmax(0, 1fr);
-        }
-        #chatSidebar {
-            min-height: 0;
-        }
-        #chatConversationList {
-            flex: 1 1 auto;
-            max-height: none;
-            min-height: 0;
-            overflow-y: auto;
-        }
-        #chatMessages {
-            min-height: 0;
-        }
         #chatPage.golden-chat-fullscreen {
             background: #0b0f19;
+            box-sizing: border-box;
             height: 100dvh;
             inset: 0;
             max-width: none;
+            min-height: 100dvh;
             padding: 0;
             position: fixed;
             width: 100vw;
@@ -194,29 +169,22 @@
         #chatPage.golden-chat-fullscreen #chatLayoutSection {
             border: 0;
             border-radius: 0;
+            height: 100%;
+            min-height: 0;
         }
         #chatPage.golden-chat-fullscreen #chatLayoutGrid {
             grid-template-columns: minmax(0, 1fr);
+            grid-template-rows: minmax(0, 1fr);
+            height: 100%;
+            min-height: 0;
         }
         #chatPage.golden-chat-fullscreen #chatSidebar {
             display: none;
         }
-        @media (max-width: 767px) {
-            #chatPage {
-                height: calc(100vh - 220px);
-                height: calc(100dvh - 220px);
-                min-height: 340px;
-            }
-            #chatLayoutGrid {
-                grid-template-rows: minmax(200px, 38%) minmax(0, 1fr);
-            }
-        }
-        @media (max-height: 600px) {
-            #chatPage:not(.golden-chat-fullscreen) {
-                height: calc(100vh - 160px);
-                height: calc(100dvh - 160px);
-                min-height: 320px;
-            }
+        #chatPage.golden-chat-fullscreen #chatThreadPane,
+        #chatPage.golden-chat-fullscreen #chatMessages {
+            height: 100%;
+            min-height: 0;
         }
         /* Custom scrollbar */
         ::-webkit-scrollbar {
@@ -475,9 +443,9 @@
 
     <!-- GOLDEN CHAT -->
     <main id="chatPage" class="hidden max-w-7xl mx-auto px-3 sm:px-6 py-4 flex-1 w-full">
-        <section id="chatLayoutSection" class="overflow-hidden rounded-2xl border border-darkBorder bg-darkCard shadow-xl">
-            <div id="chatLayoutGrid" class="grid grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)]">
-                <aside id="chatSidebar" class="flex flex-col border-b border-darkBorder md:border-b-0 md:border-r">
+        <section id="chatLayoutSection" class="min-h-[65vh] overflow-hidden rounded-2xl border border-darkBorder bg-darkCard shadow-xl">
+            <div id="chatLayoutGrid" class="grid min-h-[65vh] grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)]">
+                <aside id="chatSidebar" class="border-b border-darkBorder md:border-b-0 md:border-r">
                     <div class="flex items-center justify-between border-b border-darkBorder p-4">
                         <div>
                             <h1 class="text-lg font-extrabold text-white">Golden Chat</h1>
@@ -516,12 +484,12 @@
                             <i class="fa-solid fa-user-plus" aria-hidden="true"></i><span>Find people</span>
                         </button>
                     </div>
-                    <div id="chatConversationList" class="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 pb-3" aria-live="polite">
+                    <div id="chatConversationList" class="max-h-[55vh] space-y-1 overflow-y-auto px-2 pb-3" aria-live="polite">
                         <p class="p-3 text-[10px] text-gray-500">Your conversations will appear here.</p>
                     </div>
                 </aside>
 
-                <div id="chatThreadPane" class="flex min-w-0 flex-col">
+                <div id="chatThreadPane" class="flex min-h-[65vh] min-w-0 flex-col">
                     <header class="flex items-center justify-between gap-3 border-b border-darkBorder p-3 sm:p-4">
                         <div class="flex min-w-0 items-center gap-3">
                             <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full gold-gradient-bg text-black"><i class="fa-solid fa-user"></i></span>
@@ -542,7 +510,7 @@
                         </div>
                     </header>
                     <div id="chatProductStatus" class="hidden border-b border-darkBorder bg-gold/5 px-4 py-2 text-[10px] text-gray-300" aria-live="polite"></div>
-                    <div id="chatMessages" class="min-h-0 flex-1 space-y-3 overflow-y-auto bg-darkBg/50 p-3 sm:p-5" aria-live="polite"></div>
+                    <div id="chatMessages" class="flex-1 space-y-3 overflow-y-auto bg-darkBg/50 p-3 sm:p-5" aria-live="polite"></div>
                     <div id="chatPendingFiles" class="hidden border-t border-darkBorder px-3 pt-3 sm:px-4"></div>
                     <div id="chatEmojiPanel" class="hidden flex-wrap gap-2 border-t border-darkBorder bg-darkBg p-3" aria-label="Emoji and stickers">
                         <div class="flex flex-wrap gap-1.5" aria-label="Emojis">
