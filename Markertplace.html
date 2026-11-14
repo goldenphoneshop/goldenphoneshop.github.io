@@ -3874,6 +3874,28 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
             card.appendChild(header);
 
+            if (role === 'Vendor' && isOwnProfile) {
+                const badgePanel = document.createElement('section');
+                badgePanel.className = 'mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gold/30 bg-gold/5 p-3';
+                const badgeStatus = document.createElement('p');
+                badgeStatus.className = 'text-xs text-gray-200';
+                const badgeExpiryMs = Math.max(
+                    verifiedDealerUntilMs(profile.verifiedDealerUntil),
+                    verifiedDealerBadgeExpiries.get(profileUid) || 0
+                );
+                const badgeIsActive = badgeExpiryMs > Date.now();
+                badgeStatus.textContent = badgeIsActive
+                    ? `Verified Dealer Badge active until ${new Date(badgeExpiryMs).toLocaleString()}.`
+                    : 'No active Verified Dealer Badge. Purchase one for 24 coins per calendar month.';
+                const badgeSettingsButton = document.createElement('button');
+                badgeSettingsButton.type = 'button';
+                badgeSettingsButton.className = 'rounded-lg border border-gold/50 px-3 py-2 text-xs font-bold text-gold hover:bg-gold/10';
+                badgeSettingsButton.textContent = badgeIsActive ? 'Manage badge' : 'Get badge';
+                badgeSettingsButton.addEventListener('click', openVerifiedDealerBadgeSettings);
+                badgePanel.append(badgeStatus, badgeSettingsButton);
+                card.appendChild(badgePanel);
+            }
+
             const metrics = document.createElement('dl');
             metrics.className = 'mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2';
             appendProfileMetric(metrics, 'Quiz Likes earned', 'quizLikesEarned');
@@ -3922,6 +3944,16 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             document.getElementById('editOwnProfileButton').classList.toggle('hidden', !isOwnProfile);
             subscribeToProfilePresence(profileUid);
             loadPublicProfileStats(profileUid, true);
+        }
+
+        function openVerifiedDealerBadgeSettings() {
+            showAccountSection('edit');
+            window.setTimeout(() => {
+                document.getElementById('verifiedDealerBadgeSettings')?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+            }, 0);
         }
 
         function clearProfileProductStatsSubscriptions() {
