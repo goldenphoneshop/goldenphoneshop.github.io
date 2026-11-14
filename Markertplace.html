@@ -608,7 +608,7 @@
                     <span>Video clip · <strong class="text-gold">4 coins</strong></span>
                     <span>Voice note · <strong class="text-gold">3 coins</strong></span>
                 </div>
-                <p class="mt-2 text-[10px] leading-relaxed text-gray-500">Only the sender pays when a message is sent. Calls are not available and do not use coins. Chat coins are separate from quiz likes and product Like/Hate reactions.</p>
+                <p class="mt-2 text-[10px] leading-relaxed text-gray-500">Only the sender pays. For Buyer-to-Vendor messages, half the charge is credited to the Vendor as spendable Chat coins; this is not cash or withdrawable earnings. Calls are unavailable and do not use coins. Chat coins are separate from quiz likes and product Like/Hate reactions.</p>
             </div>
             <div class="mt-4 space-y-2">
                 <button type="button" onclick="startWalletPurchase('chatCoins12')" class="flex w-full items-center justify-between gap-3 rounded-xl border border-gold/30 bg-darkBg p-3 text-left hover:border-gold">
@@ -668,7 +668,7 @@
                 <ol class="mt-2 list-inside list-decimal space-y-1">
                     <li>Sign in with a verified account and buy a coin pack using secure checkout.</li>
                     <li>Open Golden Chat from a Vendor's listing or profile to ask about a product.</li>
-                    <li>The sender pays 1 coin for text, 2 for a photo, or 3 for a voice note. The other person is not charged.</li>
+                    <li>The sender pays 1 coin for text, 2 for a photo, 4 for a video clip, or 3 for a voice note. For Buyer-to-Vendor messages, half the charge is credited to the Vendor as spendable Chat coins. The recipient is not charged.</li>
                 </ol>
                 <p class="mt-2"><strong class="text-gold">Available:</strong> coin purchases and paid Golden Chat messages/media. <strong>Not available:</strong> voice/video calls, listing boosts, cash-outs, vouchers, escrow, daily coins, referral rewards, or paid badges. This guide cannot activate or charge for planned features.</p>
             </div>
@@ -682,7 +682,7 @@
                         </article>
                         <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
                             <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Vendor earnings and cash-out</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Not available</span></div>
-                            <p class="mt-1 text-[10px] text-gray-400">Chat coins are not currently credited as vendor earnings. No bank payout can be requested or promised here.</p>
+                            <p class="mt-1 text-[10px] text-gray-400">Buyer-to-Vendor messages credit Vendors with half the message charge as spendable Chat coins. These coins are not cash, and no bank payout can be requested or promised here.</p>
                         </article>
                         <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
                             <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Verified dealer badge</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Planned</span></div>
@@ -6493,7 +6493,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         likes: Number.isInteger(wallet.likes) && wallet.likes >= 0 ? wallet.likes : 0,
                         loves: Number.isInteger(wallet.loves) && wallet.loves >= 0 ? wallet.loves : 0,
                         hates: Number.isInteger(wallet.hates) && wallet.hates >= 0 ? wallet.hates : 0,
-                        coins: Number.isInteger(wallet.coins) && wallet.coins >= 0 ? wallet.coins : 0
+                        coins: Number.isFinite(wallet.coins) && wallet.coins >= 0 &&
+                            Number.isSafeInteger(wallet.coins * 2) ? wallet.coins : 0
                     };
                     quizWalletLoaded = true;
                     quizWalletStatus = 'Balance synced to your account.';
@@ -6588,7 +6589,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 });
                 if (currentUser?.uid !== uid) return;
                 const wallet = snapshot.exists ? snapshot.data() : {};
-                quizWallet.coins = Number.isSafeInteger(wallet.coins) && wallet.coins >= 0
+                quizWallet.coins = Number.isFinite(wallet.coins) && wallet.coins >= 0 &&
+                    Number.isSafeInteger(wallet.coins * 2)
                     ? wallet.coins
                     : 0;
                 quizWalletLoaded = true;
