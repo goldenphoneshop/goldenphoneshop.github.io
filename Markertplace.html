@@ -608,7 +608,7 @@
                     <span>Video clip · <strong class="text-gold">4 coins</strong></span>
                     <span>Voice note · <strong class="text-gold">3 coins</strong></span>
                 </div>
-                <p class="mt-2 text-[10px] leading-relaxed text-gray-500">Only the sender pays. For Buyer-to-Vendor messages, half the charge is credited to the Vendor as spendable Chat coins; this is not cash or withdrawable earnings. Calls are unavailable and do not use coins. Chat coins are separate from quiz likes and product Like/Hate reactions.</p>
+                <p class="mt-2 text-[10px] leading-relaxed text-gray-500">Only the sender pays. For Buyer-to-Vendor text messages and voice notes only, half the charge is credited to the Vendor as spendable Chat coins; photos and videos are not shared. This is not cash or withdrawable earnings. Calls are unavailable and do not use coins. Chat coins are separate from quiz likes and product Like/Hate reactions.</p>
             </div>
             <div class="mt-4 space-y-2">
                 <button type="button" onclick="startWalletPurchase('chatCoins12')" class="flex w-full items-center justify-between gap-3 rounded-xl border border-gold/30 bg-darkBg p-3 text-left hover:border-gold">
@@ -668,9 +668,9 @@
                 <ol class="mt-2 list-inside list-decimal space-y-1">
                     <li>Sign in with a verified account and buy a coin pack using secure checkout.</li>
                     <li>Open Golden Chat from a Vendor's listing or profile to ask about a product.</li>
-                    <li>The sender pays 1 coin for text, 2 for a photo, 4 for a video clip, or 3 for a voice note. For Buyer-to-Vendor messages, half the charge is credited to the Vendor as spendable Chat coins. The recipient is not charged.</li>
+                    <li>The sender pays 1 coin for text, 2 for a photo, 4 for a video clip, or 3 for a voice note. Only Buyer-to-Vendor text messages and voice notes share half their charge with the Vendor; photos and videos are not shared. The recipient is not charged.</li>
                 </ol>
-                <p class="mt-2"><strong class="text-gold">Available:</strong> coin purchases, paid Golden Chat messages/media, and 24-hour listing boosts. <strong>Not available:</strong> voice/video calls, cash-outs, vouchers, escrow, daily coins, referral rewards, or paid badges.</p>
+                <p class="mt-2"><strong class="text-gold">Available:</strong> coin purchases, paid Golden Chat messages/media, 24-hour listing boosts, and the monthly Verified Dealer Badge. <strong>Not available:</strong> voice/video calls, cash-outs, vouchers, escrow, daily coins, or referral rewards.</p>
             </div>
             <div class="mt-5 grid gap-5 md:grid-cols-2">
                 <section aria-labelledby="vendorCoinUtilitiesHeading">
@@ -685,8 +685,8 @@
                             <p class="mt-1 text-[10px] text-gray-400">Buyer-to-Vendor messages credit Vendors with half the message charge as spendable Chat coins. These coins are not cash, and no bank payout can be requested or promised here.</p>
                         </article>
                         <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
-                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Verified dealer badge</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Planned</span></div>
-                            <p class="mt-1 text-[10px] text-gray-400">Coin-funded verification badges are not enabled.</p>
+                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Verified Dealer Badge</h4><span class="rounded-full bg-green-500/10 px-2 py-1 text-[9px] font-bold text-green-300">Active</span></div>
+                            <p class="mt-1 text-[10px] text-gray-400">Vendors can buy the gold badge for 24 coins per calendar month and opt in to automatic renewal in profile settings. If renewal fails for low balance, it pauses until the Vendor tops up and re-enables it. Purchase grants a marketplace badge but is not independent identity/business verification.</p>
                         </article>
                         <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
                             <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Stock notifications</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Planned</span></div>
@@ -828,6 +828,20 @@
                     <p id="profileSettingsStatus" class="hidden text-xs" role="status" aria-live="polite"></p>
                     <button id="saveProfileSettingsButton" type="submit" class="rounded-xl gold-gradient-bg px-5 py-2.5 text-sm font-bold text-black hover:opacity-90">Save profile</button>
                 </form>
+                <div id="verifiedDealerBadgeSettings" class="hidden mt-6 max-w-lg rounded-xl border border-gold/40 bg-gold/5 p-4">
+                    <h3 class="text-sm font-extrabold text-gold"><i class="fa-solid fa-certificate mr-2"></i>Verified Dealer Badge</h3>
+                    <p class="mt-1 text-xs leading-relaxed text-gray-300">24 Golden Chat coins per calendar month. You can renew manually or opt in to automatic monthly renewal.</p>
+                    <p class="mt-2 text-[10px] leading-relaxed text-gold/90">Purchase grants a marketplace badge but is not independent identity/business verification.</p>
+                    <p id="verifiedDealerBadgeStatus" class="mt-3 text-xs text-gray-300" role="status" aria-live="polite"></p>
+                    <button id="verifiedDealerBadgePurchaseButton" type="button" onclick="purchaseVerifiedDealerBadge(this)" title="Purchase grants a marketplace badge but is not independent identity/business verification." class="mt-3 rounded-lg gold-gradient-bg px-4 py-2 text-xs font-extrabold text-black hover:opacity-90">Purchase Verified Dealer Badge · 24 Coins</button>
+                    <label for="verifiedDealerAutoRenewToggle" class="mt-4 flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-darkBorder bg-darkBg/60 p-3">
+                        <span>
+                            <span class="block text-xs font-bold text-white">Automatically renew monthly</span>
+                            <span class="mt-1 block text-[10px] leading-relaxed text-gray-400">24 coins are charged when the badge expires. If your balance is too low, renewal pauses and the badge expires.</span>
+                        </span>
+                        <input id="verifiedDealerAutoRenewToggle" type="checkbox" class="h-5 w-5 flex-shrink-0 accent-yellow-500" onchange="setVerifiedDealerAutoRenew(this.checked)">
+                    </label>
+                </div>
             </section>
 
             <section id="appSettingsSection" class="hidden p-4 sm:p-6">
@@ -1538,6 +1552,10 @@
         const boostingProductIds = new Set();
         let productBoostExpiryTimer = null;
         let currentUser = null;
+        let verifiedDealerBadgePurchasing = false;
+        let verifiedDealerAutoRenewUpdating = false;
+        let verifiedDealerSettingsUnsubscribe = null;
+        let verifiedDealerSettingsUid = null;
         let authStateRevision = 0;
         let authPersistenceReady = Promise.resolve(true);
         let quizWallet = { likes: 0, loves: 0, hates: 0, coins: 0 };
@@ -1611,6 +1629,9 @@
         const communityCommentDrafts = new Map();
         const communityMediaObjectUrls = new Set();
         const communityDownloadPermissionCache = new Map();
+        const verifiedDealerBadgeExpiries = new Map();
+        let verifiedDealerBadgesUnsubscribe = null;
+        let verifiedDealerBadgeExpiryTimer = null;
         let communityPostSubmitting = false;
         const productMediaObjectUrls = new Set();
         const MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -1680,6 +1701,7 @@
             loadCartData();
             renderAuthNav();
             renderFeedTabs();
+            subscribeToVerifiedDealerBadges();
             renderCommunityPosts();
             renderCategoryTabs();
             renderProducts();
@@ -1695,7 +1717,14 @@
             window.addEventListener('pagehide', () => {
                 markPresenceInactive();
                 clearAllCommunityCommentVoices();
+                if (verifiedDealerBadgesUnsubscribe) verifiedDealerBadgesUnsubscribe();
+                verifiedDealerBadgesUnsubscribe = null;
+                if (verifiedDealerBadgeExpiryTimer) {
+                    clearTimeout(verifiedDealerBadgeExpiryTimer);
+                    verifiedDealerBadgeExpiryTimer = null;
+                }
             });
+            window.addEventListener('pageshow', subscribeToVerifiedDealerBadges);
             subscribeSharedProducts();
             subscribeCommunityPosts();
         };
@@ -1732,6 +1761,7 @@ function initializeFirebaseAuth() {
     firebaseAuth.onAuthStateChanged(async (user) => {
         const revision = ++authStateRevision;
         if (!user) {
+            stopVerifiedDealerSettingsSubscription();
             clearAllCommunityCommentVoices();
             communityCommentDrafts.clear();
             closeChatContactsModal();
@@ -1763,6 +1793,7 @@ function initializeFirebaseAuth() {
             return;
         }
         if (user.email && !user.emailVerified) {
+            stopVerifiedDealerSettingsSubscription();
             clearAllCommunityCommentVoices();
             communityCommentDrafts.clear();
             stopGoldenChatUnreadSubscription();
@@ -1786,6 +1817,7 @@ function initializeFirebaseAuth() {
 
         const localProfile = loadAccountProfile(user.uid);
         if (currentUser?.uid && currentUser.uid !== user.uid) {
+            stopVerifiedDealerSettingsSubscription();
             clearAllCommunityCommentVoices();
             communityCommentDrafts.clear();
         }
@@ -1825,6 +1857,7 @@ function initializeFirebaseAuth() {
                 ...remoteProfile,
                 isAdmin
             };
+            subscribeToVerifiedDealerSettings(user.uid);
             saveAccountProfile(user.uid, remoteProfile);
             renderAuthNav();
             updateAccountPageHeader();
@@ -2250,6 +2283,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 return {
                     name: profile.name,
                     role: profile.role === 'Vendor' ? 'Vendor' : 'Buyer',
+                    verifiedDealerUntil: profile.verifiedDealerUntil || null,
+                    verifiedDealerAutoRenew: profile.verifiedDealerAutoRenew === true,
+                    verifiedDealerAutoRenewPaused: profile.verifiedDealerAutoRenewPaused === true,
                     ...getAccountProfileFields(profile)
                 };
             }
@@ -2273,7 +2309,13 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 ...getAccountProfileFields(profileSource),
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-            const result = { name, role, ...getAccountProfileFields(profileSource) };
+            const result = {
+                name,
+                role,
+                verifiedDealerAutoRenew: false,
+                verifiedDealerAutoRenewPaused: false,
+                ...getAccountProfileFields(profileSource)
+            };
             saveAccountProfile(user.uid, result);
             return result;
         }
@@ -2505,6 +2547,107 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             loadProfilePhotoInto(image, currentUser.profilePhotoPath, currentUser.uid);
         }
 
+        function verifiedDealerUntilMs(value) {
+            if (value && typeof value.toMillis === 'function') {
+                const timestamp = value.toMillis();
+                return Number.isFinite(timestamp) ? timestamp : 0;
+            }
+            if (value instanceof Date) return value.getTime();
+            if (value && typeof value === 'object') {
+                const seconds = Number.isFinite(value.seconds) ? value.seconds : value._seconds;
+                const nanoseconds = Number.isFinite(value.nanoseconds) ? value.nanoseconds : value._nanoseconds;
+                if (Number.isFinite(seconds)) {
+                    return seconds * 1000 + (Number.isFinite(nanoseconds) ? nanoseconds / 1000000 : 0);
+                }
+            }
+            return 0;
+        }
+
+        function stopVerifiedDealerSettingsSubscription() {
+            if (verifiedDealerSettingsUnsubscribe) verifiedDealerSettingsUnsubscribe();
+            verifiedDealerSettingsUnsubscribe = null;
+            verifiedDealerSettingsUid = null;
+        }
+
+        function subscribeToVerifiedDealerSettings(uid) {
+            if (verifiedDealerSettingsUid === uid) return;
+            stopVerifiedDealerSettingsSubscription();
+            verifiedDealerSettingsUid = uid;
+            verifiedDealerSettingsUnsubscribe = firebaseFirestore.collection('users').doc(uid)
+                .onSnapshot(snapshot => {
+                    if (!snapshot.exists || currentUser?.uid !== uid) return;
+                    const profile = snapshot.data();
+                    currentUser = {
+                        ...currentUser,
+                        verifiedDealerUntil: profile.verifiedDealerUntil || null,
+                        verifiedDealerAutoRenew: profile.verifiedDealerAutoRenew === true,
+                        verifiedDealerAutoRenewPaused: profile.verifiedDealerAutoRenewPaused === true
+                    };
+                    saveAccountProfile(uid, currentUser);
+                    updateVerifiedDealerBadgeElements();
+                    renderVerifiedDealerBadgeSettings();
+                }, error => {
+                    console.error('Unable to sync Verified Dealer Badge renewal settings.', error);
+                });
+        }
+
+        function isVerifiedDealer(uid) {
+            const profileExpiry = uid === currentUser?.uid
+                ? verifiedDealerUntilMs(currentUser.verifiedDealerUntil)
+                : 0;
+            const untilMs = Math.max(verifiedDealerBadgeExpiries.get(uid) || 0, profileExpiry);
+            return untilMs > Date.now();
+        }
+
+        function renderVerifiedDealerBadge(uid) {
+            if (typeof uid !== 'string' || !uid) return '';
+            const hidden = isVerifiedDealer(uid) ? '' : ' hidden';
+            return `<span data-verified-dealer-badge="${escapeHtml(uid)}" class="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-[9px] font-bold text-gold${hidden}" title="Purchase grants a marketplace badge but is not independent identity/business verification." aria-label="Verified Dealer"><i class="fa-solid fa-certificate" aria-hidden="true"></i>Verified Dealer</span>`;
+        }
+
+        function updateVerifiedDealerBadgeElements() {
+            document.querySelectorAll('[data-verified-dealer-badge]').forEach(element => {
+                element.classList.toggle('hidden', !isVerifiedDealer(element.dataset.verifiedDealerBadge));
+            });
+        }
+
+        function scheduleVerifiedDealerBadgeExpiry() {
+            if (verifiedDealerBadgeExpiryTimer) {
+                clearTimeout(verifiedDealerBadgeExpiryTimer);
+                verifiedDealerBadgeExpiryTimer = null;
+            }
+            const now = Date.now();
+            const nextExpiry = [...verifiedDealerBadgeExpiries.values()]
+                .filter(untilMs => untilMs > now)
+                .reduce((earliest, untilMs) => Math.min(earliest, untilMs), Infinity);
+            if (Number.isFinite(nextExpiry)) {
+                verifiedDealerBadgeExpiryTimer = setTimeout(() => {
+                    updateVerifiedDealerBadgeElements();
+                    renderVerifiedDealerBadgeSettings();
+                    scheduleVerifiedDealerBadgeExpiry();
+                }, Math.min(nextExpiry - now + 50, 2147483647));
+            }
+        }
+
+        function subscribeToVerifiedDealerBadges() {
+            if (verifiedDealerBadgesUnsubscribe) return;
+            verifiedDealerBadgesUnsubscribe = firebaseFirestore.collection('verifiedDealers')
+                .onSnapshot(snapshot => {
+                    verifiedDealerBadgeExpiries.clear();
+                    snapshot.forEach(doc => {
+                        verifiedDealerBadgeExpiries.set(
+                            doc.id,
+                            verifiedDealerUntilMs(doc.data().verifiedUntil)
+                        );
+                    });
+                    updateVerifiedDealerBadgeElements();
+                    renderVerifiedDealerBadgeSettings();
+                    scheduleVerifiedDealerBadgeExpiry();
+                }, error => {
+                    console.error('Unable to load public Verified Dealer badges.', error);
+                });
+        }
+
         function subscribeCommunityPosts() {
             if (communityPostsUnsubscribe) communityPostsUnsubscribe();
             communityPostsUnsubscribe = firebaseFirestore.collection('communityPosts')
@@ -2583,6 +2726,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const profileAction = currentUser && post.ownerUid
                 ? `<button type="button" onclick="openCommunityAuthorProfile(this.dataset.uid)" data-uid="${escapeHtml(post.ownerUid)}" class="truncate text-left text-xs font-bold text-gold hover:underline">${escapeHtml(author)}</button>`
                 : `<span class="truncate text-xs font-bold text-gold">${escapeHtml(author)}</span>`;
+            const authorIdentity = `<div class="flex min-w-0 items-center gap-1">${profileAction}${renderVerifiedDealerBadge(post.ownerUid)}</div>`;
             const downloadable = post.mediaOwnerUid === currentUser?.uid
                 ? currentUser.allowMediaDownloads === true
                 : currentUser && communityDownloadPermissionCache.get(post.mediaOwnerUid) === true;
@@ -2597,7 +2741,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 : voiceState?.blob ? 'Voice note ready to post.' : '';
             return `
                 <article data-community-post-id="${escapeHtml(post.id)}" class="overflow-hidden rounded-2xl border border-darkBorder bg-darkCard p-3 shadow-lg">
-                    <div class="mb-3 flex items-center justify-between gap-2">${profileAction}<span class="text-[10px] text-gray-500">${formatCommunityPostDate(post.createdAt)}</span></div>
+                    <div class="mb-3 flex items-center justify-between gap-2">${authorIdentity}<span class="text-[10px] text-gray-500">${formatCommunityPostDate(post.createdAt)}</span></div>
                     ${reshareNote}
                     ${media ? `<div class="space-y-2">${media}</div>` : '<p class="rounded-lg bg-darkBg p-4 text-xs text-gray-400">This media is unavailable.</p>'}
                     ${post.caption ? `<p class="mt-3 whitespace-pre-wrap break-words text-sm text-gray-200">${escapeHtml(post.caption)}</p>` : ''}
@@ -3311,6 +3455,144 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             document.getElementById('profilePhotoInput').value = '';
             document.getElementById('profileSettingsStatus').classList.add('hidden');
             updateProfileCompletionStatus();
+            renderVerifiedDealerBadgeSettings();
+        }
+
+        function renderVerifiedDealerBadgeSettings() {
+            const section = document.getElementById('verifiedDealerBadgeSettings');
+            if (!section) return;
+            const isVendor = currentUser?.role === 'Vendor';
+            section.classList.toggle('hidden', !isVendor);
+            if (!isVendor) return;
+
+            const profileExpiry = verifiedDealerUntilMs(currentUser.verifiedDealerUntil);
+            const publicExpiry = verifiedDealerBadgeExpiries.get(currentUser.uid) || 0;
+            const activeUntil = Math.max(profileExpiry, publicExpiry);
+            const isActive = activeUntil > Date.now();
+            const status = document.getElementById('verifiedDealerBadgeStatus');
+            const button = document.getElementById('verifiedDealerBadgePurchaseButton');
+            const autoRenewToggle = document.getElementById('verifiedDealerAutoRenewToggle');
+            const autoRenewEnabled = currentUser.verifiedDealerAutoRenew === true;
+            status.textContent = currentUser.verifiedDealerAutoRenewPaused === true
+                ? 'Automatic renewal paused because your wallet did not have 24 coins. Add coins and enable it again.'
+                : isActive
+                    ? `Your badge is active until ${new Date(activeUntil).toLocaleString()}. Automatic renewal is ${autoRenewEnabled ? 'on' : 'off'}.`
+                    : 'Your badge is not active. Purchase it for 24 coins for one calendar month.';
+            button.disabled = isActive || verifiedDealerBadgePurchasing;
+            button.textContent = verifiedDealerBadgePurchasing
+                ? 'Processing purchase…'
+                : isActive
+                    ? 'Badge Active'
+                    : 'Purchase Verified Dealer Badge · 24 Coins';
+            autoRenewToggle.checked = autoRenewEnabled;
+            autoRenewToggle.disabled = verifiedDealerAutoRenewUpdating
+                || (!isActive && !autoRenewEnabled && currentUser.verifiedDealerAutoRenewPaused !== true);
+        }
+
+        async function setVerifiedDealerAutoRenew(enabled) {
+            if (!currentUser || currentUser.role !== 'Vendor') {
+                showToast('Only Vendors can change badge renewal settings.', 'info');
+                return;
+            }
+            if (verifiedDealerAutoRenewUpdating) return;
+
+            verifiedDealerAutoRenewUpdating = true;
+            renderVerifiedDealerBadgeSettings();
+            try {
+                const result = await firebaseFunctions.httpsCallable('setVerifiedDealerAutoRenew')({ enabled });
+                if (result.data?.enabled !== enabled) {
+                    throw new Error('The automatic renewal setting could not be verified. Check your profile before retrying.');
+                }
+                currentUser.verifiedDealerAutoRenew = enabled;
+                currentUser.verifiedDealerAutoRenewPaused = false;
+                if (result.data.renewed === true) {
+                    if (!Number.isSafeInteger(result.data.verifiedUntilMs)
+                        || !Number.isFinite(result.data.coinsRemaining)
+                        || result.data.coinsRemaining < 0
+                        || !Number.isSafeInteger(result.data.coinsRemaining * 2)) {
+                        throw new Error('The badge renewal result could not be verified. Check your profile and wallet before retrying.');
+                    }
+                    currentUser.verifiedDealerUntil = new Date(result.data.verifiedUntilMs);
+                    quizWallet.coins = result.data.coinsRemaining;
+                    quizWalletLoaded = true;
+                    quizWalletStatus = 'Balance synced to your account.';
+                    verifiedDealerBadgeExpiries.set(currentUser.uid, result.data.verifiedUntilMs);
+                    renderQuizWallet();
+                    updateVerifiedDealerBadgeElements();
+                    scheduleVerifiedDealerBadgeExpiry();
+                    renderProducts();
+                }
+                saveAccountProfile(currentUser.uid, currentUser);
+                renderVerifiedDealerBadgeSettings();
+                showToast(
+                    enabled
+                        ? 'Automatic Verified Dealer Badge renewal is enabled.'
+                        : 'Automatic Verified Dealer Badge renewal is disabled.',
+                    'success'
+                );
+            } catch (error) {
+                console.error('Unable to update Verified Dealer Badge automatic renewal.', error);
+                showToast(error.message || 'The automatic renewal setting could not be updated.', 'error');
+            } finally {
+                verifiedDealerAutoRenewUpdating = false;
+                renderVerifiedDealerBadgeSettings();
+            }
+        }
+
+        async function purchaseVerifiedDealerBadge(button) {
+            if (!currentUser || currentUser.role !== 'Vendor') {
+                showToast('Only Vendors can purchase a Verified Dealer Badge.', 'info');
+                return;
+            }
+            if (verifiedDealerBadgePurchasing) return;
+            const activeUntil = Math.max(
+                verifiedDealerUntilMs(currentUser.verifiedDealerUntil),
+                verifiedDealerBadgeExpiries.get(currentUser.uid) || 0
+            );
+            if (activeUntil > Date.now()) {
+                renderVerifiedDealerBadgeSettings();
+                showToast('Your Verified Dealer Badge is already active. Renew it after expiry.', 'info');
+                return;
+            }
+
+            verifiedDealerBadgePurchasing = true;
+            if (button) button.disabled = true;
+            renderVerifiedDealerBadgeSettings();
+            try {
+                const result = await firebaseFunctions.httpsCallable('purchaseVerifiedDealerBadge')();
+                const data = result.data;
+                if ((!data?.purchased && !data?.alreadyActive) ||
+                    !Number.isSafeInteger(data.verifiedUntilMs) ||
+                    !Number.isFinite(data.coinsRemaining) || data.coinsRemaining < 0 ||
+                    !Number.isSafeInteger(data.coinsRemaining * 2)) {
+                    throw new Error('The badge purchase result could not be verified. Check your profile before retrying.');
+                }
+
+                currentUser.verifiedDealerUntil = new Date(data.verifiedUntilMs);
+                currentUser.verifiedDealerAutoRenewPaused = false;
+                quizWallet.coins = data.coinsRemaining;
+                quizWalletLoaded = true;
+                quizWalletStatus = 'Balance synced to your account.';
+                verifiedDealerBadgeExpiries.set(currentUser.uid, data.verifiedUntilMs);
+                saveAccountProfile(currentUser.uid, currentUser);
+                renderQuizWallet();
+                updateVerifiedDealerBadgeElements();
+                scheduleVerifiedDealerBadgeExpiry();
+                renderProducts();
+                renderVerifiedDealerBadgeSettings();
+                showToast(
+                    data.alreadyActive
+                        ? `Your badge is active until ${new Date(data.verifiedUntilMs).toLocaleString()}.`
+                        : `Verified Dealer Badge purchased for 24 coins. It is active until ${new Date(data.verifiedUntilMs).toLocaleString()}.`,
+                    data.alreadyActive ? 'info' : 'success'
+                );
+            } catch (error) {
+                console.error('Unable to purchase the Verified Dealer Badge.', error);
+                showToast(error.message || 'The Verified Dealer Badge purchase could not be completed.', 'error');
+            } finally {
+                verifiedDealerBadgePurchasing = false;
+                renderVerifiedDealerBadgeSettings();
+            }
         }
 
         function getMissingChatProfileFields(profile) {
@@ -3539,8 +3821,15 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
             const identity = document.createElement('div');
             const title = document.createElement('h2');
-            title.className = 'text-xl font-extrabold text-white';
-            title.textContent = name;
+            title.className = role === 'Vendor'
+                ? 'flex flex-wrap items-center gap-2 text-xl font-extrabold text-white'
+                : 'text-xl font-extrabold text-white';
+            title.appendChild(document.createTextNode(name));
+            if (role === 'Vendor') {
+                const badgeHolder = document.createElement('span');
+                badgeHolder.innerHTML = renderVerifiedDealerBadge(profileUid);
+                if (badgeHolder.firstElementChild) title.appendChild(badgeHolder.firstElementChild);
+            }
             const roleLabel = document.createElement('p');
             roleLabel.className = 'mt-1 text-xs font-semibold uppercase tracking-wide text-gold';
             roleLabel.textContent = role;
@@ -3953,7 +4242,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     throw error;
                 }
                 currentUser = { ...currentUser, ...profile };
-                saveAccountProfile(currentUser.uid, profile);
+                saveAccountProfile(currentUser.uid, currentUser);
                 if (profilePhotoPreviewUrl) {
                     URL.revokeObjectURL(profilePhotoPreviewUrl);
                     profilePhotoPreviewUrl = null;
@@ -6142,9 +6431,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
                         <div>
                             <div class="flex items-center justify-between mb-3 border-t border-darkBorder/60 pt-2 text-[11px] text-gray-400">
-                                ${prod.ownerUid
-                                    ? `<button type="button" onclick="openVendorProfile(this.dataset.profileUid)" data-profile-uid="${escapeHtml(prod.ownerUid)}" class="max-w-[150px] truncate text-left hover:text-gold hover:underline" aria-label="View ${escapeHtml(prod.vendorName)} profile"><i class="fa-solid fa-store text-gold mr-1"></i>${escapeHtml(prod.vendorName)}</button>`
-                                    : `<span class="max-w-[150px] truncate"><i class="fa-solid fa-store text-gold mr-1"></i>${escapeHtml(prod.vendorName)}</span>`}
+                                <div class="flex min-w-0 items-center gap-1">
+                                    ${prod.ownerUid
+                                        ? `<button type="button" onclick="openVendorProfile(this.dataset.profileUid)" data-profile-uid="${escapeHtml(prod.ownerUid)}" class="max-w-[150px] truncate text-left hover:text-gold hover:underline" aria-label="View ${escapeHtml(prod.vendorName)} profile"><i class="fa-solid fa-store text-gold mr-1"></i>${escapeHtml(prod.vendorName)}</button>`
+                                        : `<span class="max-w-[150px] truncate"><i class="fa-solid fa-store text-gold mr-1"></i>${escapeHtml(prod.vendorName)}</span>`}
+                                    ${renderVerifiedDealerBadge(prod.ownerUid)}
+                                </div>
                                 <span class="text-yellow-400 font-bold"><i class="fa-solid fa-star text-xs"></i> ${Number(prod.rating) || 5.0}</span>
                             </div>
                             ${renderMemberFollowButton({ ...prod, role: 'Vendor' })}
@@ -6459,6 +6751,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                                 <span class="text-gray-400">Vendor:</span>
                                 <div class="flex min-w-0 items-center gap-2">
                                     <span class="truncate text-white font-semibold">${escapeHtml(prod.vendorName)}</span>
+                                    ${renderVerifiedDealerBadge(prod.ownerUid)}
                                     ${prod.ownerUid ? `<button type="button" onclick="openVendorProfile(this.dataset.profileUid)" data-profile-uid="${escapeHtml(prod.ownerUid)}" class="flex-shrink-0 text-[10px] font-bold text-gold underline underline-offset-2">View profile</button>` : ''}
                                 </div>
                             </div>
