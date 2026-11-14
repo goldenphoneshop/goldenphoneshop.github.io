@@ -3498,6 +3498,25 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 || (!isActive && !autoRenewEnabled && currentUser.verifiedDealerAutoRenewPaused !== true);
         }
 
+        function verifiedDealerErrorNotice(error, fallback, isBadgePurchase = false) {
+            const code = typeof error?.code === 'string' ? error.code : '';
+            const message = typeof error?.message === 'string' ? error.message : '';
+            if (code === 'functions/failed-precondition' &&
+                (isBadgePurchase || /coins?/i.test(message))) {
+                return {
+                    message: 'You don’t have enough Golden Chat coins. The badge costs 24 coins per calendar month. Buy Golden Coins and try again.',
+                    type: 'info'
+                };
+            }
+            if (['functions/unavailable', 'functions/deadline-exceeded', 'functions/network-request-failed'].includes(code)) {
+                return {
+                    message: 'We couldn’t connect to the badge service. Check your internet connection and refresh your profile before trying again.',
+                    type: 'error'
+                };
+            }
+            return { message: message || fallback, type: 'error' };
+        }
+
         async function setVerifiedDealerAutoRenew(enabled) {
             if (!currentUser || currentUser.role !== 'Vendor') {
                 showToast('Only Vendors can change badge renewal settings.', 'info');
@@ -3541,7 +3560,11 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 );
             } catch (error) {
                 console.error('Unable to update Verified Dealer Badge automatic renewal.', error);
-                showToast(error.message || 'The automatic renewal setting could not be updated.', 'error');
+                const notice = verifiedDealerErrorNotice(
+                    error,
+                    'The automatic renewal setting could not be updated.'
+                );
+                showToast(notice.message, notice.type);
             } finally {
                 verifiedDealerAutoRenewUpdating = false;
                 renderVerifiedDealerBadgeSettings();
@@ -3597,7 +3620,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 );
             } catch (error) {
                 console.error('Unable to purchase the Verified Dealer Badge.', error);
-                showToast(error.message || 'The Verified Dealer Badge purchase could not be completed.', 'error');
+                const notice = verifiedDealerErrorNotice(
+                    error,
+                    'The Verified Dealer Badge purchase could not be completed.',
+                    true
+                );
+                showToast(notice.message, notice.type);
             } finally {
                 verifiedDealerBadgePurchasing = false;
                 renderVerifiedDealerBadgeSettings();
