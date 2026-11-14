@@ -659,7 +659,7 @@
             <header class="flex items-start justify-between gap-3">
                 <div>
                     <h2 id="goldenCoinUtilitiesHeading" class="text-xl font-extrabold text-white"><i class="fa-solid fa-coins mr-2 text-gold"></i>Golden Coin utilities</h2>
-                    <p class="mt-1 text-xs text-gray-400">Explore planned ways Buyers and Vendors may use Golden Coins.</p>
+                    <p class="mt-1 text-xs text-gray-400">See what Buyers and Vendors can do with Golden Coins today.</p>
                 </div>
                 <button type="button" onclick="closeGoldenCoinUtilities()" class="rounded-lg p-2 text-gray-400 hover:text-white" aria-label="Close Golden Coin utilities"><i class="fa-solid fa-xmark"></i></button>
             </header>
@@ -670,15 +670,15 @@
                     <li>Open Golden Chat from a Vendor's listing or profile to ask about a product.</li>
                     <li>The sender pays 1 coin for text, 2 for a photo, 4 for a video clip, or 3 for a voice note. For Buyer-to-Vendor messages, half the charge is credited to the Vendor as spendable Chat coins. The recipient is not charged.</li>
                 </ol>
-                <p class="mt-2"><strong class="text-gold">Available:</strong> coin purchases and paid Golden Chat messages/media. <strong>Not available:</strong> voice/video calls, listing boosts, cash-outs, vouchers, escrow, daily coins, referral rewards, or paid badges. This guide cannot activate or charge for planned features.</p>
+                <p class="mt-2"><strong class="text-gold">Available:</strong> coin purchases, paid Golden Chat messages/media, and 24-hour listing boosts. <strong>Not available:</strong> voice/video calls, cash-outs, vouchers, escrow, daily coins, referral rewards, or paid badges.</p>
             </div>
             <div class="mt-5 grid gap-5 md:grid-cols-2">
                 <section aria-labelledby="vendorCoinUtilitiesHeading">
                     <h3 id="vendorCoinUtilitiesHeading" class="mb-2 text-sm font-extrabold text-gold">For Vendors</h3>
                     <div class="space-y-2">
                         <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
-                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Promote and boost listings</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Planned</span></div>
-                            <p class="mt-1 text-[10px] text-gray-400">Paid listing placement is not enabled; coins cannot boost or pin products.</p>
+                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Promote and boost listings</h4><span class="rounded-full bg-green-500/10 px-2 py-1 text-[9px] font-bold text-green-300">Active</span></div>
+                            <p class="mt-1 text-[10px] text-gray-400">Vendors can spend 5 Golden Chat coins to place one of their products at the top of the marketplace feed for 24 hours. Buying another boost extends the current expiry.</p>
                         </article>
                         <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
                             <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Vendor earnings and cash-out</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Not available</span></div>
@@ -1535,6 +1535,8 @@
 
         // Global State variables
         let products = [];
+        const boostingProductIds = new Set();
+        let productBoostExpiryTimer = null;
         let currentUser = null;
         let authStateRevision = 0;
         let authPersistenceReady = Promise.resolve(true);
@@ -1592,6 +1594,7 @@
         let allowUnverifiedEmailSession = false;
         let activeProductMedia = [];
         let activeProductImageIndex = 0;
+        let activeProductDetailId = null;
         let expandedProductImageIndex = 0;
         let activeProductTitle = '';
         let selectedProductMediaFiles = [];
@@ -6012,14 +6015,66 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             renderProducts();
         }
 
+        function getProductBoostUntilMs(product) {
+            const value = product?.boostedUntil;
+            if (value && typeof value.toMillis === 'function') {
+                const timestamp = value.toMillis();
+                return Number.isFinite(timestamp) ? timestamp : 0;
+            }
+            if (value instanceof Date) return value.getTime();
+            if (value && typeof value === 'object') {
+                const seconds = Number.isFinite(value.seconds) ? value.seconds : value._seconds;
+                const nanoseconds = Number.isFinite(value.nanoseconds) ? value.nanoseconds : value._nanoseconds;
+                if (Number.isFinite(seconds)) {
+                    return seconds * 1000 + (Number.isFinite(nanoseconds) ? nanoseconds / 1000000 : 0);
+                }
+            }
+            if (typeof value === 'string') {
+                const timestamp = Date.parse(value);
+                return Number.isFinite(timestamp) ? timestamp : 0;
+            }
+            return 0;
+        }
+
         function renderProducts() {
             const grid = document.getElementById('productGrid');
             const empty = document.getElementById('emptyState');
             const countBadge = document.getElementById('productCountBadge');
 
-            const feedProducts = selectedProductFeed === 'following'
+            const sourceProducts = selectedProductFeed === 'following'
                 ? products.filter(product => product.ownerUid && followedVendorIds.has(product.ownerUid))
                 : products;
+            const now = Date.now();
+            if (productBoostExpiryTimer) {
+                clearTimeout(productBoostExpiryTimer);
+                productBoostExpiryTimer = null;
+            }
+            const nextBoostExpiry = sourceProducts
+                .map(getProductBoostUntilMs)
+                .filter(boostedUntilMs => boostedUntilMs > now)
+                .reduce((earliest, boostedUntilMs) => Math.min(earliest, boostedUntilMs), Infinity);
+            if (Number.isFinite(nextBoostExpiry)) {
+                productBoostExpiryTimer = setTimeout(() => {
+                    productBoostExpiryTimer = null;
+                    renderProducts();
+                }, Math.min(nextBoostExpiry - now + 50, 2147483647));
+            }
+            const feedProducts = sourceProducts
+                .map((product, index) => ({
+                    product,
+                    index,
+                    boostedUntilMs: getProductBoostUntilMs(product)
+                }))
+                .sort((a, b) => {
+                    const aIsBoosted = a.boostedUntilMs > now;
+                    const bIsBoosted = b.boostedUntilMs > now;
+                    if (aIsBoosted !== bIsBoosted) return bIsBoosted - aIsBoosted;
+                    if (aIsBoosted && a.boostedUntilMs !== b.boostedUntilMs) {
+                        return b.boostedUntilMs - a.boostedUntilMs;
+                    }
+                    return a.index - b.index;
+                })
+                .map(entry => entry.product);
             const filtered = feedProducts.filter(p => {
                 const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
                 const searchableText = [
@@ -6067,6 +6122,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         <div class="absolute top-3 left-3 bg-darkBg/90 backdrop-blur-md px-2.5 py-1 rounded-full border border-gold/40 text-[10px] font-bold text-gold flex items-center gap-1">
                             <span>🦅 Verified</span>
                         </div>
+                        ${getProductBoostUntilMs(prod) > now
+                            ? `<div class="absolute top-3 right-3 rounded-full border border-gold/50 bg-gold px-2.5 py-1 text-[10px] font-extrabold text-black"><i class="fa-solid fa-bolt mr-1"></i>Boosted</div>`
+                            : ''}
                         <div class="absolute bottom-3 right-3 bg-black/75 backdrop-blur-md px-2 py-0.5 rounded text-[10px] text-gray-300">
                             Stock: ${Number(prod.stock)}
                         </div>
@@ -6101,10 +6159,94 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                                     <i class="fa-solid fa-chevron-right text-[10px]"></i>
                                 </button>
                             </div>
+                            ${currentUser?.role === 'Vendor' && currentUser.uid === prod.ownerUid
+                                ? `<button type="button" onclick="boostProductListing(this.dataset.productId, this)" data-product-id="${escapeHtml(prod.id)}" class="mt-3 w-full rounded-lg border border-gold/50 bg-gold/10 px-3 py-2 text-[10px] font-extrabold text-gold transition hover:bg-gold/20"><i class="fa-solid fa-bolt mr-1"></i>Boost Listing (5 Coins)</button>`
+                                : ''}
                         </div>
                     </div>
                 </div>
             `).join('');
+        }
+
+        async function boostProductListing(productId, button) {
+            if (boostingProductIds.has(productId)) return;
+            if (!currentUser || currentUser.role !== 'Vendor') {
+                showToast('Only Vendors can boost product listings.', 'info');
+                return;
+            }
+            const product = products.find(item => item.id === productId);
+            if (!product || product.ownerUid !== currentUser.uid) {
+                showToast('You can only boost your own product listings.', 'error');
+                return;
+            }
+
+            const requestKey = `goldenEagle_pendingProductBoost:${currentUser.uid}:${productId}`;
+            let operationId = sessionStorage.getItem(requestKey);
+            if (!/^[A-Za-z0-9_-]{20}$/.test(operationId || '')) {
+                operationId = firebaseFirestore.collection('productBoostPurchases').doc().id;
+                sessionStorage.setItem(requestKey, operationId);
+            }
+
+            boostingProductIds.add(productId);
+            if (button?.isConnected) {
+                button.disabled = true;
+                button.textContent = 'Boosting…';
+                button.setAttribute('aria-busy', 'true');
+            }
+            try {
+                const result = await firebaseFunctions.httpsCallable('boostProductListing')({
+                    productId,
+                    operationId
+                });
+                const data = result.data;
+                if (data?.boosted !== true || data.productId !== productId ||
+                    !Number.isSafeInteger(data.boostedUntilMs) ||
+                    !Number.isFinite(data.coinsRemaining) || data.coinsRemaining < 0 ||
+                    !Number.isSafeInteger(data.coinsRemaining * 2)) {
+                    throw new Error('The boost result could not be verified. Retry this listing to safely check the same request.');
+                }
+
+                sessionStorage.removeItem(requestKey);
+                product.boostedUntil = new Date(data.boostedUntilMs);
+                quizWallet.coins = data.coinsRemaining;
+                quizWalletLoaded = true;
+                quizWalletStatus = 'Balance synced to your account.';
+                saveProductsData();
+                renderQuizWallet();
+                renderProducts();
+                if (activeProductDetailId === productId &&
+                    !document.getElementById('detailModal').classList.contains('hidden')) {
+                    openDetailModal(productId);
+                }
+                showToast(
+                    `Listing boosted for 24 hours. ${data.coinsRemaining.toLocaleString()} Golden Chat coins remain.`,
+                    'success'
+                );
+            } catch (error) {
+                console.error('Unable to boost product listing.', error);
+                const definitiveFailure = [
+                    'functions/failed-precondition',
+                    'functions/permission-denied',
+                    'functions/invalid-argument',
+                    'functions/not-found',
+                    'functions/unauthenticated'
+                ].includes(error.code);
+                if (definitiveFailure) sessionStorage.removeItem(requestKey);
+                showToast(
+                    definitiveFailure
+                        ? error.message || 'This listing could not be boosted.'
+                        : 'Boost status could not be confirmed. Retry this same listing to safely check the request.',
+                    'error'
+                );
+            } finally {
+                boostingProductIds.delete(productId);
+                if (button?.isConnected) {
+                    button.disabled = false;
+                    button.innerHTML = '<i class="fa-solid fa-bolt mr-1"></i>Boost Listing (5 Coins)';
+                    button.removeAttribute('aria-busy');
+                }
+                renderProducts();
+            }
         }
 
         /* ==========================================================================
@@ -6278,6 +6420,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const prod = products.find(p => p.id === id);
             if (!prod) return;
 
+            activeProductDetailId = id;
             activeProductMedia = getProductMedia(prod);
             activeProductImages = activeProductMedia
                 .filter(media => media.type === 'image')
@@ -6299,9 +6442,14 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
                 <div class="flex flex-col justify-between">
                     <div>
-                        <span class="text-xs font-bold text-gold bg-gold/10 border border-gold/30 px-3 py-1 rounded-full inline-block mb-2">
-                            ${escapeHtml(prod.category)}
-                        </span>
+                        <div class="mb-2 flex flex-wrap items-center gap-2">
+                            <span class="text-xs font-bold text-gold bg-gold/10 border border-gold/30 px-3 py-1 rounded-full inline-block">
+                                ${escapeHtml(prod.category)}
+                            </span>
+                            ${getProductBoostUntilMs(prod) > Date.now()
+                                ? `<span class="rounded-full border border-gold/50 bg-gold px-3 py-1 text-[10px] font-extrabold text-black"><i class="fa-solid fa-bolt mr-1"></i>Boosted · until ${new Date(getProductBoostUntilMs(prod)).toLocaleString()}</span>`
+                                : ''}
+                        </div>
                         <h2 class="text-xl font-extrabold text-white mb-2 leading-snug">${escapeHtml(prod.title)}</h2>
                         
                         <div class="text-2xl font-black text-gold mb-4">₦${Number(prod.price).toLocaleString()}</div>
@@ -6327,6 +6475,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     </div>
 
                     <div class="space-y-2 pt-3 border-t border-darkBorder">
+                        ${currentUser?.role === 'Vendor' && currentUser.uid === prod.ownerUid
+                            ? `<button type="button" onclick="boostProductListing(this.dataset.productId, this)" data-product-id="${escapeHtml(prod.id)}" class="w-full rounded-xl border border-gold/50 bg-gold/10 py-3 text-sm font-bold text-gold hover:bg-gold/20"><i class="fa-solid fa-bolt mr-2"></i>Boost Listing (5 Coins)</button>`
+                            : ''}
                         ${currentUser?.role === 'Buyer' && prod.ownerUid
                             ? `<button type="button" onclick="closeDetailModal(); openChatPage(this.dataset.vendorUid, this.dataset.productId)" data-vendor-uid="${escapeHtml(prod.ownerUid)}" data-product-id="${escapeHtml(prod.id)}" class="w-full rounded-xl border border-gold/40 bg-darkBg py-3 text-sm font-bold text-gold hover:bg-gold/10"><i class="fa-solid fa-message mr-2"></i>Ask Vendor if this is available · 1 coin/message</button>`
                             : ''}
@@ -7435,6 +7586,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             clearPendingProductVoice();
             closeImageViewer();
             document.getElementById('detailModal').classList.add('hidden');
+            activeProductDetailId = null;
         }
 
         function addToCart(productId) {
