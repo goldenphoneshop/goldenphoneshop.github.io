@@ -482,13 +482,13 @@
                     </div>
                     <form id="chatComposer" class="hidden border-t border-darkBorder bg-darkCard p-3 sm:p-4" onsubmit="sendGoldenChatMessage(event)">
                         <label for="chatMessageInput" class="sr-only">Write a message</label>
-                        <textarea id="chatMessageInput" rows="2" maxlength="2000" placeholder="Message your chat partner · 1 coin per text message" class="w-full resize-y rounded-xl border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-gold focus:outline-none"></textarea>
+                        <textarea id="chatMessageInput" rows="2" maxlength="2000" oninput="updateChatSendButtonCost()" placeholder="Message your chat partner · 1 coin per text message" class="w-full resize-y rounded-xl border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-gold focus:outline-none"></textarea>
                         <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
                             <div class="flex items-center gap-1">
-                                <label for="chatMediaInput" class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-darkBorder text-gray-300 hover:text-gold" title="Send a photo · 2 coins">
+                                <label for="chatMediaInput" class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-darkBorder text-gray-300 hover:text-gold" title="Send a photo · 2 coins or video clip · 4 coins">
                                     <i class="fa-solid fa-paperclip"></i>
                                 </label>
-                                <input id="chatMediaInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden" onchange="previewChatFiles(event)">
+                                <input id="chatMediaInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime" class="hidden" onchange="previewChatFiles(event)">
                                 <button type="button" onclick="toggleChatEmojiPanel()" class="h-9 w-9 rounded-lg border border-darkBorder text-xl text-gray-300 hover:text-gold" aria-label="Open emojis and stickers">😊</button>
                                 <button id="chatVoiceRecordButton" type="button" onclick="toggleChatVoiceRecording()" title="Record a voice note · 3 coins" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-300 hover:text-gold" aria-label="Record a voice note"><i class="fa-solid fa-microphone"></i></button>
                             </div>
@@ -519,9 +519,10 @@
             </div>
             <div class="mt-4 rounded-xl border border-darkBorder bg-darkBg p-3">
                 <p class="mb-2 text-[10px] font-bold uppercase tracking-wide text-gray-400">What messages cost</p>
-                <div class="grid grid-cols-1 gap-2 text-[11px] text-gray-300 sm:grid-cols-3">
+                <div class="grid grid-cols-2 gap-2 text-[11px] text-gray-300 sm:grid-cols-4">
                     <span>Text · <strong class="text-gold">1 coin</strong></span>
                     <span>Photo · <strong class="text-gold">2 coins</strong></span>
+                    <span>Video clip · <strong class="text-gold">4 coins</strong></span>
                     <span>Voice note · <strong class="text-gold">3 coins</strong></span>
                 </div>
                 <p class="mt-2 text-[10px] leading-relaxed text-gray-500">Only the sender pays when a message is sent. Calls are not available and do not use coins. Chat coins are separate from quiz likes and product Like/Hate reactions.</p>
@@ -1531,6 +1532,7 @@
         const MAX_BUYER_COMMUNITY_VIDEO_BYTES = 500 * 1024 * 1024;
         const MAX_PRODUCT_VIDEO_SECONDS = 10;
         const MAX_GOLDEN_CHAT_VOICE_BYTES = 25 * 1024 * 1024;
+        const MAX_GOLDEN_CHAT_VIDEO_BYTES = 50 * 1024 * 1024;
         const MAX_COMMUNITY_COMMENT_VOICE_BYTES = 25 * 1024 * 1024;
         let cartItems = [];
         let activeGoldenChatId = null;
@@ -4138,12 +4140,15 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     bubble.appendChild(text);
                 }
                 if (message.mediaPath) {
-                    const media = document.createElement(message.type === 'voice' ? 'audio' : 'img');
-                    media.className = message.type === 'voice'
-                        ? 'w-full max-w-xs'
+                    const media = document.createElement(
+                        message.type === 'voice' ? 'audio' : message.type === 'video' ? 'video' : 'img'
+                    );
+                    media.className = message.type === 'voice' || message.type === 'video'
+                        ? 'w-full max-w-xs rounded-lg'
                         : 'max-h-64 max-w-full rounded-lg object-contain';
-                    if (message.type === 'voice') media.controls = true;
-                    else media.alt = 'Photo sent in Golden Chat';
+                    if (message.type === 'voice' || message.type === 'video') media.controls = true;
+                    if (message.type === 'video') media.playsInline = true;
+                    if (message.type === 'image') media.alt = 'Photo sent in Golden Chat';
                     bubble.appendChild(media);
                     loadGoldenChatMedia(media, message.mediaPath, chatId);
                 }
@@ -4192,10 +4197,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             if (!text && !imageFile && !voiceBlob) return;
             const mediaFile = voiceBlob || imageFile;
             if (mediaFile && text.length > 500) {
-                showToast('Photo and voice-note captions must be 500 characters or fewer.', 'error');
+                showToast('Media captions must be 500 characters or fewer.', 'error');
                 return;
             }
-            const type = voiceBlob ? 'voice' : imageFile ? 'image' : 'text';
+            const type = voiceBlob ? 'voice'
+                : imageFile ? (imageFile.type.startsWith('video/') ? 'video' : 'image')
+                    : 'text';
             chatSending = true;
             const submit = document.querySelector('#chatComposer button[type="submit"]');
             const originalLabel = submit.textContent;
@@ -4301,7 +4308,11 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             } finally {
                 chatSending = false;
                 submit.disabled = false;
-                if (!chatSendRetry) submit.textContent = originalLabel;
+                updateChatSendButtonCost();
+                if (!chatSendRetry && !document.getElementById('chatMessageInput').value.trim() &&
+                    !pendingChatFiles.length && !pendingChatVoiceBlob) {
+                    submit.textContent = 'Send · 1 coin';
+                }
             }
         }
 
@@ -4311,18 +4322,23 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const files = Array.from(event.target.files || []);
             if (!files.length) return;
             const file = files[0];
-            if (!file.type.startsWith('image/')) {
-                showToast(`${file.name} is not an image. Golden Chat accepts photos and voice notes here.`, 'error');
+            const isImage = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type);
+            const isVideo = ['video/mp4', 'video/webm', 'video/quicktime'].includes(file.type);
+            if (!isImage && !isVideo) {
+                showToast(`${file.name} is not a supported photo or video.`, 'error');
                 event.target.value = '';
                 return;
             }
-            if (file.size > 5 * 1024 * 1024) {
-                showToast('Golden Chat photos must be 5 MB or smaller.', 'error');
+            const maxBytes = isVideo ? MAX_GOLDEN_CHAT_VIDEO_BYTES : 5 * 1024 * 1024;
+            if (file.size === 0 || file.size > maxBytes) {
+                showToast(isVideo
+                    ? 'Golden Chat video clips must be 50 MB or smaller.'
+                    : 'Golden Chat photos must be 5 MB or smaller.', 'error');
                 event.target.value = '';
                 return;
             }
             if (pendingChatVoiceBlob) {
-                showToast('Remove the recorded voice note before selecting a photo.', 'info');
+                showToast('Remove the recorded voice note before selecting media.', 'info');
                 event.target.value = '';
                 return;
             }
@@ -4346,7 +4362,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 return;
             }
             if (pendingChatFiles.length) {
-                showToast('Remove the selected photo before recording a voice note.', 'info');
+                showToast('Remove the selected media before recording a voice note.', 'info');
                 return;
             }
             if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -4426,7 +4442,11 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const hasPending = pendingChatFiles.length > 0 || Boolean(pendingChatVoiceBlob);
             container.classList.toggle('hidden', !hasPending);
             const pending = [
-                ...pendingChatFiles.map((file, index) => ({ kind: 'photo', file, index })),
+                ...pendingChatFiles.map((file, index) => ({
+                    kind: file.type.startsWith('video/') ? 'video' : 'photo',
+                    file,
+                    index
+                })),
                 ...(pendingChatVoiceBlob ? [{ kind: 'voice', file: { name: 'Voice note' }, index: -1 }] : [])
             ];
             pending.forEach(item => {
@@ -4436,7 +4456,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 label.className = 'truncate';
                 label.textContent = item.kind === 'voice'
                     ? 'Recorded voice note · 3 coins'
-                    : `Photo ready · 2 coins · ${item.file.name}`;
+                    : `${item.kind === 'video' ? 'Video clip' : 'Photo'} ready · ${item.kind === 'video' ? 4 : 2} coins · ${item.file.name}`;
                 const remove = document.createElement('button');
                 remove.type = 'button';
                 remove.className = 'flex-shrink-0 text-red-400 hover:text-red-300';
@@ -4456,6 +4476,19 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 row.append(label, remove);
                 container.appendChild(row);
             });
+            updateChatSendButtonCost();
+        }
+
+        function updateChatSendButtonCost() {
+            if (chatSending) return;
+            const submit = document.querySelector('#chatComposer button[type="submit"]');
+            if (!submit) return;
+            const media = pendingChatFiles[0]?.file;
+            const type = pendingChatVoiceBlob ? 'voice'
+                : media ? (media.type.startsWith('video/') ? 'video' : 'image')
+                    : 'text';
+            const cost = { text: 1, image: 2, video: 4, voice: 3 }[type];
+            submit.textContent = `Send · ${cost} coin${cost === 1 ? '' : 's'}`;
         }
 
         function toggleChatEmojiPanel() {
