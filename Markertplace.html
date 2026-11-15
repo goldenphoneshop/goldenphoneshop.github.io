@@ -674,7 +674,7 @@
                     <li>Open Golden Chat from a Vendor's listing or profile to ask about a product.</li>
                     <li>The sender pays 1 coin for text, 2 for a photo, 4 for a video clip, or 3 for a voice note. Only Buyer-to-Vendor text messages and voice notes share half their charge with the Vendor; photos and videos are not shared. The recipient is not charged.</li>
                 </ol>
-                <p class="mt-2"><strong class="text-gold">Available:</strong> coin purchases, paid Golden Chat messages/media, 24-hour listing boosts, monthly Verified Dealer Badges, and stock-alert broadcasts. <strong>Not available:</strong> voice/video calls, cash-outs, vouchers, escrow, daily coins, or referral rewards.</p>
+                <p class="mt-2"><strong class="text-gold">Available:</strong> coin purchases, paid Golden Chat messages/media, 24-hour listing boosts, monthly Verified Dealer Badges, stock-alert broadcasts, and referral rewards. <strong>Not available:</strong> voice/video calls, cash-outs, vouchers, escrow, or daily coins.</p>
             </div>
             <div class="mt-5 grid gap-5 md:grid-cols-2">
                 <section aria-labelledby="vendorCoinUtilitiesHeading">
@@ -714,8 +714,8 @@
                             <p class="mt-1 text-[10px] text-gray-400">Opening the app does not currently award Golden Coins.</p>
                         </article>
                         <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
-                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Refer and earn</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Planned</span></div>
-                            <p class="mt-1 text-[10px] text-gray-400">Referral links and referral coin bonuses are not enabled.</p>
+                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Refer and earn</h4><span class="rounded-full bg-green-500/10 px-2 py-1 text-[9px] font-bold text-green-300">Active</span></div>
+                            <p class="mt-1 text-[10px] text-gray-400">Share your unique profile link. When a new member registers through it, verifies email or phone, and completes the required profile, you earn 10 coins and they earn 5. Rewards are credited once through the secure server.</p>
                         </article>
                     </div>
                 </section>
@@ -845,6 +845,17 @@
                     <p id="profileSettingsStatus" class="hidden text-xs" role="status" aria-live="polite"></p>
                     <button id="saveProfileSettingsButton" type="submit" class="rounded-xl gold-gradient-bg px-5 py-2.5 text-sm font-bold text-black hover:opacity-90">Save profile</button>
                 </form>
+                <div id="referralProgramSettings" class="mt-6 max-w-lg rounded-xl border border-gold/40 bg-gold/5 p-4">
+                    <h3 class="text-sm font-extrabold text-gold"><i class="fa-solid fa-share-nodes mr-2"></i>Refer and earn</h3>
+                    <p class="mt-2 text-xs leading-relaxed text-gray-300">Share your unique link. When a new member registers through it, verifies their email or phone, and completes their required profile, you receive 10 Golden Chat coins and they receive 5. The referral must be attached during sign-up.</p>
+                    <label for="referralLinkInput" class="mt-4 block text-xs font-semibold text-gray-300">Your referral link</label>
+                    <div class="mt-1 flex flex-col gap-2 sm:flex-row">
+                        <input id="referralLinkInput" type="url" readonly placeholder="Loading your secure referral link…" class="min-w-0 flex-1 rounded-lg border border-darkBorder bg-darkBg px-3 py-2 text-xs text-white focus:border-gold focus:outline-none">
+                        <button id="copyReferralLinkButton" type="button" onclick="copyReferralLink()" disabled class="rounded-lg border border-gold/40 px-4 py-2 text-xs font-bold text-gold hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50">Copy link</button>
+                    </div>
+                    <p id="referralLinkStatus" class="mt-2 text-[10px] text-gray-400" role="status" aria-live="polite">Your unique link will load when you open profile settings.</p>
+                    <p id="referralQualificationStatus" class="mt-1 hidden text-[10px] text-gray-300" role="status" aria-live="polite"></p>
+                </div>
                 <div id="verifiedDealerBadgeSettings" class="hidden mt-6 max-w-lg rounded-xl border border-gold/40 bg-gold/5 p-4">
                     <h3 class="text-sm font-extrabold text-gold"><i class="fa-solid fa-certificate mr-2"></i>Verified Dealer Badge</h3>
                     <p class="mt-1 text-xs leading-relaxed text-gray-300">24 Golden Chat coins per calendar month. You can renew manually or opt in to automatic monthly renewal.</p>
@@ -1571,6 +1582,8 @@
         const boostingProductIds = new Set();
         let productBoostExpiryTimer = null;
         let currentUser = null;
+        const pendingSignupReferralCode = (new URLSearchParams(window.location.search).get('ref') || '').trim().slice(0, 32);
+        let referralInfoRequestRevision = 0;
         let notificationsUnsubscribe = null;
         let inAppNotifications = [];
         const stockAlertingProductIds = new Set();
@@ -3493,6 +3506,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             document.getElementById('profileSettingsStatus').classList.add('hidden');
             updateProfileCompletionStatus();
             renderVerifiedDealerBadgeSettings();
+            loadReferralInfo();
         }
 
         function renderVerifiedDealerBadgeSettings() {
@@ -3524,6 +3538,118 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             autoRenewToggle.checked = autoRenewEnabled;
             autoRenewToggle.disabled = verifiedDealerAutoRenewUpdating
                 || (!isActive && !autoRenewEnabled && currentUser.verifiedDealerAutoRenewPaused !== true);
+        }
+
+        async function loadReferralInfo() {
+            const input = document.getElementById('referralLinkInput');
+            const button = document.getElementById('copyReferralLinkButton');
+            const status = document.getElementById('referralLinkStatus');
+            const uid = currentUser?.uid;
+            if (!uid) return;
+
+            const revision = ++referralInfoRequestRevision;
+            input.value = '';
+            button.disabled = true;
+            status.textContent = 'Loading your unique referral link…';
+            try {
+                const result = await firebaseFunctions.httpsCallable('getReferralInfo')();
+                if (revision !== referralInfoRequestRevision || currentUser?.uid !== uid) return;
+                const data = result.data;
+                const referralUrl = new URL(data?.referralLink || '');
+                if (!/^[A-F0-9]{12}$/.test(data?.referralCode || '') ||
+                    referralUrl.protocol !== 'https:' ||
+                    referralUrl.hostname !== 'goldenphoneshop.github.io' ||
+                    referralUrl.pathname !== '/Markertplace.html' ||
+                    referralUrl.searchParams.get('ref') !== data.referralCode ||
+                    data.referrerBonusCoins !== 10 ||
+                    data.referredUserBonusCoins !== 5) {
+                    throw new Error('The referral link response could not be verified.');
+                }
+                input.value = referralUrl.toString();
+                status.textContent = 'Share this link during sign-up. You receive 10 coins and the new member receives 5 after they verify and complete their required profile.';
+            } catch (error) {
+                if (revision !== referralInfoRequestRevision || currentUser?.uid !== uid) return;
+                console.error('Unable to load the member referral link.', error);
+                status.textContent = error.message || 'Your referral link could not load. Check your connection and try again.';
+                status.className = 'mt-2 text-[10px] text-red-300';
+            } finally {
+                if (revision === referralInfoRequestRevision && currentUser?.uid === uid) {
+                    button.disabled = !input.value;
+                }
+            }
+        }
+
+        async function copyReferralLink() {
+            const input = document.getElementById('referralLinkInput');
+            if (!input.value) {
+                showToast('Your referral link is still loading.', 'info');
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(input.value);
+            } catch (error) {
+                console.warn('Clipboard API could not copy the referral link; trying the selection fallback.', error);
+                input.focus();
+                input.select();
+                let copied = false;
+                try {
+                    copied = document.execCommand('copy');
+                } catch (fallbackError) {
+                    console.error('Unable to copy the referral link.', fallbackError);
+                }
+                if (!copied) {
+                    showToast('Copy is unavailable. Select the link and copy it manually.', 'info');
+                    return;
+                }
+            }
+            showToast('Referral link copied. Share it with a new member.', 'success');
+        }
+
+        async function checkReferralQualification() {
+            const uid = currentUser?.uid;
+            if (!uid || firebaseAuth.currentUser?.uid !== uid) return;
+            const status = document.getElementById('referralQualificationStatus');
+            try {
+                const result = await firebaseFunctions.httpsCallable('completeReferralQualification')();
+                if (currentUser?.uid !== uid) return;
+                const data = result.data;
+                if (data?.awarded === true) {
+                    if (data.referrerBonusCoins !== 10 ||
+                        data.referredUserBonusCoins !== 5 ||
+                        !Number.isSafeInteger(data.referredCoinsRemaining) ||
+                        !Number.isSafeInteger(data.referredCoinsRemaining * 2)) {
+                        throw new Error('The referral reward response could not be verified.');
+                    }
+                    quizWallet.coins = data.referredCoinsRemaining;
+                    quizWalletLoaded = true;
+                    quizWalletStatus = 'Balance synced to your account.';
+                    renderQuizWallet();
+                    status.textContent = 'Referral complete: 5 coins were added to your wallet, and your referrer received 10 coins.';
+                    status.className = 'mt-1 text-[10px] text-green-300';
+                    status.classList.remove('hidden');
+                    showToast('Referral complete. 5 Golden Chat coins were added to your wallet.', 'success');
+                    return;
+                }
+                if (data?.eligible === true && data.profileComplete === false) {
+                    status.textContent = 'Your referral reward is pending. Complete the required profile to receive 5 coins; your referrer will receive 10.';
+                    status.className = 'mt-1 text-[10px] text-yellow-200';
+                    status.classList.remove('hidden');
+                    return;
+                }
+                if (data?.duplicate === true) {
+                    status.textContent = 'A referral reward has already been processed for this account.';
+                    status.className = 'mt-1 text-[10px] text-gray-400';
+                    status.classList.remove('hidden');
+                    return;
+                }
+                status.classList.add('hidden');
+            } catch (error) {
+                if (currentUser?.uid !== uid) return;
+                console.error('Unable to complete the referral reward.', error);
+                status.textContent = 'Your profile was saved, but referral status could not be checked. Try saving your profile again when connected.';
+                status.className = 'mt-1 text-[10px] text-red-300';
+                status.classList.remove('hidden');
+            }
         }
 
         function verifiedDealerErrorNotice(error, fallback, isBadgePurchase = false) {
