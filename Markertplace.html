@@ -312,6 +312,10 @@
                         <span class="rounded-full border border-gold/40 px-2 py-0.5 text-[9px] text-gold">COINS</span>
                     </span>
                 </button>
+                <button type="button" onclick="toggleSideMenu(false); openNotificationsModal()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
+                    <i class="fa-solid fa-bell w-5 text-center"></i> Notifications
+                    <span id="notificationMenuUnreadCount" class="ml-auto hidden rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-extrabold text-white" aria-live="polite"></span>
+                </button>
                 <button type="button" onclick="toggleSideMenu(false); openGoldenCoinUtilities()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
                     <i class="fa-solid fa-circle-info w-5 text-center"></i> How Golden Coins work
                 </button>
@@ -670,7 +674,7 @@
                     <li>Open Golden Chat from a Vendor's listing or profile to ask about a product.</li>
                     <li>The sender pays 1 coin for text, 2 for a photo, 4 for a video clip, or 3 for a voice note. Only Buyer-to-Vendor text messages and voice notes share half their charge with the Vendor; photos and videos are not shared. The recipient is not charged.</li>
                 </ol>
-                <p class="mt-2"><strong class="text-gold">Available:</strong> coin purchases, paid Golden Chat messages/media, 24-hour listing boosts, and the monthly Verified Dealer Badge. <strong>Not available:</strong> voice/video calls, cash-outs, vouchers, escrow, daily coins, or referral rewards.</p>
+                <p class="mt-2"><strong class="text-gold">Available:</strong> coin purchases, paid Golden Chat messages/media, 24-hour listing boosts, monthly Verified Dealer Badges, and stock-alert broadcasts. <strong>Not available:</strong> voice/video calls, cash-outs, vouchers, escrow, daily coins, or referral rewards.</p>
             </div>
             <div class="mt-5 grid gap-5 md:grid-cols-2">
                 <section aria-labelledby="vendorCoinUtilitiesHeading">
@@ -689,8 +693,8 @@
                             <p class="mt-1 text-[10px] text-gray-400">Vendors can buy the gold badge for 24 coins per calendar month and opt in to automatic renewal in profile settings. If renewal fails for low balance, it pauses until the Vendor tops up and re-enables it. Purchase grants a marketplace badge but is not independent identity/business verification.</p>
                         </article>
                         <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
-                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Stock notifications</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Planned</span></div>
-                            <p class="mt-1 text-[10px] text-gray-400">Coin-funded broadcasts to marketplace members are not enabled.</p>
+                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Stock notifications</h4><span class="rounded-full bg-green-500/10 px-2 py-1 text-[9px] font-bold text-green-300">Active</span></div>
+                            <p class="mt-1 text-[10px] text-gray-400">Vendors can spend 10 Golden Chat coins to alert their followers about an owned product that is in stock. Followers receive an in-app notification in the Notifications menu.</p>
                         </article>
                     </div>
                 </section>
@@ -721,6 +725,19 @@
                 <button type="button" onclick="closeGoldenCoinUtilities(); openChatPage()" class="rounded-lg border border-gold/40 px-4 py-2 text-xs font-bold text-gold hover:bg-gold/10">Open Golden Chat</button>
                 <button type="button" onclick="closeGoldenCoinUtilities()" class="rounded-lg bg-darkBg px-4 py-2 text-xs font-bold text-gray-300 hover:text-white">Close</button>
             </footer>
+        </section>
+    </div>
+
+    <div id="inAppNotificationsModal" class="fixed inset-0 z-[85] hidden items-center justify-center overflow-y-auto bg-black/80 p-4" role="dialog" aria-modal="true" aria-labelledby="inAppNotificationsHeading" onclick="if (event.target === this) closeNotificationsModal()">
+        <section class="my-8 max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-gold/40 bg-darkCard p-5 shadow-2xl sm:p-6">
+            <header class="flex items-start justify-between gap-3">
+                <div>
+                    <h2 id="inAppNotificationsHeading" class="text-xl font-extrabold text-white"><i class="fa-solid fa-bell mr-2 text-gold"></i>Notifications</h2>
+                    <p class="mt-1 text-xs text-gray-400">Stock alerts from Vendors you follow appear here.</p>
+                </div>
+                <button type="button" onclick="closeNotificationsModal()" class="rounded-lg p-2 text-gray-400 hover:text-white" aria-label="Close notifications"><i class="fa-solid fa-xmark"></i></button>
+            </header>
+            <div id="inAppNotificationList" class="mt-4 space-y-2" aria-live="polite"></div>
         </section>
     </div>
 
@@ -1554,6 +1571,9 @@
         const boostingProductIds = new Set();
         let productBoostExpiryTimer = null;
         let currentUser = null;
+        let notificationsUnsubscribe = null;
+        let inAppNotifications = [];
+        const stockAlertingProductIds = new Set();
         let verifiedDealerBadgePurchasing = false;
         let verifiedDealerAutoRenewUpdating = false;
         let verifiedDealerSettingsUnsubscribe = null;
@@ -5376,6 +5396,117 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             modal.classList.remove('flex');
         }
 
+        function openNotificationsModal() {
+            if (!currentUser) {
+                showToast('Sign in to view your notifications.', 'info');
+                return;
+            }
+            renderInAppNotifications();
+            const modal = document.getElementById('inAppNotificationsModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeNotificationsModal() {
+            const modal = document.getElementById('inAppNotificationsModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function updateNotificationUnreadCount() {
+            const badge = document.getElementById('notificationMenuUnreadCount');
+            const unreadCount = inAppNotifications.filter(notification => !notification.readAt).length;
+            badge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+            badge.classList.toggle('hidden', unreadCount === 0);
+            badge.setAttribute('aria-label', `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`);
+        }
+
+        function renderInAppNotifications() {
+            const container = document.getElementById('inAppNotificationList');
+            if (!currentUser) {
+                container.innerHTML = '<p class="rounded-xl border border-darkBorder bg-darkBg p-4 text-sm text-gray-400">Sign in to view notifications.</p>';
+                return;
+            }
+            if (inAppNotifications.length === 0) {
+                container.innerHTML = '<p class="rounded-xl border border-darkBorder bg-darkBg p-4 text-sm text-gray-400">No notifications yet. Stock alerts from Vendors you follow will appear here.</p>';
+                return;
+            }
+
+            container.innerHTML = inAppNotifications.map(notification => {
+                const createdAt = typeof notification.createdAt?.toDate === 'function'
+                    ? notification.createdAt.toDate().toLocaleString()
+                    : 'Just now';
+                const isUnread = !notification.readAt;
+                return `
+                    <button type="button"
+                        onclick="openStockAlertNotification(this.dataset.notificationId, this.dataset.productId)"
+                        data-notification-id="${escapeHtml(notification.id)}"
+                        data-product-id="${escapeHtml(notification.productId || '')}"
+                        class="w-full rounded-xl border ${isUnread ? 'border-gold/50 bg-gold/5' : 'border-darkBorder bg-darkBg'} p-4 text-left transition hover:border-gold/60">
+                        <span class="flex items-start justify-between gap-3">
+                            <span class="min-w-0">
+                                <span class="block text-sm font-bold text-white">${escapeHtml(notification.title || 'Marketplace notification')}</span>
+                                <span class="mt-1 block text-xs leading-relaxed text-gray-300">${escapeHtml(notification.message || '')}</span>
+                                <span class="mt-2 block text-[10px] text-gray-500">${escapeHtml(createdAt)}</span>
+                            </span>
+                            ${isUnread ? '<span class="flex-shrink-0 rounded-full bg-gold px-2 py-1 text-[9px] font-extrabold text-black">NEW</span>' : ''}
+                        </span>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function subscribeToNotifications() {
+            if (notificationsUnsubscribe) notificationsUnsubscribe();
+            notificationsUnsubscribe = null;
+            inAppNotifications = [];
+            updateNotificationUnreadCount();
+            renderInAppNotifications();
+            if (!currentUser) return;
+
+            const uid = currentUser.uid;
+            notificationsUnsubscribe = firebaseFirestore.collection('users').doc(uid)
+                .collection('notifications')
+                .orderBy('createdAt', 'desc')
+                .limit(50)
+                .onSnapshot(snapshot => {
+                    if (currentUser?.uid !== uid) return;
+                    inAppNotifications = snapshot.docs.map(document => ({
+                        id: document.id,
+                        ...document.data()
+                    }));
+                    updateNotificationUnreadCount();
+                    renderInAppNotifications();
+                }, error => {
+                    if (currentUser?.uid !== uid) return;
+                    console.error('Unable to load marketplace notifications.', error);
+                    showToast('Notifications could not load. Check your connection and Firestore rules.', 'error');
+                });
+        }
+
+        async function openStockAlertNotification(notificationId, productId) {
+            if (!currentUser || !/^[A-Za-z0-9_-]{1,160}$/.test(notificationId || '')) return;
+            const notification = inAppNotifications.find(item => item.id === notificationId);
+            if (!notification) return;
+            if (!notification.readAt) {
+                try {
+                    await firebaseFirestore.collection('users').doc(currentUser.uid)
+                        .collection('notifications').doc(notificationId)
+                        .update({ readAt: firebase.firestore.FieldValue.serverTimestamp() });
+                } catch (error) {
+                    console.error('Unable to mark the notification as read.', error);
+                    showToast('The notification could not be marked as read.', 'error');
+                }
+            }
+
+            closeNotificationsModal();
+            if (typeof productId === 'string' && products.some(product => product.id === productId)) {
+                openDetailModal(productId);
+            } else {
+                showToast('This listing is no longer available.', 'info');
+            }
+        }
+
         function closeChatCoinStore() {
             const modal = document.getElementById('chatCoinStoreModal');
             modal.classList.add('hidden');
@@ -6403,6 +6534,82 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             renderProducts();
         }
 
+        async function sendStockAlert(productId, button) {
+            if (stockAlertingProductIds.has(productId)) return;
+            if (!currentUser || currentUser.role !== 'Vendor') {
+                showToast('Only Vendors can send stock alerts.', 'info');
+                return;
+            }
+            const product = products.find(item => item.id === productId);
+            if (!product || product.ownerUid !== currentUser.uid) {
+                showToast('You can only send stock alerts for your own listings.', 'error');
+                return;
+            }
+            if (!Number.isSafeInteger(product.stock) || product.stock <= 0) {
+                showToast('Add available stock before sending a stock alert.', 'info');
+                return;
+            }
+
+            const requestKey = `goldenEagle_pendingStockAlert:${currentUser.uid}:${productId}`;
+            let operationId = sessionStorage.getItem(requestKey);
+            if (!/^[A-Za-z0-9_-]{20}$/.test(operationId || '')) {
+                operationId = firebaseFirestore.collection('stockAlertBroadcasts').doc().id;
+                sessionStorage.setItem(requestKey, operationId);
+            }
+
+            stockAlertingProductIds.add(productId);
+            const originalMarkup = button?.innerHTML || '';
+            if (button?.isConnected) {
+                button.disabled = true;
+                button.textContent = 'Sending alert…';
+                button.setAttribute('aria-busy', 'true');
+            }
+            try {
+                const result = await firebaseFunctions.httpsCallable('sendStockAlertToFollowers')({
+                    productId,
+                    operationId
+                });
+                const data = result.data;
+                if (data?.sent !== true || data.productId !== productId ||
+                    data.cost !== 10 || typeof data.duplicate !== 'boolean' ||
+                    !Number.isSafeInteger(data.coinsRemaining) || data.coinsRemaining < 0 ||
+                    !Number.isSafeInteger(data.coinsRemaining * 2)) {
+                    throw new Error('The stock alert result could not be verified. Retry this listing to safely check the same request.');
+                }
+
+                sessionStorage.removeItem(requestKey);
+                quizWallet.coins = data.coinsRemaining;
+                quizWalletLoaded = true;
+                quizWalletStatus = 'Balance synced to your account.';
+                renderQuizWallet();
+                showToast(
+                    data.duplicate
+                        ? 'This stock alert was already queued. No additional coins were charged.'
+                        : `Stock alert queued for your followers. ${data.coinsRemaining.toLocaleString()} Golden Chat coins remain.`,
+                    'success'
+                );
+            } catch (error) {
+                console.error('Unable to send stock alert.', error);
+                const definitiveFailure = [
+                    'functions/failed-precondition',
+                    'functions/permission-denied',
+                    'functions/invalid-argument',
+                    'functions/not-found',
+                    'functions/unauthenticated',
+                    'functions/already-exists'
+                ].includes(error.code);
+                if (definitiveFailure) sessionStorage.removeItem(requestKey);
+                showToast(error.message || 'The stock alert could not be sent. Check your connection and try again.', 'error');
+            } finally {
+                stockAlertingProductIds.delete(productId);
+                if (button?.isConnected) {
+                    button.disabled = false;
+                    button.removeAttribute('aria-busy');
+                    button.innerHTML = originalMarkup;
+                }
+            }
+        }
+
         function getProductBoostUntilMs(product) {
             const value = product?.boostedUntil;
             if (value && typeof value.toMillis === 'function') {
@@ -6552,6 +6759,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                             </div>
                             ${currentUser?.role === 'Vendor' && currentUser.uid === prod.ownerUid
                                 ? `<button type="button" onclick="boostProductListing(this.dataset.productId, this)" data-product-id="${escapeHtml(prod.id)}" class="mt-3 w-full rounded-lg border border-gold/50 bg-gold/10 px-3 py-2 text-[10px] font-extrabold text-gold transition hover:bg-gold/20"><i class="fa-solid fa-bolt mr-1"></i>Boost Listing (5 Coins)</button>`
+                                : ''}
+                            ${currentUser?.role === 'Vendor' && currentUser.uid === prod.ownerUid
+                                ? `<button type="button" onclick="sendStockAlert(this.dataset.productId, this)" data-product-id="${escapeHtml(prod.id)}" ${Number(prod.stock) > 0 ? '' : 'disabled'} class="mt-2 w-full rounded-lg border border-darkBorder px-3 py-2 text-[10px] font-extrabold text-gray-200 transition hover:border-gold/50 hover:text-gold disabled:cursor-not-allowed disabled:opacity-50"><i class="fa-solid fa-bell mr-1"></i>${Number(prod.stock) > 0 ? 'Alert Followers (10 Coins)' : 'Restock to alert followers'}</button>`
                                 : ''}
                         </div>
                     </div>
@@ -6870,6 +7080,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         ${currentUser?.role === 'Vendor' && currentUser.uid === prod.ownerUid
                             ? `<button type="button" onclick="boostProductListing(this.dataset.productId, this)" data-product-id="${escapeHtml(prod.id)}" class="w-full rounded-xl border border-gold/50 bg-gold/10 py-3 text-sm font-bold text-gold hover:bg-gold/20"><i class="fa-solid fa-bolt mr-2"></i>Boost Listing (5 Coins)</button>`
                             : ''}
+                        ${currentUser?.role === 'Vendor' && currentUser.uid === prod.ownerUid
+                            ? `<button type="button" onclick="sendStockAlert(this.dataset.productId, this)" data-product-id="${escapeHtml(prod.id)}" ${Number(prod.stock) > 0 ? '' : 'disabled'} class="w-full rounded-xl border border-darkBorder py-3 text-sm font-bold text-gray-200 hover:border-gold/50 hover:text-gold disabled:cursor-not-allowed disabled:opacity-50"><i class="fa-solid fa-bell mr-2"></i>${Number(prod.stock) > 0 ? 'Alert Followers (10 Coins)' : 'Restock to alert followers'}</button>`
+                            : ''}
                         ${currentUser?.role === 'Buyer' && prod.ownerUid
                             ? `<button type="button" onclick="closeDetailModal(); openChatPage(this.dataset.vendorUid, this.dataset.productId)" data-vendor-uid="${escapeHtml(prod.ownerUid)}" data-product-id="${escapeHtml(prod.id)}" class="w-full rounded-xl border border-gold/40 bg-darkBg py-3 text-sm font-bold text-gold hover:bg-gold/10"><i class="fa-solid fa-message mr-2"></i>Ask Vendor if this is available · 1 coin/message</button>`
                             : ''}
@@ -7056,6 +7269,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         function subscribeToQuizAccount() {
             if (quizWalletUnsubscribe) quizWalletUnsubscribe();
             quizWalletUnsubscribe = null;
+            subscribeToNotifications();
             quizWallet = { likes: 0, loves: 0, hates: 0, coins: 0 };
             quizWalletLoaded = false;
             quizWalletStatus = currentUser ? 'Loading your Golden Chat wallet…' : 'Sign in to view your coin balance.';
