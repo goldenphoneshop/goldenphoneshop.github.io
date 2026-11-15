@@ -1237,8 +1237,8 @@
                     <p class="rounded-lg bg-darkBg p-2 text-sm font-bold text-white"><span id="quizWalletLikes">0</span><span class="block text-[10px] font-medium text-gray-400">Likes</span></p>
                     <p class="rounded-lg bg-darkBg p-2 text-sm font-bold text-white"><span id="quizWalletHates">0</span><span class="block text-[10px] font-medium text-gray-400">Hates</span></p>
                 </div>
-                <p class="mt-2 text-[10px] text-gray-400">Each Like on a community post or product uses 1 earned Like credit and is permanent. Comment Likes are separate.</p>
-                <p class="mt-1 text-[10px] text-gray-400">Hates are credits for product Hate reactions; they are separate from quiz rewards.</p>
+                <p class="mt-2 text-[10px] text-gray-400">Each Like on a community post or product uses 1 earned Like credit. You can undo it for 10 seconds; after that it is permanent. Comment Likes are separate.</p>
+                <p class="mt-1 text-[10px] text-gray-400">Hates are for product discussions only. You can undo a product Hate for 10 seconds; after that it is permanent.</p>
                 <p id="quizDailyStatus" class="mt-3 text-xs text-gray-300" role="status">Sign in to view your daily reward plays.</p>
             </div>
             <div class="mt-4 grid gap-3 sm:grid-cols-2">
@@ -1669,6 +1669,7 @@
         let discussionProductId = null;
         let discussionCounts = { likes: 0, hates: 0 };
         let myProductReaction = null;
+        let productReactionRequestPending = false;
         let discussionCommentsUnsubscribe = null;
         let discussionStatsUnsubscribe = null;
         let myReactionUnsubscribe = null;
@@ -2755,7 +2756,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     ${media ? `<div class="space-y-2">${media}</div>` : '<p class="rounded-lg bg-darkBg p-4 text-xs text-gray-400">This media is unavailable.</p>'}
                     ${post.caption ? `<p class="mt-3 whitespace-pre-wrap break-words text-sm text-gray-200">${escapeHtml(post.caption)}</p>` : ''}
                     <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-darkBorder pt-3">
-                        <button type="button" onclick="toggleCommunityPostLike(this)" data-post-id="${escapeHtml(post.id)}" data-liked="false" data-like-count="0" aria-pressed="false" title="Spend 1 Like credit. Likes are permanent." class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] font-bold text-gray-200 hover:border-gold/50 hover:text-gold"><i class="fa-regular fa-thumbs-up mr-1"></i><span data-community-post-like-label>Like</span> · <span data-community-post-like-count>0</span></button>
+                        <button type="button" onclick="toggleCommunityPostLike(this)" data-post-id="${escapeHtml(post.id)}" data-liked="false" data-like-count="0" aria-pressed="false" title="Spend 1 Like credit. Tap Like again within 10 seconds to undo it; after that it is permanent." class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] font-bold text-gray-200 hover:border-gold/50 hover:text-gold"><i class="fa-regular fa-thumbs-up mr-1"></i><span data-community-post-like-label>Like</span> · <span data-community-post-like-count>0</span></button>
                         <button type="button" onclick="reshareCommunityPost(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="rounded-lg border border-gold/30 px-3 py-1.5 text-[10px] font-bold text-gold hover:bg-gold/10"><i class="fa-solid fa-retweet mr-1"></i>Reshare</button>
                         <button type="button" onclick="toggleCommunityComments(this, this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" aria-expanded="${commentsOpen}" class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] font-bold text-gray-200 hover:border-gold/50 hover:text-gold"><i class="fa-regular fa-comment mr-1"></i>Comments</button>
                         ${downloadButton}
@@ -2846,10 +2847,10 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             button.dataset.liked = String(liked);
             button.dataset.likeCount = String(count);
             button.setAttribute('aria-pressed', String(liked));
-            button.disabled = Boolean(liked && currentUser);
+            button.disabled = button.dataset.requestPending === 'true';
             button.title = liked
-                ? 'This Like is permanent.'
-                : 'Spend 1 Like credit. Likes are permanent.';
+                ? 'Tap Like again within 10 seconds to undo it. After that, this Like is permanent.'
+                : 'Spend 1 Like credit. Tap Like again within 10 seconds to undo it; after that it is permanent.';
             const countLabel = button.querySelector('[data-community-post-like-count]');
             const likeLabel = button.querySelector('[data-community-post-like-label]');
             if (countLabel) countLabel.textContent = count;
@@ -2864,7 +2865,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 openAuthModal('signin');
                 return;
             }
+            if (button.dataset.requestPending === 'true') return;
             const uid = currentUser.uid;
+            button.dataset.requestPending = 'true';
             button.disabled = true;
             try {
                 const result = await firebaseFunctions.httpsCallable('toggleCommunityPostLike')({
@@ -2885,10 +2888,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 renderQuizWallet();
                 setCommunityPostLikeButton(button, result.data.liked, result.data.likesCount);
                 showToast(
-                    result.data.alreadyLiked
-                        ? 'You already liked this post. Likes are permanent.'
-                        : `Like added permanently. ${result.data.likesRemaining} Like credits remaining.`,
-                    result.data.alreadyLiked ? 'info' : 'success'
+                    result.data.removed
+                        ? 'Like undone within 10 seconds. Your Like credit was returned.'
+                        : result.data.alreadyLiked
+                            ? 'This Like is permanent and can no longer be undone.'
+                            : `Like added. Tap Like again within 10 seconds to undo it; after that it is permanent. ${result.data.likesRemaining} Like credits remaining.`,
+                    result.data.removed || result.data.alreadyLiked ? 'info' : 'success'
                 );
             } catch (error) {
                 console.error('Unable to update the community post like.', error);
@@ -2899,7 +2904,10 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 }
                 showToast(error.message || 'Your post like could not be saved. Check your connection and try again.', 'error');
             } finally {
-                if (button.isConnected) button.disabled = false;
+                if (button.isConnected) {
+                    button.dataset.requestPending = 'false';
+                    button.disabled = false;
+                }
             }
         }
 
@@ -3514,6 +3522,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     type: 'error'
                 };
             }
+            if (code === 'functions/internal' || code === 'internal' || /^internal$/i.test(message)) {
+                return {
+                    message: 'We couldn’t complete the badge request. Please try again. If the problem continues, contact support.',
+                    type: 'error'
+                };
+            }
             return { message: message || fallback, type: 'error' };
         }
 
@@ -3591,6 +3605,15 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             if (button) button.disabled = true;
             renderVerifiedDealerBadgeSettings();
             try {
+                if (!await refreshGoldenChatCoinBalance()) return;
+                if (quizWallet.coins < 24) {
+                    showToast(
+                        'You don’t have enough Golden Chat coins. The badge costs 24 coins per calendar month. Buy Golden Coins and try again.',
+                        'info'
+                    );
+                    return;
+                }
+
                 const result = await firebaseFunctions.httpsCallable('purchaseVerifiedDealerBadge')();
                 const data = result.data;
                 if ((!data?.purchased && !data?.alreadyActive) ||
@@ -6941,14 +6964,19 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const likeButton = document.querySelector('[aria-label="Like this product"]');
             const hateButton = document.querySelector('[aria-label="Hate this product"]');
             likeButton.setAttribute('aria-pressed', String(myProductReaction === 'like'));
-            likeButton.disabled = myProductReaction === 'like';
+            hateButton.setAttribute('aria-pressed', String(myProductReaction === 'hate'));
+            likeButton.disabled = productReactionRequestPending || myProductReaction === 'hate';
             likeButton.title = myProductReaction === 'like'
-                ? 'This Like is permanent.'
-                : 'Spend 1 Like credit. Likes are permanent.';
-            hateButton.disabled = myProductReaction === 'like';
-            hateButton.title = myProductReaction === 'like'
-                ? 'This Like is permanent and cannot be changed.'
-                : 'Use a Hate credit to react to this product.';
+                ? 'Tap Like again within 10 seconds to undo it. After that, this Like is permanent.'
+                : myProductReaction === 'hate'
+                    ? 'This Hate cannot be changed to a Like.'
+                    : 'Spend 1 Like credit. Tap Like again within 10 seconds to undo it.';
+            hateButton.disabled = productReactionRequestPending || myProductReaction === 'like';
+            hateButton.title = myProductReaction === 'hate'
+                ? 'Tap Hate again within 10 seconds to undo it. After that, this Hate is permanent.'
+                : myProductReaction === 'like'
+                    ? 'This Like cannot be changed to a Hate.'
+                    : 'Use a Hate credit. Tap Hate again within 10 seconds to undo it.';
             likeButton.classList.toggle('border-gold', myProductReaction === 'like');
             likeButton.classList.toggle('text-gold', myProductReaction === 'like');
             hateButton.classList.toggle('border-red-400', myProductReaction === 'hate');
@@ -6962,35 +6990,66 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 return;
             }
             if (!discussionProductId) return;
+            if (productReactionRequestPending) return;
 
+            const uid = currentUser.uid;
+            const productId = discussionProductId;
+            productReactionRequestPending = true;
+            updateProductReactionButtons();
             try {
                 const result = await firebaseFunctions.httpsCallable('applyProductReaction')({
-                    productId: discussionProductId,
+                    productId,
                     type
                 });
-                if (type === 'like') {
-                    if (!Number.isSafeInteger(result.data?.likesRemaining) || result.data.likesRemaining < 0) {
-                        throw new Error('The server returned an invalid Like balance.');
+                if (currentUser?.uid !== uid || discussionProductId !== productId) return;
+                if (type === 'like' || type === 'hate') {
+                    const balanceField = type === 'like' ? 'likesRemaining' : 'hatesRemaining';
+                    const balanceKey = type === 'like' ? 'likes' : 'hates';
+                    const remaining = result.data?.[balanceField];
+                    if (!Number.isSafeInteger(remaining) || remaining < 0) {
+                        throw new Error(`The server returned an invalid ${type === 'like' ? 'Like' : 'Hate'} balance.`);
                     }
-                    quizWallet.likes = result.data.likesRemaining;
+                    quizWallet[balanceKey] = remaining;
                     quizWalletLoaded = true;
                     renderQuizWallet();
-                    if (result.data.alreadyApplied) {
-                        showToast('You already liked this product. Product Likes are permanent.', 'info');
+                    if (result.data.removed) {
+                        showToast(
+                            `Product ${type === 'like' ? 'Like' : 'Hate'} undone within 10 seconds. Your credit was returned.`,
+                            'info'
+                        );
+                    } else if (result.data.alreadyApplied) {
+                        showToast(
+                            type === 'like'
+                                ? 'This Product Like is permanent and can no longer be undone.'
+                                : 'This Product Hate is permanent and can no longer be undone.',
+                            'info'
+                        );
                     } else {
-                        showToast(`Product Like added permanently. ${result.data.likesRemaining} Like credits remaining.`, 'success');
+                        showToast(
+                            type === 'like'
+                                ? `Product Like added. Tap Like again within 10 seconds to undo it; after that it is permanent. ${remaining} Like credits remaining.`
+                                : `Product Hate added. Tap Hate again within 10 seconds to undo it; after that it is permanent. ${remaining} Hate credits remaining.`,
+                            'success'
+                        );
                     }
                 } else if (!result.data.removed) {
                     showToast(`${type} added from your balance.`, 'success');
                 }
             } catch (error) {
                 console.error('Unable to save product reaction.', error);
+                if (currentUser?.uid !== uid || discussionProductId !== productId) return;
                 if (error.code === 'functions/failed-precondition') {
                     showToast(error.message || 'You do not have enough reaction credits.', 'info');
-                    if (type === 'like') openQuizStore();
+                    if ((type === 'like' || type === 'hate') &&
+                        /credit|earn|add/i.test(error.message || '')) {
+                        openQuizStore();
+                    }
                     return;
                 }
                 showToast('Your reaction could not be saved. Check your connection and sign-in.', 'error');
+            } finally {
+                productReactionRequestPending = false;
+                updateProductReactionButtons();
             }
         }
 
