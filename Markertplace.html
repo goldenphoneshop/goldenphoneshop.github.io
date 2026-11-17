@@ -1502,6 +1502,7 @@
     <!-- NOTIFICATION TOAST CONTAINER -->
     <div id="toastContainer" class="fixed top-20 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
+    <script src="functions/escrow-fee.js"></script>
     <!-- APPLICATION LOGIC SCRIPT -->
     <script>
         const firebaseConfig = {
@@ -1713,12 +1714,14 @@
         let discussionProductId = null;
         let productCommentReplyTarget = null;
         let discussionCounts = { likes: 0, hates: 0 };
+        let discussionStatsError = false;
         let myProductReaction = null;
         let productReactionRequestPending = false;
         let discussionCommentsUnsubscribe = null;
         let discussionStatsUnsubscribe = null;
         let myReactionUnsubscribe = null;
         const profileProductStatsUnsubscribers = new Map();
+        const feedProductStatsSubscriptions = new Map();
         const discussionAudioUrls = new Map();
         let productVoiceRecorder = null;
         let productVoiceStream = null;
@@ -2796,7 +2799,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 ? `<button type="button" onclick="openCommunityAuthorProfile(this.dataset.uid)" data-uid="${escapeHtml(post.ownerUid)}" class="truncate text-left text-xs font-bold text-gold hover:underline">${escapeHtml(author)}</button>`
                 : `<span class="truncate text-xs font-bold text-gold">${escapeHtml(author)}</span>`;
             const authorIdentity = `<div class="flex min-w-0 items-center gap-1">${profileAction}${renderVerifiedDealerBadge(post.ownerUid)}</div>`;
-            const downloadable = post.mediaOwnerUid === currentUser?.uid
+            const downloadable = currentUser && post.mediaOwnerUid === currentUser.uid
                 ? currentUser.allowMediaDownloads === true
                 : currentUser && communityDownloadPermissionCache.get(post.mediaOwnerUid) === true;
             const downloadButton = downloadable
@@ -2815,7 +2818,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     ${media ? `<div class="space-y-2">${media}</div>` : '<p class="rounded-lg bg-darkBg p-4 text-xs text-gray-400">This media is unavailable.</p>'}
                     ${post.caption ? `<p class="mt-3 whitespace-pre-wrap break-words text-sm text-gray-200">${escapeHtml(post.caption)}</p>` : ''}
                     <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-darkBorder pt-3">
-                        <button type="button" onclick="toggleCommunityPostLike(this)" data-post-id="${escapeHtml(post.id)}" data-liked="false" data-like-count="0" aria-pressed="false" title="Spend 1 Like credit. Tap Like again within 10 seconds to undo it; after that it is permanent." class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] font-bold text-gray-200 hover:border-gold/50 hover:text-gold"><i class="fa-regular fa-thumbs-up mr-1"></i><span data-community-post-like-label>Like</span> · <span data-community-post-like-count>0</span></button>
+                        <button type="button" onclick="toggleCommunityPostLike(this)" data-community-post-like data-post-id="${escapeHtml(post.id)}" data-liked="false" data-like-count="" aria-pressed="false" title="Spend 1 Like credit. Tap Like again within 10 seconds to undo it; after that it is permanent." class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] font-bold text-gray-200 hover:border-gold/50 hover:text-gold"><i class="fa-regular fa-thumbs-up mr-1"></i><span data-community-post-like-label>Like</span> · <span data-community-post-like-count>—</span></button>
                         <button type="button" onclick="reshareCommunityPost(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="rounded-lg border border-gold/30 px-3 py-1.5 text-[10px] font-bold text-gold hover:bg-gold/10"><i class="fa-solid fa-retweet mr-1"></i>Reshare</button>
                         <button type="button" onclick="toggleCommunityComments(this, this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" aria-expanded="${commentsOpen}" class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] font-bold text-gray-200 hover:border-gold/50 hover:text-gold"><i class="fa-regular fa-comment mr-1"></i>Comments</button>
                         ${downloadButton}
@@ -2849,48 +2852,51 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         function subscribeToCommunityPostLikes(postId) {
             let subscription = communityPostLikeUnsubscribers.get(postId);
             if (!subscription) {
-                subscription = { stats: null, liked: null, uid: null };
+                subscription = { stats: null, liked: null, uid: null, count: null, isLiked: false, error: false };
+                communityPostLikeUnsubscribers.set(postId, subscription);
                 subscription.stats = firebaseFirestore.collection('communityPostStats').doc(postId)
                     .onSnapshot(snapshot => {
-                        const count = Number.isSafeInteger(snapshot.data()?.likes) && snapshot.data().likes >= 0
+                        subscription.count = Number.isSafeInteger(snapshot.data()?.likes) && snapshot.data().likes >= 0
                             ? snapshot.data().likes
                             : 0;
-                        document.querySelectorAll('[data-community-post-id] [data-post-id]').forEach(button => {
-                            if (button.dataset.postId === postId &&
-                                button.hasAttribute('data-community-post-like-count')) {
-                                setCommunityPostLikeButton(button, button.dataset.liked === 'true', count);
-                            }
-                        });
+                        subscription.error = false;
+                        updateCommunityPostLikeButtons(postId, subscription);
                     }, error => {
                         console.error('Unable to load community post likes.', error);
+                        subscription.error = true;
+                        updateCommunityPostLikeButtons(postId, subscription);
                     });
-                communityPostLikeUnsubscribers.set(postId, subscription);
             }
             const uid = currentUser?.uid || null;
-            if (subscription.uid === uid) return;
+            if (subscription.uid === uid) {
+                updateCommunityPostLikeButtons(postId, subscription);
+                return;
+            }
             if (subscription.liked) subscription.liked();
             subscription.liked = null;
             subscription.uid = uid;
+            subscription.isLiked = false;
+            updateCommunityPostLikeButtons(postId, subscription);
             if (!uid) {
-                document.querySelectorAll('[data-community-post-id] [data-post-id]').forEach(button => {
-                    if (button.dataset.postId === postId &&
-                        button.hasAttribute('data-community-post-like-count')) {
-                        setCommunityPostLikeButton(button, false, Number(button.dataset.likeCount) || 0);
-                    }
-                });
                 return;
             }
             subscription.liked = firebaseFirestore.collection('communityPosts').doc(postId)
                 .collection('likes').doc(uid).onSnapshot(snapshot => {
-                    document.querySelectorAll('[data-community-post-id] [data-post-id]').forEach(button => {
-                        if (button.dataset.postId === postId &&
-                            button.hasAttribute('data-community-post-like-count')) {
-                            setCommunityPostLikeButton(button, snapshot.exists, Number(button.dataset.likeCount) || 0);
-                        }
-                    });
+                    subscription.isLiked = snapshot.exists;
+                    updateCommunityPostLikeButtons(postId, subscription);
                 }, error => {
                     console.error('Unable to load your community post like.', error);
                 });
+        }
+
+        function updateCommunityPostLikeButtons(postId, subscription) {
+            document.querySelectorAll('[data-community-post-like]').forEach(button => {
+                if (button.dataset.postId !== postId) return;
+                setCommunityPostLikeButton(button, subscription.isLiked, subscription.count);
+                if (subscription.error) {
+                    button.querySelector('[data-community-post-like-count]').textContent = 'Unavailable';
+                }
+            });
         }
 
         function cleanupCommunityPostLikeSubscriptions() {
@@ -2908,7 +2914,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
         function setCommunityPostLikeButton(button, liked, count) {
             button.dataset.liked = String(liked);
-            button.dataset.likeCount = String(count);
+            button.dataset.likeCount = count === null ? '' : String(count);
             button.setAttribute('aria-pressed', String(liked));
             button.disabled = button.dataset.requestPending === 'true';
             button.title = liked
@@ -2916,7 +2922,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 : 'Spend 1 Like credit. Tap Like again within 10 seconds to undo it; after that it is permanent.';
             const countLabel = button.querySelector('[data-community-post-like-count]');
             const likeLabel = button.querySelector('[data-community-post-like-label]');
-            if (countLabel) countLabel.textContent = count;
+            if (countLabel) countLabel.textContent = count === null ? '—' : count.toLocaleString();
             if (likeLabel) likeLabel.textContent = liked ? 'Liked' : 'Like';
             button.classList.toggle('border-gold/50', liked);
             button.classList.toggle('text-gold', liked);
@@ -2949,7 +2955,15 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 quizWallet.likes = result.data.likesRemaining;
                 quizWalletLoaded = true;
                 renderQuizWallet();
-                setCommunityPostLikeButton(button, result.data.liked, result.data.likesCount);
+                const subscription = communityPostLikeUnsubscribers.get(button.dataset.postId);
+                if (subscription) {
+                    subscription.count = result.data.likesCount;
+                    subscription.isLiked = result.data.liked;
+                    subscription.error = false;
+                    updateCommunityPostLikeButtons(button.dataset.postId, subscription);
+                } else {
+                    setCommunityPostLikeButton(button, result.data.liked, result.data.likesCount);
+                }
                 showToast(
                     result.data.removed
                         ? 'Like undone within 10 seconds. Your Like credit was returned.'
@@ -4369,7 +4383,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         <span class="mt-2 block truncate text-sm font-bold text-white">${escapeHtml(product.title)}</span>
                         <span class="mt-1 block text-xs text-gold">₦${Number(product.price).toLocaleString()}</span>
                         <span class="mt-1 block text-[10px] text-gray-400">Stock: ${Number(product.stock) || 0}</span>
-                        <span class="mt-1 block text-[10px] text-gray-300"><i class="fa-solid fa-thumbs-up mr-1 text-gold"></i><span data-profile-product-likes="${escapeHtml(product.id)}">0</span> Likes</span>
+                        <span class="mt-1 block text-[10px] text-gray-300"><i class="fa-solid fa-thumbs-up mr-1 text-gold"></i><span data-profile-product-likes="${escapeHtml(product.id)}">—</span> Likes</span>
                     </button>`;
                 }).join('');
                 profileProducts.forEach(product => subscribeToProfileProductStats(product.id));
@@ -4394,6 +4408,11 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     });
                 }, error => {
                     console.error('Unable to load product Like count on member profile.', error);
+                    document.querySelectorAll('[data-profile-product-likes]').forEach(label => {
+                        if (label.dataset.profileProductLikes === productId) {
+                            label.textContent = 'Unavailable';
+                        }
+                    });
                 });
             profileProductStatsUnsubscribers.set(productId, unsubscribe);
         }
@@ -6949,6 +6968,27 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             return 0;
         }
 
+        function renderEscrowFeePreview(productPrice) {
+            try {
+                if (typeof calculateEscrowFee !== 'function') {
+                    throw new Error('Escrow fee calculator is unavailable.');
+                }
+                const price = Number(productPrice);
+                const fee = calculateEscrowFee(price);
+                const totalKobo = Math.round(price * 100) + Math.round(fee * 100);
+                if (!Number.isSafeInteger(totalKobo)) throw new RangeError('Total price is too large.');
+                return `<div class="mt-2 space-y-1 text-[10px] text-gray-300">
+                    <p>Vendor Product Price: ${formatNaira(price)}</p>
+                    <p>Escrow &amp; Service Protection Fee: ${formatNaira(fee)}</p>
+                    <p class="font-bold text-gold">Estimated Total Payable: ${formatNaira(totalKobo / 100)}</p>
+                    <p class="text-gray-500">Preview only; protected checkout is not available.</p>
+                </div>`;
+            } catch (error) {
+                console.error('Unable to calculate the escrow fee preview.', error);
+                return '<p class="mt-2 text-[10px] text-red-300">Escrow fee preview unavailable; protected checkout is not available.</p>';
+            }
+        }
+
         function renderProducts() {
             const grid = document.getElementById('productGrid');
             const empty = document.getElementById('emptyState');
@@ -7011,6 +7051,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
             if (filtered.length === 0) {
                 grid.innerHTML = '';
+                syncFeedProductStats([]);
                 empty.classList.remove('hidden');
                 empty.querySelector('h3').textContent = selectedProductFeed === 'following'
                     ? 'Your Following FYP is empty'
@@ -7064,6 +7105,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                                 <span class="text-yellow-400 font-bold"><i class="fa-solid fa-star text-xs"></i> ${Number(prod.rating) || 5.0}</span>
                             </div>
                             ${renderMemberFollowButton({ ...prod, role: 'Vendor' })}
+                            <p class="mb-3 text-xs text-gray-300"><i class="fa-solid fa-thumbs-up mr-1 text-gold" aria-hidden="true"></i><span data-feed-product-likes="${escapeHtml(prod.id)}">—</span> Likes</p>
+                            ${renderEscrowFeePreview(prod.price)}
 
                             <div class="flex items-center justify-between gap-2">
                                 <div>
@@ -7085,6 +7128,43 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     </div>
                 </div>
             `).join('');
+            syncFeedProductStats(filtered.map(product => String(product.id)));
+        }
+
+        function syncFeedProductStats(productIds) {
+            const visibleIds = new Set(productIds);
+            feedProductStatsSubscriptions.forEach((subscription, productId) => {
+                if (visibleIds.has(productId)) return;
+                subscription.unsubscribe();
+                feedProductStatsSubscriptions.delete(productId);
+            });
+            visibleIds.forEach(productId => {
+                let subscription = feedProductStatsSubscriptions.get(productId);
+                if (!subscription) {
+                    subscription = { count: null, error: false, unsubscribe: null };
+                    feedProductStatsSubscriptions.set(productId, subscription);
+                    subscription.unsubscribe = firebaseFirestore.collection('productDiscussionStats').doc(productId)
+                        .onSnapshot(snapshot => {
+                            const likes = snapshot.data()?.likes;
+                            subscription.count = Number.isSafeInteger(likes) && likes >= 0 ? likes : 0;
+                            subscription.error = false;
+                            updateFeedProductLikeCount(productId, subscription);
+                        }, error => {
+                            console.error('Unable to load marketplace product Like count.', error);
+                            subscription.error = true;
+                            updateFeedProductLikeCount(productId, subscription);
+                        });
+                }
+                updateFeedProductLikeCount(productId, subscription);
+            });
+        }
+
+        function updateFeedProductLikeCount(productId, subscription) {
+            document.querySelectorAll('[data-feed-product-likes]').forEach(label => {
+                if (label.dataset.feedProductLikes !== productId) return;
+                label.textContent = subscription.error ? 'Unavailable'
+                    : subscription.count === null ? '—' : subscription.count.toLocaleString();
+            });
         }
 
         async function boostProductListing(productId, button) {
@@ -7407,6 +7487,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         <button onclick="addToCart(this.dataset.productId)" data-product-id="${escapeHtml(prod.id)}" class="w-full py-3 gold-gradient-bg font-extrabold text-black rounded-xl text-sm gold-glow hover:opacity-95 transition flex items-center justify-center gap-2">
                             <i class="fa-solid fa-cart-plus"></i> Add to Cart
                         </button>
+                        ${firebaseConfig.projectId !== 'golden-eagle-marketplace' && prod.ownerUid
+                            ? `<button type="button" onclick="startEscrowTestCheckout(this.dataset.productId, this)" data-product-id="${escapeHtml(prod.id)}" class="w-full rounded-xl border border-gold/40 py-3 text-sm font-bold text-gold">Test escrow checkout</button>`
+                            : ''}
                         
                         <div class="grid grid-cols-2 gap-2">
                             <button onclick="askAiAboutItem(this.dataset.productTitle)" data-product-title="${escapeHtml(prod.title)}" class="py-2 bg-darkBg border border-darkBorder hover:border-gold/50 text-gray-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1">
@@ -7425,6 +7508,55 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             subscribeToProductDiscussion(prod.id);
         }
 
+        async function startEscrowTestCheckout(productId, button) {
+            if (firebaseConfig.projectId === 'golden-eagle-marketplace') {
+                showToast('Escrow checkout is not available on the live marketplace.', 'error');
+                return;
+            }
+            if (!currentUser) {
+                openAuthModal('signin');
+                return;
+            }
+            const product = products.find(item => item.id === productId);
+            if (!product) {
+                showToast('This listing is no longer available.', 'error');
+                return;
+            }
+            const price = Number(product.price);
+            let fee;
+            try {
+                fee = calculateEscrowFee(price);
+            } catch (error) {
+                console.error('Unable to calculate test escrow checkout.', error);
+                showToast('The test checkout total could not be calculated.', 'error');
+                return;
+            }
+            const total = (Math.round(price * 100) + Math.round(fee * 100)) / 100;
+            if (!window.confirm(`Test checkout only. Vendor price: ${formatNaira(price)}; fee: ${formatNaira(fee)}; total: ${formatNaira(total)}. Continue?`)) return;
+            const checkoutEmail = currentUser.email || window.prompt('Enter an email address for your test payment receipt:');
+            if (!checkoutEmail) return;
+            button.disabled = true;
+            try {
+                const result = await firebaseFunctions.httpsCallable('initiateEscrowCheckout')({
+                    productId, expectedPrice: price, checkoutEmail: checkoutEmail.trim()
+                });
+                if (result.data?.productPrice !== price || result.data?.platformFee !== fee ||
+                    result.data?.totalPaid !== total) {
+                    throw new Error('The checkout total changed. Refresh and review the price.');
+                }
+                const checkoutUrl = new URL(result.data?.checkoutUrl);
+                if (checkoutUrl.protocol !== 'https:' || checkoutUrl.hostname !== 'checkout.flutterwave.com') {
+                    throw new Error('The checkout link is invalid.');
+                }
+                window.location.assign(checkoutUrl.href);
+            } catch (error) {
+                console.error('Unable to start escrow test checkout.', error);
+                showToast(error.message || 'Test checkout could not start.', 'error');
+            } finally {
+                button.disabled = false;
+            }
+        }
+
         function updateDiscussionComposer() {
             const isSignedIn = Boolean(currentUser);
             document.getElementById('productDiscussionComposer').classList.toggle('hidden', !isSignedIn);
@@ -7438,7 +7570,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
             if (discussionProductId !== productId) cancelProductCommentReply();
             discussionProductId = productId;
-            discussionCounts = { likes: 0, hates: 0 };
+            discussionCounts = { likes: null, hates: 0 };
+            discussionStatsError = false;
             myProductReaction = null;
             updateProductReactionButtons();
             updateDiscussionComposer();
@@ -7458,6 +7591,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 .collection('productDiscussionStats').doc(productId)
                 .onSnapshot(snapshot => {
                     const stats = snapshot.exists ? snapshot.data() : {};
+                    discussionStatsError = false;
                     discussionCounts = {
                         likes: Number.isInteger(stats.likes) ? stats.likes : 0,
                         hates: Number.isInteger(stats.hates) ? stats.hates : 0
@@ -7465,6 +7599,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     updateProductReactionButtons();
                 }, error => {
                     console.error('Unable to load product discussion reaction counts.', error);
+                    discussionStatsError = true;
+                    updateProductReactionButtons();
                 });
 
             subscribeToMyProductReaction();
@@ -7491,7 +7627,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         }
 
         function updateProductReactionButtons() {
-            document.getElementById('productLikeCount').textContent = discussionCounts.likes;
+            document.getElementById('productLikeCount').textContent = discussionStatsError ? 'Unavailable' : discussionCounts.likes === null
+                ? '—' : discussionCounts.likes.toLocaleString();
             document.getElementById('productHateCount').textContent = discussionCounts.hates;
             const likeButton = document.querySelector('[aria-label="Like this product"]');
             const hateButton = document.querySelector('[aria-label="Hate this product"]');
@@ -7843,6 +7980,33 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 const paymentStatus = url.searchParams.get('status');
                 if (!txRef && !transactionId) return;
                 if (!currentUser) return;
+
+                if (txRef?.startsWith('escrow-')) {
+                    if (paymentStatus && paymentStatus.toLowerCase() !== 'successful') {
+                        url.searchParams.delete('tx_ref');
+                        url.searchParams.delete('transaction_id');
+                        url.searchParams.delete('status');
+                        window.history.replaceState({}, document.title, url.toString());
+                        showToast('The test checkout did not complete. If charged, keep your receipt and contact support.', 'info');
+                        return;
+                    }
+                    if (!transactionId) {
+                        showToast('The test payment needs verification. Keep your receipt and contact support.', 'error');
+                        return;
+                    }
+                    try {
+                        await firebaseFunctions.httpsCallable('verifyEscrowPayment')({ txRef, transactionId });
+                        url.searchParams.delete('tx_ref');
+                        url.searchParams.delete('transaction_id');
+                        url.searchParams.delete('status');
+                        window.history.replaceState({}, document.title, url.toString());
+                        showToast('Test payment verified. This is not a live escrow order.', 'success');
+                    } catch (error) {
+                        console.error('Unable to verify escrow test payment.', error);
+                        showToast(error.message || 'Test payment verification is pending. Keep your receipt and retry.', 'error');
+                    }
+                    return;
+                }
 
                 if (paymentStatus && paymentStatus.toLowerCase() !== 'successful') {
                     url.searchParams.delete('tx_ref');
