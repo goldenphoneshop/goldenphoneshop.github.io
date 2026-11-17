@@ -1226,6 +1226,10 @@
                     <button type="button" onclick="openAuthModal('signin')" class="rounded-lg gold-gradient-bg px-4 py-2 text-xs font-bold text-black">Sign in to join the discussion</button>
                 </div>
                 <form id="productDiscussionComposer" class="hidden mt-4 space-y-2" onsubmit="postProductComment(event)">
+                    <div id="productCommentReplyContext" class="hidden flex items-center justify-between gap-2 rounded-lg border border-gold/30 bg-gold/5 px-3 py-2 text-xs text-gold">
+                        <span id="productCommentReplyLabel"></span>
+                        <button type="button" onclick="cancelProductCommentReply()" class="text-gray-300 hover:text-white">Cancel reply</button>
+                    </div>
                     <label for="productCommentInput" class="sr-only">Write a product comment</label>
                     <textarea id="productCommentInput" maxlength="2000" rows="2" placeholder="Write a comment…" class="w-full resize-y rounded-xl border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-gold focus:outline-none"></textarea>
                     <div class="flex flex-wrap items-center justify-between gap-2">
@@ -1247,7 +1251,7 @@
                     </div>
                     <p id="voiceRecordStatus" class="hidden text-[11px] text-gray-400" role="status" aria-live="polite"></p>
                     <div id="pendingProductVoice" class="hidden flex items-center gap-2 rounded-xl border border-darkBorder bg-darkBg p-2">
-                        <audio id="pendingProductVoiceAudio" controls class="h-9 min-w-0 flex-1"></audio>
+                        <audio id="pendingProductVoiceAudio" controls controlslist="nodownload" oncontextmenu="return false" class="h-9 min-w-0 flex-1"></audio>
                         <button type="button" onclick="clearPendingProductVoice()" class="text-xs text-red-400" aria-label="Remove voice recording">Remove</button>
                     </div>
                 </form>
@@ -1668,6 +1672,7 @@
         const communityCommentVoiceStates = new Map();
         const communityCommentAudioUrls = new Map();
         const communityCommentDrafts = new Map();
+        const communityCommentReplyTargets = new Map();
         const communityMediaObjectUrls = new Set();
         const communityDownloadPermissionCache = new Map();
         const verifiedDealerBadgeExpiries = new Map();
@@ -1706,6 +1711,7 @@
         let discardChatVoiceOnStop = false;
         const attemptedLegacyProductMigrations = new Set();
         let discussionProductId = null;
+        let productCommentReplyTarget = null;
         let discussionCounts = { likes: 0, hates: 0 };
         let myProductReaction = null;
         let productReactionRequestPending = false;
@@ -1809,6 +1815,8 @@ function initializeFirebaseAuth() {
             stopVerifiedDealerSettingsSubscription();
             clearAllCommunityCommentVoices();
             communityCommentDrafts.clear();
+            communityCommentReplyTargets.clear();
+            cancelProductCommentReply();
             closeChatContactsModal();
             goldenChatContacts = { followers: [], following: [] };
             if (chatVoiceRecorder?.state === 'recording') {
@@ -1841,6 +1849,8 @@ function initializeFirebaseAuth() {
             stopVerifiedDealerSettingsSubscription();
             clearAllCommunityCommentVoices();
             communityCommentDrafts.clear();
+            communityCommentReplyTargets.clear();
+            cancelProductCommentReply();
             stopGoldenChatUnreadSubscription();
             currentUser = null;
             renderCommunityPosts();
@@ -1865,6 +1875,8 @@ function initializeFirebaseAuth() {
             stopVerifiedDealerSettingsSubscription();
             clearAllCommunityCommentVoices();
             communityCommentDrafts.clear();
+            communityCommentReplyTargets.clear();
+            cancelProductCommentReply();
         }
         currentUser = {
             uid: user.uid,
@@ -2752,6 +2764,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         communityCommentDrafts.set(post.id, input.value)
                     );
                     syncCommunityCommentVoiceComposer(post.id);
+                    syncCommunityReplyComposer(post.id);
                 }
                 if (!openCommunityCommentPostIds.has(post.id)) return;
                 if (communityCommentDocs.has(post.id)) {
@@ -2812,10 +2825,14 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                             ${commentsOpen ? '<p class="text-xs text-gray-500">Loading comments…</p>' : ''}
                         </div>
                         <form class="mt-3 space-y-2" data-post-id="${escapeHtml(post.id)}" onsubmit="postCommunityComment(event, this.dataset.postId)">
-                            <textarea aria-label="Write a comment" required maxlength="2000" rows="2" placeholder="Write a comment…" class="w-full resize-y rounded-xl border border-darkBorder bg-darkBg px-3 py-2 text-xs text-white placeholder:text-gray-500 focus:border-gold focus:outline-none"></textarea>
+                            <div data-community-reply-context class="hidden flex items-center justify-between gap-2 rounded-lg border border-gold/30 bg-gold/5 px-3 py-2 text-xs text-gold">
+                                <span data-community-reply-label></span>
+                                <button type="button" onclick="cancelCommunityCommentReply(this.form.dataset.postId)" class="text-gray-300 hover:text-white">Cancel reply</button>
+                            </div>
+                            <textarea aria-label="Write a comment" maxlength="2000" rows="2" placeholder="Write a comment…" class="w-full resize-y rounded-xl border border-darkBorder bg-darkBg px-3 py-2 text-xs text-white placeholder:text-gray-500 focus:border-gold focus:outline-none"></textarea>
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <div class="flex items-center gap-2">
-                                    <span class="text-[10px] text-gray-500">Text required; voice optional.</span>
+                                    <span class="text-[10px] text-gray-500">Send text, a voice note, or both.</span>
                                     <button type="button" onclick="startCommunityCommentVoiceRecording(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="${isRecording ? 'hidden' : ''} rounded-lg border border-darkBorder px-2.5 py-1.5 text-[10px] font-semibold text-gray-300 hover:border-gold/50 hover:text-gold"><i class="fa-solid fa-microphone mr-1"></i>Record voice</button>
                                     <button type="button" onclick="stopCommunityCommentVoiceRecording(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="${isRecording ? '' : 'hidden'} rounded-lg border border-red-400/40 px-2.5 py-1.5 text-[10px] font-semibold text-red-300"><i class="fa-solid fa-stop mr-1"></i>Stop</button>
                                     <button type="button" onclick="clearCommunityCommentVoice(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="${voiceState?.blob ? '' : 'hidden'} rounded-lg border border-darkBorder px-2.5 py-1.5 text-[10px] text-gray-400 hover:text-white">Remove voice</button>
@@ -2823,7 +2840,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                                 </div>
                                 <button type="submit" class="rounded-lg gold-gradient-bg px-3 py-1.5 text-[10px] font-bold text-black">Post comment</button>
                             </div>
-                            <audio data-community-voice-preview controls preload="metadata" class="${voiceState?.blob ? 'mt-2 h-9 w-full' : 'hidden'}" ${voiceState?.url ? `src="${escapeHtml(voiceState.url)}"` : ''}></audio>
+                            <audio data-community-voice-preview controls controlslist="nodownload" oncontextmenu="return false" preload="metadata" class="${voiceState?.blob ? 'mt-2 h-9 w-full' : 'hidden'}" ${voiceState?.url ? `src="${escapeHtml(voiceState.url)}"` : ''}></audio>
                         </form>
                     </section>
                 </article>`;
@@ -2985,7 +3002,91 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             communityCommentUnsubscribers.set(postId, unsubscribe);
         }
 
+        function orderCommentThreads(commentDocs) {
+            const byId = new Map(commentDocs.map(doc => [doc.id, doc]));
+            const children = new Map();
+            const roots = [];
+            commentDocs.forEach(doc => {
+                const parentId = doc.data().parentCommentId;
+                if (typeof parentId === 'string' && parentId !== doc.id && byId.has(parentId)) {
+                    if (!children.has(parentId)) children.set(parentId, []);
+                    children.get(parentId).push(doc);
+                } else {
+                    roots.push(doc);
+                }
+            });
+            const ordered = [];
+            const visited = new Set();
+            const appendTree = root => {
+                const pending = [root];
+                while (pending.length) {
+                    const doc = pending.pop();
+                    if (visited.has(doc.id)) continue;
+                    visited.add(doc.id);
+                    ordered.push(doc);
+                    const replies = children.get(doc.id) || [];
+                    for (let i = replies.length - 1; i >= 0; i--) pending.push(replies[i]);
+                }
+            };
+            roots.forEach(appendTree);
+            commentDocs.forEach(appendTree);
+            return { ordered, byId };
+        }
+
+        function appendCommentReplyReference(row, comment, byId) {
+            if (typeof comment.parentCommentId !== 'string') return;
+            row.classList.add('ml-4', 'sm:ml-8', 'border-l-2', 'border-l-gold/40');
+            const reference = document.createElement('p');
+            reference.className = 'mb-1 text-[10px] text-gray-400';
+            const parent = byId.get(comment.parentCommentId);
+            reference.textContent = parent
+                ? `Reply to ${parent.data().authorName || 'Marketplace member'}`
+                : 'Reply to an unavailable or earlier comment';
+            row.append(reference);
+        }
+
+        function configureVoicePlayback(audio) {
+            audio.setAttribute('controlslist', 'nodownload');
+            audio.addEventListener('contextmenu', event => event.preventDefault());
+        }
+
+        function syncCommunityReplyComposer(postId) {
+            const target = communityCommentReplyTargets.get(postId);
+            document.querySelectorAll('form[data-post-id]').forEach(form => {
+                if (form.dataset.postId !== postId) return;
+                const context = form.querySelector('[data-community-reply-context]');
+                const label = form.querySelector('[data-community-reply-label]');
+                const input = form.querySelector('textarea');
+                const button = form.querySelector('button[type="submit"]');
+                context.classList.toggle('hidden', !target);
+                label.textContent = target ? `Replying to ${target.authorName}` : '';
+                input.placeholder = target ? 'Write a reply…' : 'Write a comment…';
+                input.setAttribute('aria-label', target ? 'Write a reply' : 'Write a comment');
+                if (!button.disabled) button.textContent = target ? 'Post reply' : 'Post comment';
+            });
+        }
+
+        function selectCommunityCommentReply(postId, commentDoc, container) {
+            if (!currentUser) {
+                showToast('Sign in to reply to comments.', 'info');
+                openAuthModal('signin');
+                return;
+            }
+            communityCommentReplyTargets.set(postId, {
+                id: commentDoc.id,
+                authorName: commentDoc.data().authorName || 'Marketplace member'
+            });
+            syncCommunityReplyComposer(postId);
+            container.closest('[data-community-post-id]')?.querySelector('form[data-post-id] textarea')?.focus();
+        }
+
+        function cancelCommunityCommentReply(postId) {
+            communityCommentReplyTargets.delete(postId);
+            syncCommunityReplyComposer(postId);
+        }
+
         function renderCommunityPostComments(postId, commentDocs) {
+            const { ordered, byId } = orderCommentThreads(commentDocs);
             document.querySelectorAll('[data-community-comment-list]').forEach(container => {
                 if (container.dataset.postId !== postId) return;
                 container.replaceChildren();
@@ -2996,10 +3097,11 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     container.appendChild(empty);
                     return;
                 }
-                commentDocs.forEach(commentDoc => {
+                ordered.forEach(commentDoc => {
                     const comment = commentDoc.data();
                     const row = document.createElement('article');
                     row.className = 'rounded-xl border border-darkBorder bg-darkBg p-2.5';
+                    appendCommentReplyReference(row, comment, byId);
                     const author = document.createElement('p');
                     author.className = 'mb-1 text-[10px] font-bold text-gold';
                     author.textContent = comment.authorName || 'Marketplace member';
@@ -3016,14 +3118,22 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     likeButton.dataset.authorUid = comment.authorUid || '';
                     likeButton.dataset.likeCount = String(Number.isSafeInteger(comment.likesCount) ? comment.likesCount : 0);
                     likeButton.addEventListener('click', () => toggleCommunityCommentLike(likeButton));
+                    const replyButton = document.createElement('button');
+                    replyButton.type = 'button';
+                    replyButton.className = 'ml-2 mt-1 rounded-lg border border-darkBorder px-2.5 py-1 text-[10px] font-semibold text-gray-300 hover:border-gold/50 hover:text-gold';
+                    replyButton.textContent = 'Reply';
+                    replyButton.addEventListener('click', () => selectCommunityCommentReply(postId, commentDoc, container));
                     const date = document.createElement('p');
                     date.className = 'mt-1 text-[9px] text-gray-500';
                     const createdAt = comment.createdAt?.toDate?.();
                     date.textContent = createdAt ? createdAt.toLocaleString() : 'Just now';
-                    row.append(author, body, likeButton, date);
+                    row.append(author);
+                    if (comment.text) row.append(body);
+                    row.append(likeButton, replyButton, date);
                     if (comment.voicePath) {
                         const audio = document.createElement('audio');
                         audio.controls = true;
+                        configureVoicePlayback(audio);
                         audio.preload = 'none';
                         audio.className = 'mt-2 h-9 w-full';
                         row.insertBefore(audio, date);
@@ -3148,8 +3258,17 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const input = form.querySelector('textarea');
             const button = form.querySelector('button[type="submit"]');
             const text = input.value.trim();
-            if (!text) {
-                showToast('Write a comment before posting.', 'info');
+            const replyTarget = communityCommentReplyTargets.get(postId);
+            const authorUid = currentUser.uid;
+            const authorName = currentUser.name || 'Marketplace member';
+            const voiceState = communityCommentVoiceStates.get(postId);
+            if (voiceState?.recorder?.state === 'recording') {
+                showToast('Stop recording before posting your comment.', 'info');
+                return;
+            }
+            const voiceBlob = voiceState?.blob || null;
+            if (!text && (!voiceBlob || voiceBlob.size === 0)) {
+                showToast('Write a comment or record a voice note first.', 'info');
                 return;
             }
             if (text.length > 2000) {
@@ -3158,17 +3277,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
             button.disabled = true;
             button.textContent = 'Posting…';
-            const voiceState = communityCommentVoiceStates.get(postId);
-            if (voiceState?.recorder?.state === 'recording') {
-                button.disabled = false;
-                button.textContent = 'Post comment';
-                showToast('Stop recording before posting your comment.', 'info');
-                return;
-            }
-            const voiceBlob = voiceState?.blob || null;
             if (voiceBlob && voiceBlob.size > MAX_COMMUNITY_COMMENT_VOICE_BYTES) {
                 button.disabled = false;
-                button.textContent = 'Post comment';
+                syncCommunityReplyComposer(postId);
                 showToast('The voice note exceeds the 25 MB upload limit.', 'error');
                 return;
             }
@@ -3177,13 +3288,14 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 const commentRef = firebaseFirestore.collection('communityPosts').doc(postId)
                     .collection('comments').doc();
                 const commentData = {
-                    authorUid: currentUser.uid,
-                    authorName: currentUser.name || 'Marketplace member',
+                    authorUid,
+                    authorName,
                     text,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 };
+                if (replyTarget) commentData.parentCommentId = replyTarget.id;
                 if (voiceBlob) {
-                    const voicePath = `community-comment-voice/${postId}/${commentRef.id}/${currentUser.uid}/voice`;
+                    const voicePath = `community-comment-voice/${postId}/${commentRef.id}/${authorUid}/voice`;
                     uploadedVoiceRef = firebaseStorage.ref(voicePath);
                     await uploadedVoiceRef.put(voiceBlob, {
                         contentType: voiceBlob.type || 'audio/webm'
@@ -3191,13 +3303,23 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     commentData.voicePath = voicePath;
                 }
                 await commentRef.set(commentData);
-                document.querySelectorAll('form[data-post-id]').forEach(commentForm => {
-                    if (commentForm.dataset.postId === postId) {
-                        commentForm.querySelector('textarea').value = '';
+                if (currentUser?.uid === authorUid) {
+                    document.querySelectorAll('form[data-post-id]').forEach(commentForm => {
+                        const field = commentForm.querySelector('textarea');
+                        if (commentForm.dataset.postId === postId && field.value.trim() === text) {
+                            field.value = '';
+                        }
+                    });
+                    if ((communityCommentDrafts.get(postId) || '').trim() === text) {
+                        communityCommentDrafts.delete(postId);
                     }
-                });
-                communityCommentDrafts.delete(postId);
-                clearCommunityCommentVoice(postId);
+                    if (communityCommentVoiceStates.get(postId) === voiceState) {
+                        clearCommunityCommentVoice(postId);
+                    }
+                    if (communityCommentReplyTargets.get(postId) === replyTarget) {
+                        cancelCommunityCommentReply(postId);
+                    }
+                }
             } catch (error) {
                 console.error('Unable to post community comment.', error);
                 if (uploadedVoiceRef) {
@@ -3205,10 +3327,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         console.error('Unable to remove the unposted community voice recording.', cleanupError)
                     );
                 }
-                showToast('Your comment could not be posted. Check your connection and Firebase setup.', 'error');
+                showToast(replyTarget
+                    ? 'Your reply could not be posted. The comment may have been deleted; check your connection and try again.'
+                    : 'Your comment could not be posted. Check your connection and Firebase setup.', 'error');
             } finally {
                 button.disabled = false;
-                button.textContent = 'Post comment';
+                syncCommunityReplyComposer(postId);
             }
         }
 
@@ -5088,6 +5212,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         ? 'w-full max-w-xs rounded-lg'
                         : 'max-h-64 max-w-full rounded-lg object-contain';
                     if (message.type === 'voice' || message.type === 'video') media.controls = true;
+                    if (message.type === 'voice') configureVoicePlayback(media);
                     if (message.type === 'video') media.playsInline = true;
                     if (message.type === 'image') media.alt = 'Photo sent in Golden Chat';
                     bubble.appendChild(media);
@@ -7311,6 +7436,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             if (discussionStatsUnsubscribe) discussionStatsUnsubscribe();
             if (myReactionUnsubscribe) myReactionUnsubscribe();
 
+            if (discussionProductId !== productId) cancelProductCommentReply();
             discussionProductId = productId;
             discussionCounts = { likes: 0, hates: 0 };
             myProductReaction = null;
@@ -8077,6 +8203,41 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
         }
 
+        function syncProductReplyComposer() {
+            const context = document.getElementById('productCommentReplyContext');
+            const label = document.getElementById('productCommentReplyLabel');
+            const input = document.getElementById('productCommentInput');
+            const button = document.getElementById('postProductCommentButton');
+            context.classList.toggle('hidden', !productCommentReplyTarget);
+            label.textContent = productCommentReplyTarget
+                ? `Replying to ${productCommentReplyTarget.authorName}`
+                : '';
+            input.placeholder = productCommentReplyTarget ? 'Write a reply…' : 'Write a comment…';
+            input.setAttribute('aria-label', productCommentReplyTarget ? 'Write a reply' : 'Write a product comment');
+            if (!button.disabled) {
+                button.textContent = productCommentReplyTarget ? 'Post reply' : 'Post comment';
+            }
+        }
+
+        function cancelProductCommentReply() {
+            productCommentReplyTarget = null;
+            syncProductReplyComposer();
+        }
+
+        function selectProductCommentReply(commentDoc) {
+            if (!currentUser) {
+                showToast('Sign in to reply to comments.', 'info');
+                openAuthModal('signin');
+                return;
+            }
+            productCommentReplyTarget = {
+                id: commentDoc.id,
+                authorName: commentDoc.data().authorName || 'Marketplace member'
+            };
+            syncProductReplyComposer();
+            document.getElementById('productCommentInput').focus();
+        }
+
         function renderProductDiscussionComments(commentDocs) {
             const container = document.getElementById('productDiscussionComments');
             container.replaceChildren();
@@ -8088,10 +8249,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 return;
             }
 
-            commentDocs.forEach(commentDoc => {
+            const { ordered, byId } = orderCommentThreads(commentDocs);
+            ordered.forEach(commentDoc => {
                 const comment = commentDoc.data();
                 const row = document.createElement('article');
                 row.className = 'rounded-xl border border-darkBorder bg-darkCard p-3';
+                appendCommentReplyReference(row, comment, byId);
                 const author = document.createElement('p');
                 author.className = 'mb-1 text-[11px] font-bold text-gold';
                 author.textContent = comment.authorName || 'Marketplace member';
@@ -8104,6 +8267,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 if (comment.voicePath) {
                     const audio = document.createElement('audio');
                     audio.controls = true;
+                    configureVoicePlayback(audio);
                     audio.preload = 'none';
                     audio.className = 'mt-2 h-9 w-full';
                     const cachedUrl = discussionAudioUrls.get(comment.voicePath);
@@ -8127,10 +8291,16 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 const createdAt = comment.createdAt?.toDate?.();
                 date.textContent = createdAt ? createdAt.toLocaleString() : 'Just now';
                 row.append(date);
+                const replyButton = document.createElement('button');
+                replyButton.type = 'button';
+                replyButton.className = 'mt-2 rounded-lg border border-darkBorder px-2.5 py-1 text-[10px] font-semibold text-gray-300 hover:border-gold/50 hover:text-gold';
+                replyButton.textContent = 'Reply';
+                replyButton.addEventListener('click', () => selectProductCommentReply(commentDoc));
+                row.append(replyButton);
                 if (currentUser?.uid === comment.authorUid) {
                     const remove = document.createElement('button');
                     remove.type = 'button';
-                    remove.className = 'mt-2 text-[10px] text-red-300 hover:text-red-200';
+                    remove.className = 'ml-2 mt-2 text-[10px] text-red-300 hover:text-red-200';
                     remove.textContent = 'Delete my comment';
                     remove.addEventListener('click', async () => {
                         try {
@@ -8279,6 +8449,10 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const input = document.getElementById('productCommentInput');
             const text = input.value.trim();
             const voiceBlob = pendingProductVoiceBlob;
+            const productId = discussionProductId;
+            const authorUid = currentUser.uid;
+            const authorName = currentUser.name || 'Marketplace member';
+            const replyTarget = productCommentReplyTarget;
             if (!text && !voiceBlob) {
                 showToast('Write a comment or record a voice note first.', 'info');
                 return;
@@ -8298,26 +8472,31 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             let uploadedVoiceRef = null;
             try {
                 const commentRef = firebaseFirestore
-                    .collection('productDiscussions').doc(discussionProductId)
+                    .collection('productDiscussions').doc(productId)
                     .collection('comments').doc();
                 let voicePath = '';
                 if (voiceBlob) {
-                    voicePath = `product-discussions/${discussionProductId}/voice/${currentUser.uid}/${commentRef.id}`;
+                    voicePath = `product-discussions/${productId}/voice/${authorUid}/${commentRef.id}`;
                     uploadedVoiceRef = firebaseStorage.ref(voicePath);
                     await uploadedVoiceRef.put(voiceBlob, {
                         contentType: voiceBlob.type || 'audio/webm'
                     });
                 }
-                await commentRef.set({
-                    authorUid: currentUser.uid,
-                    authorName: currentUser.name || 'Marketplace member',
+                const commentData = {
+                    authorUid,
+                    authorName,
                     text,
                     voicePath,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                input.value = '';
-                clearPendingProductVoice();
-                document.getElementById('voiceRecordStatus').classList.add('hidden');
+                };
+                if (replyTarget) commentData.parentCommentId = replyTarget.id;
+                await commentRef.set(commentData);
+                if (discussionProductId === productId && currentUser?.uid === authorUid) {
+                    if (input.value.trim() === text) input.value = '';
+                    if (pendingProductVoiceBlob === voiceBlob) clearPendingProductVoice();
+                    document.getElementById('voiceRecordStatus').classList.add('hidden');
+                    if (productCommentReplyTarget === replyTarget) cancelProductCommentReply();
+                }
             } catch (error) {
                 console.error('Unable to post product discussion comment.', error);
                 if (uploadedVoiceRef) {
@@ -8325,10 +8504,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         console.error('Unable to remove the unposted voice recording.', cleanupError)
                     );
                 }
-                showToast('Your comment could not be posted. Check your connection and Firebase setup.', 'error');
+                showToast(replyTarget
+                    ? 'Your reply could not be posted. The comment may have been deleted; check your connection and try again.'
+                    : 'Your comment could not be posted. Check your connection and Firebase setup.', 'error');
             } finally {
                 button.disabled = false;
-                button.innerHTML = 'Post comment <i class="fa-solid fa-paper-plane ml-1"></i>';
+                syncProductReplyComposer();
             }
         }
 
@@ -8428,6 +8609,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             discussionStatsUnsubscribe = null;
             myReactionUnsubscribe = null;
             discussionProductId = null;
+            cancelProductCommentReply();
             clearPendingProductVoice();
             closeImageViewer();
             document.getElementById('detailModal').classList.add('hidden');
