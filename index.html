@@ -1,0 +1,591 @@
+<!DOCTYPE html> 
+<html>
+    <head>
+        <title>GSM MARKET</title>  
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+
+    body {
+        font-family: Arial, sans-serif;
+        text-align: center;
+        padding: 24px;
+        background-color:#f2f2f2;
+        margin: 0;
+}
+
+.site-header {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    margin-bottom: 24px;
+}
+
+.site-logo {
+    display: block;
+    width: min(100%, 100px);
+    aspect-ratio: 1;
+    height: auto;
+    object-fit: contain;
+    padding: 4px;
+    box-sizing: border-box;
+    border-radius: 50%;
+    margin: 0;
+}
+
+.site-slogan {
+    width: 100px;
+    margin: -2px 0 0;
+    color: #17243b;
+    font-size: 9px;
+    font-weight: bold;
+    line-height: 1.2;
+    text-align: left;
+}
+
+h1 { 
+    font-size: 40px;
+    color: #222;
+    margin-bottom: 10px
+}
+
+button { 
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    background-color: #222;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    margin-top: 10px;
+    transition: 0.3s ease;
+} 
+
+button:hover { 
+    background-color: #444;
+    transform: translateY(-2px);
+}
+
+    .lap-box, .status-box { 
+        background-color: white;
+        padding: 20px;
+        margin: 30px auto;
+        max-width: 500px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+     }
+
+    .checks-box { 
+        background-color: white;
+        padding: 20px;
+        margin: 30px auto;
+        max-width: 500px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    }
+    
+    .products { 
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin: 30px auto;
+        max-width: 650px;
+    }
+
+    .products > h2 {
+        grid-column: 1 / -1;
+    }
+
+    .product-card { 
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 180px;
+        background-color: white;
+        padding: 8px;
+        margin: 4px auto;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s ease;
+    } 
+    
+    .product-card:hover { 
+        transform: translateY(-5px);
+    }
+
+    .product-card img { 
+        width: 100%;
+        height: 100px;
+        object-fit: cover;
+        border-radius: 12px;
+        display: block;
+        margin-bottom: 8px;
+        cursor: zoom-in;
+    } 
+
+    .image-gallery {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(0, 0, 0, 0.94);
+    }
+
+    .image-gallery[hidden] {
+        display: none;
+    }
+
+    .image-gallery-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        max-width: min(900px, 100%);
+        max-height: 100%;
+    }
+
+    .image-gallery-main {
+        display: block;
+        max-width: 100%;
+        max-height: 72vh;
+        object-fit: contain;
+    }
+
+    .image-gallery-thumbnails {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        max-width: 100%;
+        overflow-x: auto;
+        padding: 4px;
+    }
+
+    .image-gallery-thumbnail {
+        flex: 0 0 56px;
+        width: 56px;
+        height: 56px;
+        padding: 2px;
+        border: 2px solid transparent;
+        border-radius: 6px;
+        background: #fff;
+        cursor: pointer;
+    }
+
+    .image-gallery-thumbnail[aria-current="true"] {
+        border-color: #D4AF37;
+    }
+
+    .image-gallery-thumbnail img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .image-gallery-control {
+        position: absolute;
+        padding: 12px;
+        border: 0;
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        font-size: 32px;
+        cursor: pointer;
+    }
+
+    .image-gallery-close {
+        top: 12px;
+        right: 16px;
+        font-size: 28px;
+    }
+
+    .image-gallery-previous {
+        left: 8px;
+    }
+
+    .image-gallery-next {
+        right: 8px;
+    }
+
+    @media (max-width: 600px) {
+        .image-gallery-main {
+            max-height: 65vh;
+        }
+
+        .image-gallery-previous {
+            left: 0;
+        }
+
+        .image-gallery-next {
+            right: 0;
+        }
+    }
+    
+    .product-card h2 { 
+        font-size: 30px;
+        margin-bottom: 20px;
+    }
+
+    .product-card p { 
+        margin: 8px 0;
+    } 
+
+
+    .product-card button,
+    .product-card .order-button { 
+        display: inline-block;
+        background-color: #222;
+        color: white;
+        border: none;
+        padding: 8px 12px;
+        font-size: 14px;
+        border-radius: 8px;
+        cursor: pointer;
+        text-decoration: none;
+    }
+
+        
+    .product-card button:hover,
+    .product-card .order-button:hover { 
+        background-color: #555;
+    }
+
+    .product-card h3 { 
+        font-size: 17px;
+        margin: 6px 0;
+    }
+
+    .product-card p { 
+        font-size: 13px;
+        color: #555;
+        line-height: 1.5;
+    }
+
+    .price { 
+        font-size: 15px;
+        font-weight: bold;
+    }
+
+    .tagline {
+        color: #555;
+        max-width: 600px;
+        margin: 10px auto 30px;
+        line-height: 1.5;
+    }
+    
+    .contact { 
+        background-color: white;
+        padding: 25px;
+        margin: 30px auto;
+        max-width:600px;
+        border-radius: 15px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    } 
+
+    .contact button { 
+        background-color: #222;
+        color: white;
+        padding: 12px 25px;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        cursor: pointer;
+    }
+
+    .contact button:hover { 
+        background-color: #555;
+    }
+
+    .about { 
+        background-color: white;
+        padding: 25px;
+        margin: 30px auto;
+        max-width: 600px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        text-align: center;
+    }
+
+    .about h2 { 
+        margin-bottom: 15px;
+    }
+    
+    footer { 
+        background-color: #222;
+        color: white;
+        padding: 20px;
+        margin-top: 40px;
+        text-align: center;
+    }
+
+    nav a { 
+        background-color: #222;
+        padding: 15px;
+        color: white;
+        text-decoration: none;
+        margin-botton: 30px;
+    }
+
+     
+    nav a { 
+        color: white;
+        text-decoration: none;
+        margin: 0 15px;
+        font-weight: bold;
+    }
+
+    nav { 
+        margin-bottom: 20px;
+    }
+
+    nav a { 
+        margin: 0 10px;
+        text-decoration: none;
+        color: #555;
+    }
+
+    nav a:hover { 
+        text-decoration: underline;
+    }
+
+    .product-card { 
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 180px;
+        background: white;
+        padding: 8px;
+        margin: 4px auto;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    @media (max-width: 600px) { 
+        .product-card { 
+            max-width: 190px;
+        } 
+
+        .about,
+        .contact { 
+            max-width: 90%;
+        } 
+    } 
+    
+    footer { 
+        background-color: #222;
+        color: white;
+        text-align: center;
+        padding: 20px;
+        margin-top: 30px;
+    }
+
+@media (max-width: 600px) { 
+    .products { 
+        grid-template-columns: 1fr;
+        display: grid;
+        padding: 0 15px;
+    }
+
+    .product-card { 
+        max-width: 190px;
+    } 
+
+    .contact { 
+        max-width: 90%;
+    } 
+    h1 { 
+        font-size: 30px;
+    }
+    nav a { 
+        margin: 5px;
+    }
+}
+
+</style>
+</head>
+
+<body>
+
+<header class="site-header">
+    <img class="site-logo" src="Image/logo.jpg" alt="Golden Eagle Marketplace logo" width="100" height="100">
+    <p class="site-slogan">Bringing the Marketplace Home</p>
+</header>
+
+<p>We help sellers in Lag and at Aba, St. Michael's market and other areas to sell their phones and accessories at affordable prices.</p>
+
+<p class="tagline">
+    Your trusted plug for quality phones and accessories at affordable prices.
+</p>
+
+    <section class="products"  id="products"> 
+        <h2>Our Products</h2>
+
+        <div class="product-card">
+            <img src="Image/Smartphone.%20jpg/smartphone.jpg%20(3).jpeg" alt="Smartphone" data-product-gallery="smartphones" tabindex="0" role="button" aria-label="View smartphone photos">
+            <h3>Smartphones</h3>
+            <p>Quality smartphones for different budgets.</p>
+            <a class="order-button" href="./Markertplace.html" target="_self">Order Now</a>
+        </div>
+
+        <div class="product-card">
+            <img src="Image/Accessories.%20jpg/accessories.jpg%20(2).jpg" alt="Phone Accessories" data-product-gallery="accessories" tabindex="0" role="button" aria-label="View phone accessory photos">
+            <h3>Phone Accessories</h3>
+            <p>Chargers, earpieces, power banks, cases and more.</p>
+            <a class="order-button" href="./Markertplace.html" target="_self">Order Now</a>
+        </div>
+        
+        <div class="product-card"> 
+            <img src="Image/Case.%20jpg/Smartphone.%20jpg%20(13).PNG" alt="Phone Cases" data-product-gallery="cases" tabindex="0" role="button" aria-label="View phone case photos">
+            <h3>Phone Cases</h3>
+            <p>Stylish and protective cases for your phone.</p>
+            <a class="order-button" href="./Markertplace.html" target="_self">Order Now</a>
+        </div>
+        </section> 
+
+    <section class="contact" id="contact">
+         <h2>Need a Phone or Accessory?</h2>
+         <p>Contact us to check availability and prices.</p>
+         <a href="https://wa.me/2347075215355" target="_blank">
+            <button>Contact Us</button>
+        </a>
+    </section>
+
+    <section class="about" id="about">
+        <h2>About Golden phones &amp; Accessories</h2>
+        <p>
+            We provide quality phones and accessories at affordable prices.
+            Our goal is to make it easy for customers to find the right products for their needs.
+        </p>
+    </section>
+
+    <footer>
+        <p>© 2026 Golden Phones &amp; Accessories. All rights reserved.</p>
+        <p>Quality phones. Quality accessories. Trusted service.</p>
+    </footer>
+
+    <div id="productImageGallery" class="image-gallery" role="dialog" aria-modal="true" aria-label="Product photo gallery" hidden>
+        <button type="button" class="image-gallery-control image-gallery-close" aria-label="Close gallery">&times;</button>
+        <button type="button" class="image-gallery-control image-gallery-previous" aria-label="Previous photo">&#8249;</button>
+        <div class="image-gallery-content">
+            <img id="galleryMainImage" class="image-gallery-main" src="" alt="">
+            <p id="galleryImageCount" aria-live="polite"></p>
+            <div id="galleryThumbnails" class="image-gallery-thumbnails" aria-label="Choose a product photo"></div>
+        </div>
+        <button type="button" class="image-gallery-control image-gallery-next" aria-label="Next photo">&#8250;</button>
+    </div>
+
+    <script>
+        const productImageSets = {
+            smartphones: [
+                "Image/Smartphone.%20jpg/smartphone.jpg%20(3).jpeg",
+                "Image/Smartphone.%20jpg/smartphone.jpg%20(1).jpeg",
+                "Image/Smartphone.%20jpg/smartphone.jpg%20(2).jpeg"
+            ],
+            accessories: [
+                "Image/Accessories.%20jpg/accessories.jpg%20(2).jpg",
+                "Image/Accessories.%20jpg/accessories.jpg%20(1).jpg",
+                "Image/Accessories.%20jpg/accessories.jpg%20(3).jpg",
+                "Image/Accessories.%20jpg/accessories.jpg%20(4).jpg",
+                "Image/Accessories.%20jpg/accessories.jpg%20(5).jpg",
+                "Image/Accessories.%20jpg/accessories.jpg%20(6).jpg"
+            ],
+            cases: [
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(13).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(2).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(3).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(4).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(5).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(6).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(7).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(8).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(9).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(10).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(11).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(12).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(14).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(15).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(16).PNG",
+                "Image/Case.%20jpg/Smartphone.%20jpg%20(17).PNG"
+            ]
+        };
+
+        const imageGallery = document.getElementById("productImageGallery");
+        const galleryMainImage = document.getElementById("galleryMainImage");
+        const galleryImageCount = document.getElementById("galleryImageCount");
+        const galleryThumbnails = document.getElementById("galleryThumbnails");
+        let activeGalleryImages = [];
+        let activeGalleryIndex = 0;
+        let previousGalleryFocus = null;
+
+        function showGalleryImage(index) {
+            activeGalleryIndex = (index + activeGalleryImages.length) % activeGalleryImages.length;
+            const imagePath = activeGalleryImages[activeGalleryIndex];
+            galleryMainImage.src = imagePath;
+            galleryMainImage.alt = `Product photo ${activeGalleryIndex + 1}`;
+            galleryImageCount.textContent = `${activeGalleryIndex + 1} of ${activeGalleryImages.length}`;
+
+            [...galleryThumbnails.children].forEach((thumbnail, thumbnailIndex) => {
+                thumbnail.setAttribute("aria-current", String(thumbnailIndex === activeGalleryIndex));
+            });
+        }
+
+        function openProductGallery(image) {
+            const galleryKey = image.dataset.productGallery;
+            activeGalleryImages = productImageSets[galleryKey] || [image.getAttribute("src")];
+            activeGalleryIndex = 0;
+            previousGalleryFocus = image;
+            galleryThumbnails.replaceChildren();
+
+            activeGalleryImages.forEach((imagePath, index) => {
+                const thumbnail = document.createElement("button");
+                thumbnail.type = "button";
+                thumbnail.className = "image-gallery-thumbnail";
+                thumbnail.setAttribute("aria-label", `Show photo ${index + 1}`);
+                thumbnail.addEventListener("click", () => showGalleryImage(index));
+
+                const thumbnailImage = document.createElement("img");
+                thumbnailImage.src = imagePath;
+                thumbnailImage.alt = "";
+                thumbnail.loading = "lazy";
+                thumbnail.addEventListener("error", () => thumbnail.remove(), { once: true });
+
+                thumbnail.append(thumbnailImage);
+                galleryThumbnails.append(thumbnail);
+            });
+
+            showGalleryImage(0);
+            imageGallery.hidden = false;
+            document.body.style.overflow = "hidden";
+            imageGallery.querySelector(".image-gallery-close").focus();
+        }
+
+        function closeProductGallery() {
+            imageGallery.hidden = true;
+            document.body.style.overflow = "";
+            if (previousGalleryFocus) previousGalleryFocus.focus();
+        }
+
+        document.querySelectorAll("[data-product-gallery]").forEach(image => {
+            image.addEventListener("click", () => openProductGallery(image));
+            image.addEventListener("keydown", event => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openProductGallery(image);
+                }
+            });
+        });
+
+        imageGallery.querySelector(".image-gallery-close").addEventListener("click", closeProductGallery);
+        imageGallery.querySelector(".image-gallery-previous").addEventListener("click", () => showGalleryImage(activeGalleryIndex - 1));
+        imageGallery.querySelector(".image-gallery-next").addEventListener("click", () => showGalleryImage(activeGalleryIndex + 1));
+        imageGallery.addEventListener("click", event => {
+            if (event.target === imageGallery) closeProductGallery();
+        });
+        document.addEventListener("keydown", event => {
+            if (imageGallery.hidden) return;
+            if (event.key === "Escape") closeProductGallery();
+            if (event.key === "ArrowLeft") showGalleryImage(activeGalleryIndex - 1);
+            if (event.key === "ArrowRight") showGalleryImage(activeGalleryIndex + 1);
+        });
+    </script>
+
+</body>
+</html>
