@@ -13,13 +13,13 @@ function extract(start, end) {
   return html.slice(first, last);
 }
 
-test("the test checkout confirms server totals before opening Flutterwave", async () => {
+test("checkout confirms server totals before opening Flutterwave", async () => {
   let destination = "";
   let result = { checkoutUrl: "https://checkout.flutterwave.com/v3/hosted/pay/test",
     productPrice: 7500, platformFee: 1375, totalPaid: 8875 };
   const toasts = [];
   const context = {
-    firebaseConfig: { projectId: "escrow-test" },
+    firebaseConfig: { projectId: "golden-eagle-marketplace" },
     currentUser: { email: "buyer@example.test" },
     products: [{ id: "p1", price: 7500 }],
     calculateEscrowFee,
@@ -30,14 +30,14 @@ test("the test checkout confirms server totals before opening Flutterwave", asyn
     console: { error() {} },
     URL
   };
-  vm.runInNewContext(extract("async function startEscrowTestCheckout", "function updateDiscussionComposer"), context);
+  vm.runInNewContext(extract("async function startEscrowCheckout", "function updateDiscussionComposer"), context);
   const button = { disabled: false };
-  await context.startEscrowTestCheckout("p1", button);
+  await context.startEscrowCheckout("p1", button);
   assert.match(destination, /^https:\/\/checkout\.flutterwave\.com\//);
   assert.equal(button.disabled, false);
   destination = "";
   result = { ...result, totalPaid: 1 };
-  await context.startEscrowTestCheckout("p1", button);
+  await context.startEscrowCheckout("p1", button);
   assert.equal(destination, "");
   assert.match(toasts.at(-1), /checkout total changed/i);
 });
@@ -64,7 +64,7 @@ test("an escrow return is verified without invoking the wallet purchase handler"
   assert.equal(new URL(replaced).search, "");
 });
 
-test("the cart previews the single-product fee without presenting it as active checkout", () => {
+test("the cart offers checkout only for a single vendor product", () => {
   const nodes = {};
   for (const id of ["cartItemCount", "cartItems", "cartSummary", "cartSubtotal", "cartEscrowPreview", "cartCheckout"]) {
     nodes[id] = {
@@ -94,15 +94,12 @@ test("the cart previews the single-product fee without presenting it as active c
   assert.match(nodes.cartEscrowPreview.innerHTML, /NGN 1375/);
   assert.match(nodes.cartEscrowPreview.innerHTML, /NGN 8875/);
   assert.match(nodes.cartEscrowPreview.innerHTML, /live escrow checkout is unavailable/i);
-  assert.match(nodes.cartCheckout.textContent, /live escrow checkout is unavailable/i);
-  context.firebaseConfig.projectId = "escrow-test";
-  context.renderCart();
-  assert.match(nodes.cartCheckout.innerHTML, /startEscrowTestCheckout/);
-  assert.match(nodes.cartCheckout.innerHTML, /test payments only/i);
+  assert.match(nodes.cartCheckout.innerHTML, /startEscrowCheckout/);
+  assert.match(nodes.cartCheckout.innerHTML, /Pay with Escrow Protection/i);
   context.cartItems[0].quantity = 2;
   context.renderCart();
   assert.match(nodes.cartEscrowPreview.textContent, /one listed product at a time/i);
-  assert.match(nodes.cartCheckout.textContent, /unavailable/i);
+  assert.match(nodes.cartCheckout.textContent, /choose one listed product/i);
   context.cartItems.length = 0;
   context.renderCart();
   assert.equal(nodes.cartEscrowPreview.innerHTML, "");
@@ -139,7 +136,7 @@ test("order controls match the participant and status and call the protected fun
   const context = {
     currentUser: { uid: "buyer", role: "Buyer" },
     activeAccountSection: "escrow",
-    firebaseConfig: { projectId: "escrow-test" },
+    firebaseConfig: { projectId: "golden-eagle-marketplace" },
     firebaseFirestore: { collection: () => ({ where: (field, op, uid) => {
       queries.push({ field, uid });
       return { get: async () => ({ empty: false, docs: [{ id: "order1", data: () => order }] }) };
@@ -171,10 +168,40 @@ test("order controls match the participant and status and call the protected fun
   assert.doesNotMatch(list.innerHTML, /Confirm delivery|Open dispute/);
 });
 
-test("production guard blocks escrow order reads and actions", async () => {
-  let called = false;
+test("production account navigation opens the escrow orders section", () => {
+  const nodes = {};
   const context = {
     currentUser: { uid: "buyer", role: "Buyer" },
+    firebaseConfig: { projectId: "golden-eagle-marketplace" },
+    activeAccountSection: "profile",
+    accountConnectionsUnsubscribe: null,
+    document: {
+      querySelectorAll: () => [],
+      getElementById(id) {
+        if (!nodes[id]) nodes[id] = { classList: {
+          hidden: true,
+          remove() { this.hidden = false; },
+          toggle(name, hidden) { this.hidden = hidden; }
+        } };
+        return nodes[id];
+      }
+    },
+    unsubscribeFromProfilePresence() {},
+    clearProfileProductStatsSubscriptions() {},
+    loadEscrowOrders() { context.loaded = true; }
+  };
+  vm.runInNewContext(extract("function showAccountSection", "async function loadEscrowOrders"), context);
+  context.showAccountSection("escrow");
+  assert.equal(context.activeAccountSection, "escrow");
+  assert.equal(nodes.escrowOrdersNav.classList.hidden, false);
+  assert.equal(nodes.escrowOrdersSection.classList.hidden, false);
+  assert.equal(context.loaded, true);
+});
+
+test("signed-out users cannot load or change escrow orders", async () => {
+  let called = false;
+  const context = {
+    currentUser: null,
     firebaseConfig: { projectId: "golden-eagle-marketplace" },
     firebaseFirestore: { collection() { called = true; } },
     firebaseFunctions: { httpsCallable() { called = true; } }

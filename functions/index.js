@@ -963,12 +963,20 @@ exports.flutterwaveWalletWebhook = onRequest(
     }
     const txRef = request.body?.data?.tx_ref;
     const transactionId = request.body?.data?.id;
-    try {
-      if (process.env.ESCROW_LIVE_WEBHOOK_ENABLED === "true" &&
-          await routeEscrowWebhookEvent(request.body, FLUTTERWAVE_SECRET_KEY.value())) {
-        response.status(200).send("Escrow event processed.");
+    if (process.env.GCLOUD_PROJECT === "golden-eagle-marketplace" ||
+        process.env.ESCROW_LIVE_WEBHOOK_ENABLED === "true") {
+      try {
+        if (await routeEscrowWebhookEvent(request.body, FLUTTERWAVE_SECRET_KEY.value())) {
+          response.status(200).send("Escrow event processed.");
+          return;
+        }
+      } catch (error) {
+        logger.error("Flutterwave escrow webhook requires reconciliation.", { txRef, error });
+        response.status(500).send("Escrow event requires reconciliation.");
         return;
       }
+    }
+    try {
       await ensurePurchaseIsVerified(
         txRef,
         String(transactionId || ""),
@@ -1015,7 +1023,21 @@ function escrowSandboxKey() {
   return key;
 }
 
-function escrowSandboxRedirectUrl() {
+function escrowPaymentKey() {
+  if (process.env.GCLOUD_PROJECT !== "golden-eagle-marketplace") {
+    return escrowSandboxKey();
+  }
+  const key = FLUTTERWAVE_SECRET_KEY.value();
+  if (typeof key !== "string" || !/^FLWSECK-\S+$/.test(key)) {
+    throw new HttpsError("failed-precondition", "Configure a live Flutterwave wallet secret key for escrow checkout.");
+  }
+  return key;
+}
+
+function escrowCheckoutRedirectUrl() {
+  if (process.env.GCLOUD_PROJECT === "golden-eagle-marketplace") {
+    return PAYMENT_REDIRECT_URL;
+  }
   let url;
   try {
     url = new URL(process.env.ESCROW_TEST_REDIRECT_URL);
@@ -1030,11 +1052,11 @@ function escrowSandboxRedirectUrl() {
 }
 
 exports.initiateEscrowCheckout = onCall(
-  { secrets: [FLW_SECRET_KEY] },
+  { secrets: [FLW_SECRET_KEY, FLUTTERWAVE_SECRET_KEY] },
   async request => {
     const auth = requireVerifiedUser(request);
-    const secret = escrowSandboxKey();
-    const redirectUrl = escrowSandboxRedirectUrl();
+    const secret = escrowPaymentKey();
+    const redirectUrl = escrowCheckoutRedirectUrl();
     const productId = request.data?.productId;
     if (typeof productId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(productId)) {
       throw new HttpsError("invalid-argument", "Choose a valid product.");
@@ -1113,13 +1135,13 @@ exports.initiateEscrowCheckout = onCall(
         redirect_url: redirectUrl,
         customer: { email },
         configurations: { session_duration: 15 },
-        customizations: { title: "Golden Eagle escrow test checkout" }
+        customizations: { title: "Golden Eagle escrow checkout" }
       }),
       signal: AbortSignal.timeout(15000)
     });
     if (!response.ok) {
-      logger.error("Escrow test checkout initialization failed.", { txRef, status: response.status });
-      throw new HttpsError("unavailable", "Flutterwave could not start test checkout.");
+      logger.error("Escrow checkout initialization failed.", { txRef, status: response.status });
+      throw new HttpsError("unavailable", "Flutterwave could not start checkout.");
     }
     const checkout = await response.json();
     let checkoutUrl;
@@ -1223,10 +1245,10 @@ async function verifyEscrowTransaction(txRef, transactionId, secret) {
 }
 
 exports.verifyEscrowPayment = onCall(
-  { secrets: [FLW_SECRET_KEY] },
+  { secrets: [FLW_SECRET_KEY, FLUTTERWAVE_SECRET_KEY] },
   async request => {
     const auth = requireVerifiedUser(request);
-    const secret = escrowSandboxKey();
+    const secret = escrowPaymentKey();
     const txRef = request.data?.txRef;
     if (typeof txRef !== "string" || !/^escrow-[0-9a-f-]{36}$/i.test(txRef)) {
       throw new HttpsError("invalid-argument", "The payment reference is invalid.");
@@ -1270,9 +1292,9 @@ async function releaseExpiredEscrowStock(txRef, now, paymentFailed = false) {
 }
 
 exports.reconcileExpiredEscrowPayments = onSchedule(
-  { schedule: "every 5 minutes", secrets: [FLW_SECRET_KEY], timeoutSeconds: 540 },
+  { schedule: "every 5 minutes", secrets: [FLW_SECRET_KEY, FLUTTERWAVE_SECRET_KEY], timeoutSeconds: 540 },
   async () => {
-    const secret = escrowSandboxKey();
+    const secret = escrowPaymentKey();
     const now = Date.now();
     let cursor = null;
     while (true) {

@@ -8,6 +8,7 @@ const { calculateEscrowFee } = require("../escrow-fee");
 
 function setup(fetchMock) {
   const documents = new Map();
+  const bindings = new WeakMap();
   class HttpsError extends Error {
     constructor(code, message) { super(message); this.code = code; }
   }
@@ -93,9 +94,18 @@ function setup(fetchMock) {
     FLW_SECRET_HASH: { value: () => "test-webhook-hash" },
     FLUTTERWAVE_SECRET_KEY: { value: () => "FLWSECK_TEST-wallet" },
     FLUTTERWAVE_WEBHOOK_HASH: { value: () => "wallet-webhook-hash" },
-    onCall: (...args) => args.at(-1),
+    PAYMENT_REDIRECT_URL: "https://goldenphoneshop.github.io/Markertplace.html",
+    onCall: (...args) => {
+      const handler = args.at(-1);
+      bindings.set(handler, args.length > 1 ? args[0] : {});
+      return handler;
+    },
     onRequest: (...args) => args.at(-1),
-    onSchedule: (...args) => args.at(-1),
+    onSchedule: (...args) => {
+      const handler = args.at(-1);
+      bindings.set(handler, args[0]);
+      return handler;
+    },
     URLSearchParams,
     URL,
     AbortSignal,
@@ -117,7 +127,7 @@ function setup(fetchMock) {
     extract("function escrowAmountKobo", "exports.getOrCreateGoldenChat"),
     context
   );
-  return { documents, functions: context.exports, findVendorPayoutQuote: context.findVendorPayoutQuote, context };
+  return { documents, functions: context.exports, findVendorPayoutQuote: context.findVendorPayoutQuote, context, bindings };
 }
 
 function request(uid, data = {}, admin = false) {
@@ -637,15 +647,69 @@ test("a mismatched sandbox payment cannot create an order", async () => {
   assert.equal(documents.has(`escrowOrders/${txRef}`), false);
 });
 
-test("sandbox checkout rejects the production project and non-test keys", async () => {
+test("production checkout, verification and webhook use the wallet merchant key", async () => {
+  let payment;
+  const { documents, functions, context } = setup(async (url, options) => {
+    assert.equal(options.headers.Authorization, "Bearer FLWSECK-live");
+    if (url.endsWith("/payments")) {
+      payment = JSON.parse(options.body);
+      return { ok: true, json: async () => ({
+        status: "success", data: { link: "https://checkout.flutterwave.com/v3/hosted/pay/live" }
+      }) };
+    }
+    assert.match(url, /\/transactions\/123\/verify$/);
+    return { ok: true, json: async () => ({
+      status: "success", data: {
+        id: 123, status: "successful", tx_ref: payment.tx_ref, amount: 8875, currency: "NGN",
+        customer: { email: "buyer@example.test" }
+      }
+    }) };
+  });
+  context.process.env.GCLOUD_PROJECT = "golden-eagle-marketplace";
+  context.FLW_SECRET_KEY.value = () => "FLWSECK-different-escrow-merchant";
+  context.FLUTTERWAVE_SECRET_KEY.value = () => "FLWSECK-live";
+  documents.set("users/buyer", { role: "Buyer" });
+  documents.set("users/vendor", { role: "Vendor" });
+  documents.set("products/product1", { ownerUid: "vendor", title: "Phone", stock: 1, price: 7500 });
+  const checkout = await functions.initiateEscrowCheckout(request("buyer", {
+    productId: "product1", expectedPrice: 7500, checkoutEmail: "buyer@example.test"
+  }));
+  assert.equal(payment.redirect_url, "https://goldenphoneshop.github.io/Markertplace.html");
+  await functions.verifyEscrowPayment(request("buyer", { txRef: checkout.txRef, transactionId: "123" }));
+  assert.equal(documents.get(`escrowOrders/${checkout.txRef}`).status, "HELD_IN_ESCROW");
+  const response = { code: null, status(code) { this.code = code; return this; }, send() {} };
+  await functions.flutterwaveWalletWebhook({
+    get: () => "wallet-webhook-hash",
+    body: { event: "charge.completed", data: { id: 123, tx_ref: checkout.txRef } }
+  }, response);
+  assert.equal(response.code, 200);
+});
+
+test("escrow payment functions bind both production and sandbox secrets", () => {
+  const { functions, context, bindings } = setup();
+  for (const name of ["initiateEscrowCheckout", "verifyEscrowPayment", "reconcileExpiredEscrowPayments"]) {
+    const secrets = bindings.get(functions[name]).secrets;
+    assert.ok(secrets.includes(context.FLW_SECRET_KEY));
+    assert.ok(secrets.includes(context.FLUTTERWAVE_SECRET_KEY));
+  }
+});
+
+test("checkout rejects keys from the wrong environment or an unconfigured project", async () => {
   const { functions, context } = setup();
   context.process.env.GCLOUD_PROJECT = "golden-eagle-marketplace";
   context.process.env.ESCROW_TEST_PROJECT_ID = "golden-eagle-marketplace";
   await assert.rejects(functions.initiateEscrowCheckout(request("buyer")),
     error => error.code === "failed-precondition");
+  context.FLUTTERWAVE_SECRET_KEY.value = () => "FLWSECK-";
+  await assert.rejects(functions.initiateEscrowCheckout(request("buyer")),
+    error => error.code === "failed-precondition");
   context.process.env.GCLOUD_PROJECT = "escrow-test";
   context.process.env.ESCROW_TEST_PROJECT_ID = "escrow-test";
   context.FLW_SECRET_KEY.value = () => "FLWSECK-live";
+  await assert.rejects(functions.initiateEscrowCheckout(request("buyer")),
+    error => error.code === "failed-precondition");
+  context.process.env.GCLOUD_PROJECT = "other-project";
+  context.FLW_SECRET_KEY.value = () => "FLWSECK_TEST-test";
   await assert.rejects(functions.initiateEscrowCheckout(request("buyer")),
     error => error.code === "failed-precondition");
 });
@@ -724,6 +788,62 @@ test("shared webhook keeps wallet routing and only routes escrow when enabled", 
   assert.equal(documents.get(`escrowOrders/${txRef}`).status, "HELD_IN_ESCROW");
   await functions.flutterwaveWalletWebhook(wallet, response());
   assert.equal(context.walletCalls.length, 2);
+});
+
+test("production shared webhook routes verified escrow payments without a flag", async () => {
+  const txRef = "escrow-12345678-1234-1234-1234-123456789abc";
+  const { documents, functions, context } = setup(async (url, options) => {
+    assert.match(url, /\/transactions\/123\/verify$/);
+    assert.equal(options.headers.Authorization, "Bearer FLWSECK-live-wallet");
+    return { ok: true, json: async () => ({
+      status: "success",
+      data: { id: 123, status: "successful", tx_ref: txRef, amount: 8875, currency: "NGN",
+        customer: { email: "buyer@example.test" } }
+    }) };
+  });
+  context.process.env.GCLOUD_PROJECT = "golden-eagle-marketplace";
+  context.FLUTTERWAVE_SECRET_KEY.value = () => "FLWSECK-live-wallet";
+  documents.set(`escrowPendingPayments/${txRef}`, {
+    ...heldOrder(), productId: "product1", productTitle: "Phone",
+    email: "buyer@example.test", status: "PENDING", reservationStatus: "HELD", currency: "NGN"
+  });
+  const response = () => ({ code: null, status(code) { this.code = code; return this; }, send() {} });
+  const event = { get: () => "wrong-hash",
+    body: { event: "charge.completed", data: { id: 123, tx_ref: txRef } } };
+  const denied = response();
+  await functions.flutterwaveWalletWebhook(event, denied);
+  assert.equal(denied.code, 401);
+  assert.equal(documents.has(`escrowOrders/${txRef}`), false);
+  event.get = () => "wallet-webhook-hash";
+  const accepted = response();
+  await functions.flutterwaveWalletWebhook(event, accepted);
+  assert.equal(accepted.code, 200);
+  assert.equal(documents.get(`escrowOrders/${txRef}`).status, "HELD_IN_ESCROW");
+  assert.equal(context.walletCalls.length, 0);
+  await functions.flutterwaveWalletWebhook(event, response());
+  assert.equal(documents.get(`escrowOrders/${txRef}`).status, "HELD_IN_ESCROW");
+  await functions.flutterwaveWalletWebhook({
+    get: () => "wallet-webhook-hash",
+    body: { event: "charge.completed", data: { id: 99, tx_ref: "wallet-reference" } }
+  }, response());
+  assert.equal(context.walletCalls.length, 1);
+});
+
+test("production escrow webhook reports provider verification failures for retry", async () => {
+  const txRef = "escrow-12345678-1234-1234-1234-123456789abc";
+  const { documents, functions, context } = setup(async () => ({ ok: false }));
+  context.process.env.GCLOUD_PROJECT = "golden-eagle-marketplace";
+  documents.set(`escrowPendingPayments/${txRef}`, {
+    ...heldOrder(), email: "buyer@example.test", status: "PENDING", reservationStatus: "HELD"
+  });
+  const response = { code: null, status(code) { this.code = code; return this; }, send() {} };
+  await functions.flutterwaveWalletWebhook({
+    get: () => "wallet-webhook-hash",
+    body: { event: "charge.completed", data: { id: 123, tx_ref: txRef } }
+  }, response);
+  assert.equal(response.code, 500);
+  assert.equal(documents.has(`escrowOrders/${txRef}`), false);
+  assert.equal(context.walletCalls.length, 0);
 });
 
 test("sandbox webhook verifies transfer and refund events before finalizing once", async () => {
