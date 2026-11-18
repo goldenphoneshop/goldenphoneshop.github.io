@@ -773,6 +773,7 @@
                 <button type="button" data-account-section="profile" onclick="openAccountPage('profile')" class="rounded-lg border px-4 py-2 text-xs font-bold">My profile</button>
                 <button type="button" data-account-section="followers" onclick="showAccountSection('followers')" class="rounded-lg border px-4 py-2 text-xs font-bold">Followers <span data-connection-count="followers">—</span></button>
                 <button type="button" data-account-section="following" onclick="showAccountSection('following')" class="rounded-lg border px-4 py-2 text-xs font-bold">Following <span data-connection-count="following">—</span></button>
+                <button type="button" id="escrowOrdersNav" data-account-section="escrow" onclick="openAccountPage('escrow')" class="hidden rounded-lg border px-4 py-2 text-xs font-bold">Escrow orders</button>
                 <span class="flex items-center gap-1 rounded-lg border border-darkBorder px-4 py-2 text-xs font-bold text-gray-300" aria-label="Likes received">Likes <span data-profile-likes-count>—</span></span>
             </nav>
 
@@ -790,6 +791,13 @@
                 <h2 id="accountConnectionsHeading" class="mb-1 text-base font-bold text-white"></h2>
                 <p id="accountConnectionsHint" class="mb-4 text-xs text-gray-400"></p>
                 <div id="accountConnectionsList" class="space-y-3"></div>
+            </section>
+
+            <section id="escrowOrdersSection" class="hidden p-4 sm:p-6">
+                <h2 class="text-base font-bold text-white">Escrow orders</h2>
+                <p class="mt-1 text-xs text-gray-400">Test orders only; no live payment protection is provided.</p>
+                <button type="button" onclick="loadEscrowOrders()" class="mt-3 text-xs font-bold text-gold underline">Refresh orders</button>
+                <div id="escrowOrderList" class="mt-4 space-y-3" aria-live="polite"></div>
             </section>
 
             <section id="profileSettingsSection" class="hidden p-4 sm:p-6">
@@ -876,6 +884,29 @@
                         <input id="verifiedDealerAutoRenewToggle" type="checkbox" class="h-5 w-5 flex-shrink-0 accent-yellow-500" onchange="setVerifiedDealerAutoRenew(this.checked)">
                     </label>
                 </div>
+                <section id="vendorEscrowPayoutSettings" class="hidden mt-6 max-w-lg rounded-xl border border-darkBorder p-4">
+                    <h3 class="text-sm font-extrabold text-gold">Escrow bank payouts</h3>
+                    <p id="vendorEscrowPayoutStatus" class="mt-2 text-xs text-gray-300" role="status" aria-live="polite"></p>
+                    <div id="vendorEscrowPayoutControls" class="hidden">
+                        <form class="mt-3 space-y-2" onsubmit="saveEscrowBankAccount(event)">
+                            <label for="escrowBankCode" class="block text-xs text-gray-300">Nigerian bank code</label>
+                            <input id="escrowBankCode" required inputmode="numeric" pattern="[0-9]{3,6}" maxlength="6" autocomplete="off" class="w-full rounded-lg border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white">
+                            <label for="escrowAccountNumber" class="block text-xs text-gray-300">Bank account number</label>
+                            <input id="escrowAccountNumber" required inputmode="numeric" pattern="[0-9]{10}" maxlength="10" autocomplete="off" class="w-full rounded-lg border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white">
+                            <button type="submit" class="rounded-lg border border-gold/40 px-4 py-2 text-xs font-bold text-gold">Verify and save bank account</button>
+                        </form>
+                        <p id="escrowBankSummary" class="mt-3 text-xs text-gray-300"></p>
+                        <form class="mt-4 space-y-2" onsubmit="quoteEscrowWithdrawal(event)">
+                            <label for="escrowWithdrawalAmount" class="block text-xs text-gray-300">Withdrawal amount (NGN, minimum 2,000)</label>
+                            <input id="escrowWithdrawalAmount" required type="number" min="2000" step="0.01" oninput="clearEscrowWithdrawalQuote()" class="w-full rounded-lg border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white">
+                            <button type="submit" class="rounded-lg border border-gold/40 px-4 py-2 text-xs font-bold text-gold">Review withdrawal fees</button>
+                        </form>
+                        <p id="escrowWithdrawalQuote" class="mt-3 whitespace-pre-line text-xs text-gray-300" aria-live="polite"></p>
+                        <button id="escrowWithdrawalConfirm" type="button" onclick="submitEscrowWithdrawal()" class="hidden mt-3 rounded-lg gold-gradient-bg px-4 py-2 text-xs font-bold text-black">Confirm withdrawal</button>
+                        <button id="escrowWithdrawalRetry" type="button" onclick="retryEscrowWithdrawal()" class="hidden mt-3 rounded-lg border border-gold/40 px-4 py-2 text-xs font-bold text-gold">Check previous withdrawal request</button>
+                        <button id="escrowWithdrawalCheck" type="button" onclick="checkEscrowWithdrawal()" class="hidden mt-3 rounded-lg border border-gold/40 px-4 py-2 text-xs font-bold text-gold">Check transfer status</button>
+                    </div>
+                </section>
             </section>
 
             <section id="appSettingsSection" class="hidden p-4 sm:p-6">
@@ -1325,9 +1356,8 @@
                     <span class="text-sm font-semibold text-gray-300">Estimated subtotal</span>
                     <span id="cartSubtotal" class="text-lg font-extrabold text-gold"></span>
                 </div>
-                <div class="rounded-xl border border-gold/30 bg-gold/10 p-3 text-xs text-gray-300">
-                    Payment checkout is not connected yet. Your cart is saved on this device; no payment has been taken.
-                </div>
+                <div id="cartEscrowPreview" class="mb-4 text-xs text-gray-400"></div>
+                <div id="cartCheckout" class="rounded-xl border border-gold/30 bg-gold/10 p-3 text-xs text-gray-300"></div>
             </div>
         </div>
     </div>
@@ -3566,7 +3596,10 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 openAccountPage('edit');
                 return;
             }
-            activeAccountSection = ['profile', 'followers', 'following', 'edit', 'app'].includes(section) ? section : 'profile';
+            const escrowAvailable = firebaseConfig.projectId !== 'golden-eagle-marketplace';
+            const sections = ['profile', 'followers', 'following', 'edit', 'app'];
+            if (escrowAvailable) sections.push('escrow');
+            activeAccountSection = sections.includes(section) ? section : 'profile';
             document.querySelectorAll('[data-account-section]').forEach(button => {
                 const isActive = button.dataset.accountSection === activeAccountSection;
                 button.className = `rounded-lg border px-4 py-2 text-xs font-bold transition ${
@@ -3575,11 +3608,13 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         : 'border-darkBorder text-gray-300 hover:border-gold/40 hover:text-white'
                 }`;
             });
+            document.getElementById('escrowOrdersNav').classList.toggle('hidden', !escrowAvailable);
 
             const isConnectionList = activeAccountSection === 'followers' || activeAccountSection === 'following';
             const isProfile = activeAccountSection === 'profile';
             const isEdit = activeAccountSection === 'edit';
             const isAppSettings = activeAccountSection === 'app';
+            const isEscrow = activeAccountSection === 'escrow';
             if (!isProfile) {
                 unsubscribeFromProfilePresence();
                 clearProfileProductStatsSubscriptions();
@@ -3589,10 +3624,17 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             document.getElementById('memberProfileSection').classList.toggle('hidden', !isProfile);
             document.getElementById('profileSettingsSection').classList.toggle('hidden', !isEdit);
             document.getElementById('appSettingsSection').classList.toggle('hidden', !isAppSettings);
+            document.getElementById('escrowOrdersSection').classList.toggle('hidden', !isEscrow);
             document.getElementById('quizAdminSection').classList.toggle(
                 'hidden',
                 !isAppSettings || !currentUser.isAdmin
             );
+            if (isEscrow) {
+                if (accountConnectionsUnsubscribe) accountConnectionsUnsubscribe();
+                accountConnectionsUnsubscribe = null;
+                loadEscrowOrders();
+                return;
+            }
             if (isEdit) {
                 populateProfileSettings();
                 if (accountConnectionsUnsubscribe) accountConnectionsUnsubscribe();
@@ -3623,6 +3665,84 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
 
             subscribeToAccountConnections(activeAccountSection);
+        }
+
+        async function loadEscrowOrders() {
+            if (!currentUser || firebaseConfig.projectId === 'golden-eagle-marketplace') return;
+            const uid = currentUser.uid;
+            const field = currentUser.role === 'Vendor' ? 'vendorUid' : 'buyerUid';
+            const list = document.getElementById('escrowOrderList');
+            list.textContent = 'Loading orders…';
+            try {
+                const snapshot = await firebaseFirestore.collection('escrowOrders').where(field, '==', uid).get();
+                if (currentUser?.uid !== uid || activeAccountSection !== 'escrow') return;
+                if (snapshot.empty) {
+                    list.textContent = 'No escrow orders yet.';
+                    return;
+                }
+                list.innerHTML = snapshot.docs.map(doc => {
+                    const order = doc.data();
+                    const id = escapeHtml(doc.id);
+                    const status = escapeHtml(order.status || 'Unknown');
+                    let actions = '';
+                    if (field === 'vendorUid' && order.status === 'HELD_IN_ESCROW') {
+                        actions = `<button type="button" data-order-id="${id}" data-action="ship" onclick="updateEscrowOrderFromProfile(this)" class="rounded-lg border border-gold/40 px-3 py-2 font-bold text-gold">Mark shipped</button>`;
+                    } else if (field === 'buyerUid' && ['HELD_IN_ESCROW', 'SHIPPED'].includes(order.status)) {
+                        if (order.status === 'SHIPPED') {
+                            actions += `<button type="button" data-order-id="${id}" data-action="confirm" onclick="updateEscrowOrderFromProfile(this)" class="rounded-lg border border-gold/40 px-3 py-2 font-bold text-gold">Confirm delivery</button>`;
+                        }
+                        actions += `<button type="button" data-order-id="${id}" data-action="dispute" onclick="updateEscrowOrderFromProfile(this)" class="rounded-lg border border-red-400/40 px-3 py-2 font-bold text-red-300">Open dispute</button>`;
+                    }
+                    return `<article class="rounded-xl border border-darkBorder bg-darkBg p-3 text-xs text-gray-300">
+                        <h3 class="font-bold text-white">${escapeHtml(order.productTitle || 'Product')}</h3>
+                        <p class="mt-1">Status: ${status}</p>
+                        <p class="mt-1">Vendor price: ${formatNaira(order.productPrice)} · Protection fee: ${formatNaira(order.platformFee)} · Total: ${formatNaira(order.totalPaid)}</p>
+                        <p class="mt-1 break-all text-gray-500">Order: ${id}</p>
+                        <div class="mt-3 flex flex-wrap gap-2">${actions}</div>
+                    </article>`;
+                }).join('');
+            } catch (error) {
+                console.error('Unable to load escrow orders.', error);
+                if (currentUser?.uid === uid && activeAccountSection === 'escrow') {
+                    list.textContent = 'Orders could not be loaded. Check your connection and account verification.';
+                }
+            }
+        }
+
+        async function updateEscrowOrderFromProfile(button) {
+            if (!currentUser || firebaseConfig.projectId === 'golden-eagle-marketplace') return;
+            const actions = { ship: 'markOrderShipped', confirm: 'confirmDeliveryAndRelease', dispute: 'openEscrowDispute' };
+            const action = button.dataset.action;
+            const callable = actions[action];
+            if (!callable) return;
+            const uid = currentUser.uid;
+            const data = { orderId: button.dataset.orderId };
+            if (action === 'dispute') {
+                const reason = window.prompt('Describe the problem with this order (up to 2,000 characters):');
+                if (reason === null) return;
+                data.reason = reason.trim();
+                if (!data.reason || data.reason.length > 2000) {
+                    showToast('Enter a dispute reason of up to 2,000 characters.', 'error');
+                    return;
+                }
+            } else if (!window.confirm(action === 'confirm'
+                ? 'Confirm you received the item? This releases the vendor payment.'
+                : 'Mark this order as shipped?')) return;
+            button.disabled = true;
+            try {
+                const result = await firebaseFunctions.httpsCallable(callable)(data);
+                if (currentUser?.uid !== uid) return;
+                showToast(`Order status: ${result.data.status}.`, 'success');
+                await loadEscrowOrders();
+            } catch (error) {
+                console.error('Unable to update escrow order.', error);
+                if (currentUser?.uid === uid) {
+                    showToast(error.message || 'The order could not be updated.', 'error');
+                    await loadEscrowOrders();
+                }
+            } finally {
+                button.disabled = false;
+            }
         }
 
         function populateProfileSettings() {
@@ -3658,6 +3778,210 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             updateProfileCompletionStatus();
             renderVerifiedDealerBadgeSettings();
             loadReferralInfo();
+            loadVendorEscrowPayoutSettings();
+        }
+
+        let escrowBankAccount = null;
+        let escrowWithdrawalQuote = null;
+        let escrowPayoutBusy = false;
+
+        function escrowWithdrawalStorageKey(uid) {
+            return `escrowWithdrawalRequest:${uid}`;
+        }
+
+        function clearEscrowWithdrawalQuote() {
+            escrowWithdrawalQuote = null;
+            document.getElementById('escrowWithdrawalQuote').textContent = '';
+            document.getElementById('escrowWithdrawalConfirm').classList.add('hidden');
+        }
+
+        async function loadVendorEscrowPayoutSettings() {
+            const section = document.getElementById('vendorEscrowPayoutSettings');
+            const controls = document.getElementById('vendorEscrowPayoutControls');
+            const status = document.getElementById('vendorEscrowPayoutStatus');
+            const uid = currentUser?.uid;
+            const isVendor = currentUser?.role === 'Vendor';
+            section.classList.toggle('hidden', !isVendor);
+            controls.classList.add('hidden');
+            escrowBankAccount = null;
+            clearEscrowWithdrawalQuote();
+            document.getElementById('escrowBankCode').value = '';
+            document.getElementById('escrowAccountNumber').value = '';
+            document.getElementById('escrowWithdrawalAmount').value = '';
+            if (!isVendor) return;
+            status.textContent = 'Checking payout availability…';
+            try {
+                const result = await firebaseFunctions.httpsCallable('getVendorBankAccount')();
+                if (currentUser?.uid !== uid) return;
+                escrowBankAccount = result.data.configured ? result.data : null;
+                document.getElementById('escrowBankSummary').textContent = escrowBankAccount
+                    ? `${escrowBankAccount.accountName} · bank ${escrowBankAccount.bankCode} · ending ${escrowBankAccount.lastFour}`
+                    : 'No payout bank account is saved.';
+                const pending = localStorage.getItem(escrowWithdrawalStorageKey(uid));
+                document.getElementById('escrowWithdrawalRetry').classList.toggle('hidden', !pending);
+                document.getElementById('escrowWithdrawalCheck').classList.toggle('hidden',
+                    !localStorage.getItem(`escrowWithdrawalCheck:${uid}`));
+                controls.classList.remove('hidden');
+                status.textContent = pending
+                    ? 'A previous withdrawal needs checking. Do not start another until it is resolved.'
+                    : 'Verify your bank account and review fees before requesting a withdrawal.';
+            } catch (error) {
+                console.error('Unable to load escrow payout settings.', error);
+                if (currentUser?.uid === uid) status.textContent = 'Escrow payouts are unavailable or could not be loaded.';
+            }
+        }
+
+        async function saveEscrowBankAccount(event) {
+            event.preventDefault();
+            if (escrowPayoutBusy || !currentUser || localStorage.getItem(escrowWithdrawalStorageKey(currentUser.uid))) return;
+            const uid = currentUser.uid;
+            escrowPayoutBusy = true;
+            const button = event.submitter;
+            if (button) button.disabled = true;
+            try {
+                const result = await firebaseFunctions.httpsCallable('saveVendorBankAccount')({
+                    bankCode: document.getElementById('escrowBankCode').value.trim(),
+                    accountNumber: document.getElementById('escrowAccountNumber').value.trim()
+                });
+                if (currentUser?.uid !== uid) return;
+                document.getElementById('escrowAccountNumber').value = '';
+                escrowBankAccount = result.data;
+                clearEscrowWithdrawalQuote();
+                document.getElementById('escrowBankSummary').textContent =
+                    `${result.data.accountName} · bank ${result.data.bankCode} · ending ${result.data.lastFour}`;
+                showToast('Bank account verified.', 'success');
+            } catch (error) {
+                console.error('Unable to verify payout account.', error);
+                showToast(error.message || 'Bank account verification failed.', 'error');
+            } finally {
+                escrowPayoutBusy = false;
+                if (button) button.disabled = false;
+            }
+        }
+
+        async function quoteEscrowWithdrawal(event) {
+            event.preventDefault();
+            if (escrowPayoutBusy || !currentUser) return;
+            if (localStorage.getItem(escrowWithdrawalStorageKey(currentUser.uid))) {
+                showToast('Check the previous withdrawal before starting another.', 'error');
+                return;
+            }
+            if (localStorage.getItem(`escrowWithdrawalCheck:${currentUser.uid}`)) {
+                showToast('Check the previous transfer before starting another.', 'error');
+                return;
+            }
+            if (!escrowBankAccount) {
+                showToast('Verify a bank account first.', 'error');
+                return;
+            }
+            const uid = currentUser.uid;
+            const amount = Number(document.getElementById('escrowWithdrawalAmount').value);
+            const bankVersion = escrowBankAccount.version;
+            clearEscrowWithdrawalQuote();
+            escrowPayoutBusy = true;
+            const button = event.submitter;
+            if (button) button.disabled = true;
+            try {
+                const result = await firebaseFunctions.httpsCallable('getVendorPayoutQuote')({ amount });
+                if (currentUser?.uid !== uid || escrowBankAccount?.version !== bankVersion ||
+                    Number(document.getElementById('escrowWithdrawalAmount').value) !== amount) return;
+                escrowWithdrawalQuote = { amount, bankVersion, quote: result.data };
+                const q = result.data;
+                document.getElementById('escrowWithdrawalQuote').textContent =
+                    `Requested: ${formatNaira(q.grossKobo / 100)}\nBase fee: ${formatNaira(q.baseFeeKobo / 100)}\nCommission: ${formatNaira(q.commissionKobo / 100)}\nFlutterwave fee: ${formatNaira(q.providerFeeKobo / 100)}\nBank transfer: ${formatNaira(q.netKobo / 100)}\nLeft from requested amount: ${formatNaira(q.retainedBalanceKobo / 100)}`;
+                document.getElementById('escrowWithdrawalConfirm').classList.remove('hidden');
+            } catch (error) {
+                console.error('Unable to quote escrow withdrawal.', error);
+                showToast(error.message || 'Withdrawal fees could not be loaded.', 'error');
+            } finally {
+                escrowPayoutBusy = false;
+                if (button) button.disabled = false;
+            }
+        }
+
+        async function submitEscrowWithdrawal() {
+            if (escrowPayoutBusy || !currentUser || !escrowWithdrawalQuote) return;
+            const key = escrowWithdrawalStorageKey(currentUser.uid);
+            if (localStorage.getItem(key) || localStorage.getItem(`escrowWithdrawalCheck:${currentUser.uid}`)) {
+                showToast('Check the previous withdrawal before starting another.', 'error');
+                return;
+            }
+            if (!window.confirm('Request this bank transfer with the displayed fees?')) return;
+            try {
+                localStorage.setItem(key, JSON.stringify({
+                    ...escrowWithdrawalQuote, operationId: crypto.randomUUID()
+                }));
+            } catch (error) {
+                console.error('Unable to save the withdrawal request ID.', error);
+                showToast('Cannot safely save the request on this device. Withdrawal not sent.', 'error');
+                return;
+            }
+            clearEscrowWithdrawalQuote();
+            await retryEscrowWithdrawal();
+        }
+
+        async function retryEscrowWithdrawal() {
+            if (escrowPayoutBusy || !currentUser) return;
+            const uid = currentUser.uid;
+            const key = escrowWithdrawalStorageKey(uid);
+            escrowPayoutBusy = true;
+            const button = document.getElementById('escrowWithdrawalRetry');
+            button.classList.remove('hidden');
+            button.disabled = true;
+            try {
+                const stored = localStorage.getItem(key);
+                if (!stored) throw new Error('No withdrawal request is saved on this device.');
+                const result = await firebaseFunctions.httpsCallable('requestVendorWithdrawal')(JSON.parse(stored));
+                if (currentUser?.uid !== uid) return;
+                if (result.data.status === 'INITIATING') {
+                    throw new Error('Withdrawal status is uncertain. Contact support; do not make another request.');
+                }
+                if (!['PENDING', 'PAID'].includes(result.data.status) ||
+                    !/^[a-f0-9]{64}$/.test(result.data.withdrawalId || '')) {
+                    throw new Error('Withdrawal needs support review. Do not make another request.');
+                }
+                localStorage.setItem(`escrowWithdrawalCheck:${uid}`, result.data.withdrawalId);
+                localStorage.removeItem(key);
+                button.classList.add('hidden');
+                document.getElementById('escrowWithdrawalCheck').classList.remove('hidden');
+                showToast(`Withdrawal ${result.data.status.toLowerCase()}. Check its transfer status.`, 'info');
+            } catch (error) {
+                console.error('Unable to confirm escrow withdrawal.', error);
+                showToast(error.message || 'Withdrawal status is uncertain. Contact support.', 'error');
+            } finally {
+                escrowPayoutBusy = false;
+                button.disabled = false;
+            }
+        }
+
+        async function checkEscrowWithdrawal() {
+            if (escrowPayoutBusy || !currentUser) return;
+            const uid = currentUser.uid;
+            const key = `escrowWithdrawalCheck:${uid}`;
+            escrowPayoutBusy = true;
+            const button = document.getElementById('escrowWithdrawalCheck');
+            button.disabled = true;
+            try {
+                const withdrawalId = localStorage.getItem(key);
+                if (!withdrawalId) throw new Error('No transfer is saved on this device.');
+                const result = await firebaseFunctions.httpsCallable('checkVendorWithdrawal')({ withdrawalId });
+                if (currentUser?.uid !== uid) return;
+                if (result.data.status === 'PAID') {
+                    localStorage.removeItem(key);
+                    button.classList.add('hidden');
+                    showToast('Bank transfer completed.', 'success');
+                } else if (result.data.status === 'PENDING') {
+                    showToast('Bank transfer is still pending.', 'info');
+                } else {
+                    throw new Error('The transfer needs support review.');
+                }
+            } catch (error) {
+                console.error('Unable to check escrow transfer.', error);
+                showToast(error.message || 'Transfer status could not be checked. Contact support.', 'error');
+            } finally {
+                escrowPayoutBusy = false;
+                button.disabled = false;
+            }
         }
 
         function renderVerifiedDealerBadgeSettings() {
@@ -6981,7 +7305,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     <p>Vendor Product Price: ${formatNaira(price)}</p>
                     <p>Escrow &amp; Service Protection Fee: ${formatNaira(fee)}</p>
                     <p class="font-bold text-gold">Estimated Total Payable: ${formatNaira(totalKobo / 100)}</p>
-                    <p class="text-gray-500">Preview only; protected checkout is not available.</p>
+                    <p class="text-gray-500">Live escrow checkout is unavailable; amounts shown are estimates.</p>
                 </div>`;
             } catch (error) {
                 console.error('Unable to calculate the escrow fee preview.', error);
@@ -8858,9 +9182,13 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const cartContent = document.getElementById('cartItems');
             const summary = document.getElementById('cartSummary');
             const subtotalElement = document.getElementById('cartSubtotal');
+            const escrowPreview = document.getElementById('cartEscrowPreview');
+            const checkout = document.getElementById('cartCheckout');
             if (!cartItems.length) {
                 cartContent.innerHTML = '<div class="text-center py-10 text-sm text-gray-400"><i class="fa-solid fa-basket-shopping text-3xl text-gray-600 mb-3 block"></i>Your cart is empty.</div>';
                 summary.classList.add('hidden');
+                escrowPreview.replaceChildren();
+                checkout.replaceChildren();
                 return;
             }
 
@@ -8899,6 +9227,19 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
             summary.classList.remove('hidden');
             subtotalElement.textContent = formatNaira(subtotal);
+            const singleProduct = cartItems.length === 1 && cartItems[0].quantity === 1
+                ? products.find(product => product.id === cartItems[0].productId)
+                : null;
+            if (singleProduct) {
+                escrowPreview.innerHTML = renderEscrowFeePreview(singleProduct.price);
+            } else {
+                escrowPreview.textContent = 'Escrow fee preview is available for one listed product at a time.';
+            }
+            if (firebaseConfig.projectId !== 'golden-eagle-marketplace' && singleProduct?.ownerUid) {
+                checkout.innerHTML = `<button type="button" onclick="startEscrowTestCheckout(this.dataset.productId, this)" data-product-id="${escapeHtml(singleProduct.id)}" class="rounded-lg border border-gold/40 px-4 py-2 font-bold text-gold">Test escrow checkout</button><p class="mt-2">Test payments only; no live protection is provided.</p>`;
+            } else {
+                checkout.textContent = 'Live escrow checkout is unavailable. Your cart is saved on this device; no payment has been taken.';
+            }
         }
 
         function askAiAboutItem(title) {
