@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Golden Eagle Admin</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #0c1220; color: #e8edf7; }
+    body { margin: 0; } main { max-width: 1200px; margin: auto; padding: 1.5rem; }
+    h1, h2, h3, p { margin: 0 0 .7rem; } h1 { color: #f3c94c; } h2 { font-size: 1.15rem; }
+    .card { background: #151f32; border: 1px solid #334056; border-radius: .8rem; padding: 1rem; margin: 1rem 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .8rem; }
+    .entry { background: #0c1220; border: 1px solid #334056; border-radius: .6rem; padding: .8rem; margin: .6rem 0; overflow-wrap: anywhere; }
+    label { display: block; margin: .6rem 0; } input, button { font: inherit; border-radius: .4rem; padding: .55rem; }
+    input { box-sizing: border-box; width: 100%; background: #0c1220; color: #fff; border: 1px solid #536078; }
+    button { background: #f3c94c; color: #101520; border: 0; cursor: pointer; margin: .2rem .4rem .2rem 0; }
+    button.secondary { background: #29364b; color: #fff; } button:disabled { opacity: .5; cursor: not-allowed; }
+    .muted { color: #b6c1d3; font-size: .9rem; } .error { color: #ffaaa5; } [hidden] { display: none !important; }
+    table { border-collapse: collapse; width: 100%; } th, td { padding: .4rem; text-align: left; border-bottom: 1px solid #334056; }
+    .scroll { overflow-x: auto; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Golden Eagle administration</h1>
+  <p class="muted">Only verified accounts with the Firebase administrator claim can access dashboard functions.</p>
+  <p id="authStatus" role="status">Checking your account…</p>
+  <section id="signIn" class="card" hidden>
+    <h2>Administrator sign in</h2>
+    <form id="signInForm">
+      <label>Email <input id="email" type="email" autocomplete="username" required></label>
+      <label>Password <input id="password" type="password" autocomplete="current-password" required></label>
+      <button type="submit">Sign in</button>
+      <button id="googleSignIn" type="button" class="secondary">Sign in with Google</button>
+    </form>
+  </section>
+  <button id="signOut" class="secondary" type="button" hidden>Sign out</button>
+  <section id="dashboard" hidden>
+    <p class="muted">Live cash-outs remain disabled. Test payouts are submitted by vendors and can only be checked or reconciled here. Manual refunds must be initiated separately in Flutterwave.</p>
+    <button id="refresh" type="button">Refresh dashboard</button>
+    <p id="actionStatus" role="status" aria-live="polite"></p>
+    <section class="card">
+      <h2>Platform metrics</h2>
+      <p class="muted">Recorded totals include held, shipped, disputed and awaiting-refund orders; they are not a verified bank or segregated escrow balance. Metrics are current snapshots, not historical totals.</p>
+      <p id="metricsStatus" role="status">Loading…</p>
+      <div id="metrics"></div>
+    </section>
+    <section class="card">
+      <h2>Disputed orders and refund requests</h2>
+      <p class="muted">Preparing a manual refund locks the order against release. Make the refund in Flutterwave only after preparation, then verify its provider refund ID below. Do not retry an uncertain refund.</p>
+      <p id="disputesStatus" role="status"></p><div id="disputes"></div>
+      <button id="disputesMore" class="secondary" type="button" hidden>Load more disputes</button>
+    </section>
+    <section class="card">
+      <h2>Refunds awaiting verification</h2>
+      <p id="refundsStatus" role="status"></p><div id="refunds"></div>
+      <button id="refundsMore" class="secondary" type="button" hidden>Load more refunds</button>
+    </section>
+    <section class="card">
+      <h2>Pending vendor cash-outs</h2>
+      <p class="muted">Minimum requested amount: ₦2,000. Payout checks and reconciliation remain restricted to the configured test project; no transfer is initiated here.</p>
+      <p id="payoutsStatus" role="status"></p><div id="payouts"></div>
+      <button id="payoutsMore" class="secondary" type="button" hidden>Load more payouts</button>
+    </section>
+  </section>
+</main>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyAuEIGypz6qdsHfTYuSg4nS-CloXcqDGGc",
+    authDomain: "golden-eagle-marketplace.firebaseapp.com",
+    projectId: "golden-eagle-marketplace",
+    storageBucket: "golden-eagle-marketplace.firebasestorage.app",
+    messagingSenderId: "120512676475",
+    appId: "1:120512676475:web:9f451f54ff3d36771258de",
+    measurementId: "G-M8S05C406W"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const cloud = firebase.functions();
+  const el = id => document.getElementById(id);
+  const cursors = { disputes: null, refunds: null, payouts: null };
+  let authRevision = 0;
+  const call = (name, data) => cloud.httpsCallable(name)(data).then(result => result.data);
+  const money = amount => typeof amount === 'number' && Number.isFinite(amount)
+    ? `₦${amount.toLocaleString('en-NG', { maximumFractionDigits: 2 })}` : 'Unavailable';
+
+  function showError(id, error) {
+    console.error('Administrator operation failed.', error);
+    el(id).textContent = error.message || 'Operation failed. Check your connection and permissions.';
+    el(id).classList.add('error');
+  }
+  function message(id, text) {
+    el(id).classList.remove('error');
+    el(id).textContent = text;
+  }
+  function line(parent, label, value) {
+    const p = document.createElement('p');
+    p.textContent = `${label}: ${value == null ? 'Unavailable' : value}`;
+    parent.appendChild(p);
+  }
+  function button(parent, label, handler, disabled = false) {
+    const control = document.createElement('button');
+    control.type = 'button';
+    control.className = 'secondary';
+    control.textContent = label;
+    control.disabled = disabled;
+    control.addEventListener('click', () => perform(control, handler));
+    parent.appendChild(control);
+  }
+  async function perform(control, action) {
+    control.disabled = true;
+    message('actionStatus', 'Working…');
+    try {
+      const result = await action();
+      if (result === null) {
+        message('actionStatus', 'No action taken.');
+        return;
+      }
+      message('actionStatus', result);
+      await refreshAll();
+    } catch (error) {
+      showError('actionStatus', error);
+    } finally {
+      control.disabled = false;
+    }
+  }
+  function renderItem(kind, item) {
+    const card = document.createElement('article');
+    card.className = 'entry';
+    line(card, 'ID', item.id);
+    line(card, 'Status', item.status);
+    if (kind === 'disputes') {
+      line(card, 'Product', item.productTitle);
+      line(card, 'Buyer', item.buyerUid);
+      line(card, 'Vendor', item.vendorUid);
+      line(card, 'Dispute', item.disputeReason);
+      line(card, 'Fulfillment', item.fulfillmentMethod);
+      line(card, 'Dispatched', item.dispatched ? 'Yes' : 'No');
+      line(card, 'Product price', money(item.productPrice));
+      line(card, 'Total paid', money(item.totalPaid));
+      line(card, 'Flutterwave transaction ID', item.transactionId);
+      button(card, 'Prepare manual refund', async () => {
+        if (!window.confirm('Lock this disputed order for a manual refund? Do not issue a refund before preparing it.')) return null;
+        const result = await call('prepareManualEscrowRefund', { orderId: item.id });
+        return `Refund prepared for ${money(result.amountKobo / 100)}. Flutterwave transaction ID: ${result.transactionId}. Issue it manually, then verify its refund ID.`;
+      });
+      button(card, 'Release to vendor ledger', async () => {
+        if (!window.confirm('Release this disputed order to the vendor ledger? This cannot be undone here.')) return null;
+        const result = await call('resolveEscrowDispute', { orderId: item.id, decision: 'release' });
+        return `Order status: ${result.status}.`;
+      });
+    } else if (kind === 'refunds') {
+      line(card, 'Refund amount', money(item.amountKobo / 100));
+      line(card, 'Transaction ID', item.transactionId);
+      line(card, 'Mode', item.mode);
+      line(card, 'Provider refund ID', item.providerRefundId);
+      button(card, item.mode === 'MANUAL' ? 'Verify manual refund' : 'Check/reconcile test refund', async () => {
+        const refundId = window.prompt('Enter the existing Flutterwave refund ID. Do not create another refund.', item.providerRefundId || '');
+        if (refundId === null) return null;
+        if (!/^\d{1,32}$/.test(refundId.trim())) throw new Error('Enter a valid numeric refund ID.');
+        const id = refundId.trim();
+        let result;
+        if (item.mode === 'MANUAL') {
+          result = await call('verifyManualEscrowRefund', { orderId: item.id, refundId: id });
+        } else {
+          if (item.status === 'INITIATING') await call('reconcileEscrowRefund', { orderId: item.id, refundId: id });
+          result = await call('checkEscrowRefund', { orderId: item.id });
+        }
+        return `Refund status: ${result.status}.`;
+      });
+    } else {
+      const eligible = Number.isSafeInteger(item.grossKobo) && item.grossKobo >= 200000;
+      line(card, 'Vendor', item.vendorUid);
+      line(card, 'Requested amount', money(item.grossKobo / 100));
+      line(card, 'Transfer amount', money(item.netKobo / 100));
+      line(card, 'Bank account ending', item.bankLastFour);
+      line(card, 'Provider transfer ID', item.providerTransferId);
+      line(card, 'Minimum check', eligible ? 'Meets ₦2,000 minimum' : 'Below minimum or invalid; manual review required');
+      button(card, 'Check test payout', async () => {
+        const result = await call('adminCheckVendorWithdrawal', { withdrawalId: item.id });
+        return `Payout status: ${result.status}.`;
+      }, !eligible);
+      button(card, 'Reconcile test payout', async () => {
+        const transferId = window.prompt('Enter the existing Flutterwave transfer ID. Do not send another transfer.', item.providerTransferId || '');
+        if (transferId === null) return null;
+        if (!/^\d{1,32}$/.test(transferId.trim())) throw new Error('Enter a valid numeric transfer ID.');
+        const result = await call('reconcileEscrowWithdrawal', { withdrawalId: item.id, transferId: transferId.trim() });
+        return `Payout status: ${result.status}. Check the payout to verify completion.`;
+      }, !eligible || item.status !== 'INITIATING');
+    }
+    return card;
+  }
+  async function loadQueue(kind, append = false) {
+    const more = el(`${kind}More`);
+    more.disabled = true;
+    message(`${kind}Status`, 'Loading…');
+    try {
+      const data = await call('listEscrowAdminQueue', { kind, ...(append ? { cursor: cursors[kind] } : {}) });
+      if (el('dashboard').hidden) return;
+      const container = el(kind);
+      if (!append) container.replaceChildren();
+      data.items.forEach(item => container.appendChild(renderItem(kind, item)));
+      cursors[kind] = data.nextCursor;
+      more.hidden = !data.nextCursor;
+      message(`${kind}Status`, container.childElementCount ? '' : 'No pending items.');
+    } catch (error) {
+      showError(`${kind}Status`, error);
+    } finally {
+      more.disabled = false;
+    }
+  }
+  async function loadMetrics() {
+    message('metricsStatus', 'Loading…');
+    try {
+      const data = await call('getEscrowAdminMetrics', {});
+      if (el('dashboard').hidden) return;
+      const container = el('metrics');
+      container.replaceChildren();
+      line(container, 'Active orders', data.activeOrders);
+      line(container, 'Recorded active order total', money(data.activeTotal));
+      line(container, `Check-ins on ${data.day} (WAT)`, data.dailyCheckIns);
+      line(container, 'Coins awarded today', data.dailyCoins);
+      const table = document.createElement('table');
+      const header = document.createElement('tr');
+      for (const text of ['Fulfillment', 'Order status', 'Count']) {
+        const th = document.createElement('th'); th.textContent = text; header.appendChild(th);
+      }
+      table.appendChild(header);
+      for (const row of data.fulfillment) {
+        const tr = document.createElement('tr');
+        for (const value of [row.method === 'delivery' ? 'Home/Location Delivery' : 'Pickup Station', row.status, row.count]) {
+          const td = document.createElement('td'); td.textContent = String(value); tr.appendChild(td);
+        }
+        table.appendChild(tr);
+      }
+      const scroll = document.createElement('div'); scroll.className = 'scroll'; scroll.appendChild(table);
+      container.appendChild(scroll);
+      message('metricsStatus', '');
+    } catch (error) {
+      showError('metricsStatus', error);
+    }
+  }
+  async function refreshAll() {
+    await Promise.all([loadMetrics(), ...Object.keys(cursors).map(kind => loadQueue(kind))]);
+  }
+  for (const kind of Object.keys(cursors)) {
+    el(`${kind}More`).addEventListener('click', () => loadQueue(kind, true));
+  }
+  el('refresh').addEventListener('click', refreshAll);
+  el('signInForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    try {
+      await auth.signInWithEmailAndPassword(el('email').value.trim(), el('password').value);
+      el('password').value = '';
+    } catch (error) { showError('authStatus', error); }
+  });
+  el('googleSignIn').addEventListener('click', async () => {
+    try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
+    catch (error) { showError('authStatus', error); }
+  });
+  el('signOut').addEventListener('click', async () => {
+    try { await auth.signOut(); } catch (error) { showError('authStatus', error); }
+  });
+  auth.onAuthStateChanged(async user => {
+    const revision = ++authRevision;
+    el('dashboard').hidden = true;
+    el('signIn').hidden = !!user;
+    el('signOut').hidden = !user;
+    for (const kind of Object.keys(cursors)) { el(kind).replaceChildren(); cursors[kind] = null; }
+    el('metrics').replaceChildren();
+    if (!user) { message('authStatus', 'Sign in with a verified administrator account.'); return; }
+    try {
+      const token = await user.getIdTokenResult(true);
+      if (revision !== authRevision) return;
+      const verified = token.claims.email_verified === true || token.claims.firebase?.sign_in_provider === 'phone';
+      if (!verified || token.claims.admin !== true) {
+        message('authStatus', 'Access denied. A verified account and administrator claim are required.');
+        return;
+      }
+      message('authStatus', 'Administrator authenticated.');
+      el('dashboard').hidden = false;
+      await refreshAll();
+    } catch (error) {
+      if (revision === authRevision) showError('authStatus', error);
+    }
+  });
+</script>
+</body>
+</html>

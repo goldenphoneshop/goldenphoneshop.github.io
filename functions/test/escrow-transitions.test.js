@@ -12,26 +12,48 @@ function setup(fetchMock) {
   class HttpsError extends Error {
     constructor(code, message) { super(message); this.code = code; }
   }
+  function makeQuery(name, filters) {
+    let after = null;
+    let maximum = Infinity;
+    const query = {
+      where(field, operator, value) { return makeQuery(name, [...filters, { field, operator, value }]); },
+      orderBy() { return this; },
+      limit(value) { maximum = value; return this; },
+      startAfter(value) { after = typeof value === "string" ? value : value.id; return this; },
+      async get() {
+        const docs = [...documents.entries()]
+          .filter(([key, data]) => key.startsWith(`${name}/`) && filters.every(filter => {
+            const actual = filter.field.split(".").reduce((value, part) => value?.[part], data);
+            return filter.operator === "in" ? filter.value.includes(actual) : actual === filter.value;
+          }))
+          .map(([key, value]) => ({ id: key.slice(name.length + 1), data: () => value }))
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .filter(doc => !after || doc.id > after).slice(0, maximum);
+        return { empty: docs.length === 0, docs };
+      },
+      count() {
+        return { async get() { const snapshot = await query.get(); return { data: () => ({ count: snapshot.docs.length }) }; } };
+      },
+      aggregate(fields) {
+        return { async get() {
+          const snapshot = await query.get();
+          const data = {};
+          const sumFields = Object.values(fields).filter(field => field.type === "sum");
+          const docs = snapshot.docs.filter(doc => sumFields.every(field =>
+            Object.hasOwn(doc.data(), field.field)));
+          for (const [key, field] of Object.entries(fields)) {
+            data[key] = field.type === "count" ? docs.length :
+              docs.reduce((sum, doc) => sum + (doc.data()[field.field] || 0), 0);
+          }
+          return { data: () => data };
+        } };
+      }
+    };
+    return query;
+  }
   const db = {
     collection(name) {
-      return { where: (field, operator, values) => {
-        assert.equal(operator, "in");
-        let after = null;
-        const query = {
-          orderBy() { return this; },
-          limit() { return this; },
-          startAfter(doc) { after = doc.id; return this; },
-          async get() {
-            const docs = [...documents.entries()]
-              .filter(([key, value]) => key.startsWith(`${name}/`) && values.includes(value[field]))
-              .map(([key, value]) => ({ id: key.slice(name.length + 1), data: () => value }))
-              .sort((a, b) => a.id.localeCompare(b.id))
-              .filter(doc => !after || doc.id > after).slice(0, 100);
-            return { empty: docs.length === 0, docs };
-          }
-        };
-        return query;
-      }, doc: id => ({
+      return { where: (field, operator, value) => makeQuery(name, [{ field, operator, value }]), doc: id => ({
         key: `${name}/${id}`,
         async get() {
           const value = documents.get(this.key);
@@ -90,6 +112,7 @@ function setup(fetchMock) {
     exports: {},
     FieldValue: { serverTimestamp: () => "time" },
     FieldPath: { documentId: () => "__name__" },
+    AggregateField: { count: () => ({ type: "count" }), sum: field => ({ type: "sum", field }) },
     FLW_SECRET_KEY: { value: () => "FLWSECK_TEST-test" },
     FLW_SECRET_HASH: { value: () => "test-webhook-hash" },
     FLUTTERWAVE_SECRET_KEY: { value: () => "FLWSECK_TEST-wallet" },
@@ -1208,6 +1231,129 @@ test("fulfillment refunds are full before dispatch and product-only afterward", 
   }
 });
 
+test("manual live refunds lock disputed orders and require matching provider verification", async () => {
+  for (const dispatched of [false, true]) {
+    let returnedAmount = 1;
+    let returnedId = 501;
+    let returnedTransaction = 123;
+    let providerStatus = "pending";
+    let fetches = 0;
+    const expected = dispatched ? 7500 : 10812.5;
+    const { documents, functions, context } = setup(async (url, options) => {
+      fetches += 1;
+      assert.match(url, /\/v3\/refunds\/501$/);
+      assert.equal(options.headers.Authorization, "Bearer FLWSECK-live");
+      return { ok: true, json: async () => ({
+        id: returnedId, transaction_id: returnedTransaction, amount_refunded: returnedAmount, status: providerStatus
+      }) };
+    });
+    context.process.env.GCLOUD_PROJECT = "golden-eagle-marketplace";
+    context.FLUTTERWAVE_SECRET_KEY.value = () => "FLWSECK-live";
+    documents.set("escrowOrders/order1", {
+      ...heldOrder(), status: "DISPUTED", platformFee: 562.5,
+      fulfillment: { method: "delivery" }, fulfillmentFee: 2750, totalPaid: 10812.5,
+      transactionId: "123", ...(dispatched ? { shippedAt: "time" } : {})
+    });
+    await assert.rejects(functions.prepareManualEscrowRefund(request("buyer")),
+      error => error.code === "permission-denied");
+    const prepared = await functions.prepareManualEscrowRefund(request("admin", {}, true));
+    assert.equal(prepared.amountKobo, expected * 100);
+    assert.equal(fetches, 0);
+    assert.equal((await functions.prepareManualEscrowRefund(request("admin", {}, true))).alreadyPrepared, true);
+    await assert.rejects(functions.resolveEscrowDispute(request("admin", { decision: "release" }, true)),
+      error => error.code === "failed-precondition");
+    await assert.rejects(functions.verifyManualEscrowRefund(request("buyer", { refundId: "501" })),
+      error => error.code === "permission-denied");
+    await assert.rejects(functions.verifyManualEscrowRefund(request("admin", { refundId: "501" }, true)),
+      error => error.code === "failed-precondition");
+    assert.equal(documents.get("escrowOrders/order1").status, "REFUND_INITIATING");
+    returnedAmount = expected;
+    returnedId = 502;
+    await assert.rejects(functions.verifyManualEscrowRefund(request("admin", { refundId: "501" }, true)),
+      error => error.code === "failed-precondition");
+    returnedId = 501;
+    returnedTransaction = 124;
+    await assert.rejects(functions.verifyManualEscrowRefund(request("admin", { refundId: "501" }, true)),
+      error => error.code === "failed-precondition");
+    returnedTransaction = 123;
+    const pending = await functions.verifyManualEscrowRefund(request("admin", { refundId: "501" }, true));
+    assert.equal(pending.status, "REFUND_PENDING");
+    assert.equal(documents.get("escrowPlatformAccounting/revenue"), undefined);
+    providerStatus = "completed-bank-transfer";
+    const result = await functions.verifyManualEscrowRefund(request("admin", { refundId: "501" }, true));
+    assert.equal(result.status, "REFUNDED");
+    assert.equal(documents.get("escrowRefunds/order1").verifiedBy, "admin");
+    assert.equal(documents.get("escrowPlatformAccounting/revenue")?.retainedKobo || 0,
+      dispatched ? 331250 : 0);
+    await functions.verifyManualEscrowRefund(request("admin", { refundId: "501" }, true));
+    assert.equal(documents.get("escrowPlatformAccounting/revenue")?.retainedKobo || 0,
+      dispatched ? 331250 : 0);
+  }
+});
+
+test("admin queues and metrics require authorization and paginate without exposing bank details", async () => {
+  const { documents, functions } = setup();
+  for (let i = 0; i < 52; i++) {
+    documents.set(`escrowOrders/order${String(i).padStart(2, "0")}`, {
+      ...heldOrder(), status: "DISPUTED", fulfillment: { method: i % 2 ? "pickup" : "delivery" }
+    });
+  }
+  documents.set("escrowOrders/released", { ...heldOrder(), status: "RELEASED", fulfillment: { method: "pickup" } });
+  documents.set("escrowWithdrawals/payout", { status: "PENDING", grossKobo: 200000,
+    vendorUid: "vendor", accountNumber: "1234567890", bankLastFour: "7890" });
+  const day = new Date(Date.now() + 3600000).toISOString().slice(0, 10);
+  documents.set("quizWallets/buyer", { dailyCheckInDay: day });
+  documents.set("quizWallets/vendor", { dailyCheckInDay: day });
+  await assert.rejects(functions.getEscrowAdminMetrics(request("buyer")),
+    error => error.code === "permission-denied");
+  await assert.rejects(functions.listEscrowAdminQueue(request("buyer", { kind: "disputes" })),
+    error => error.code === "permission-denied");
+  for (const name of ["getEscrowAdminMetrics", "listEscrowAdminQueue", "prepareManualEscrowRefund",
+    "verifyManualEscrowRefund", "adminCheckVendorWithdrawal"]) {
+    const unverified = request("admin", { kind: "disputes" }, true);
+    unverified.auth.token.email_verified = false;
+    await assert.rejects(functions[name](unverified), error => error.code === "permission-denied");
+  }
+  const metrics = await functions.getEscrowAdminMetrics(request("admin", {}, true));
+  assert.equal(metrics.activeOrders, 52);
+  assert.equal(metrics.activeTotal, 52 * 8875);
+  assert.equal(metrics.dailyCheckIns, 2);
+  assert.equal(metrics.dailyCoins, 10);
+  assert.equal(metrics.fulfillment.find(item => item.method === "delivery" && item.status === "DISPUTED").count, 26);
+  const first = await functions.listEscrowAdminQueue(request("admin", { kind: "disputes" }, true));
+  assert.equal(first.items.length, 50);
+  const second = await functions.listEscrowAdminQueue(request("admin", { kind: "disputes", cursor: first.nextCursor }, true));
+  assert.equal(second.items.length, 2);
+  const payouts = await functions.listEscrowAdminQueue(request("admin", { kind: "payouts" }, true));
+  assert.equal(payouts.items[0].bankLastFour, "7890");
+  assert.equal(Object.hasOwn(payouts.items[0], "accountNumber"), false);
+  documents.set("escrowOrders/refunding", { ...heldOrder(), status: "REFUND_PENDING" });
+  assert.equal((await functions.getEscrowAdminMetrics(request("admin", {}, true))).activeOrders, 53);
+  documents.set("escrowOrders/missing", { status: "HELD_IN_ESCROW" });
+  await assert.rejects(functions.getEscrowAdminMetrics(request("admin", {}, true)),
+    error => error.code === "failed-precondition");
+});
+
+test("admin payout checks enforce the minimum and retain the production gate", async () => {
+  const withdrawalId = "a".repeat(64);
+  const { documents, functions, context } = setup();
+  documents.set(`escrowWithdrawals/${withdrawalId}`, {
+    vendorUid: "vendor", status: "PENDING", grossKobo: 199999
+  });
+  await assert.rejects(functions.adminCheckVendorWithdrawal(request("buyer", { withdrawalId })),
+    error => error.code === "permission-denied");
+  await assert.rejects(functions.adminCheckVendorWithdrawal(request("admin", { withdrawalId }, true)),
+    error => error.code === "failed-precondition");
+  await assert.rejects(functions.reconcileEscrowWithdrawal(request("admin", { withdrawalId, transferId: "123" }, true)),
+    error => error.code === "failed-precondition");
+  documents.get(`escrowWithdrawals/${withdrawalId}`).grossKobo = 200000;
+  context.process.env.GCLOUD_PROJECT = "golden-eagle-marketplace";
+  await assert.rejects(functions.adminCheckVendorWithdrawal(request("admin", { withdrawalId }, true)),
+    error => error.code === "failed-precondition");
+  await assert.rejects(functions.reconcileEscrowWithdrawal(request("admin", { withdrawalId, transferId: "123" }, true)),
+    error => error.code === "failed-precondition");
+});
+
 test("an uncertain refund cannot be retried or released", async () => {
   let refundRequests = 0;
   const { documents, functions } = setup(async () => {
@@ -1302,7 +1448,7 @@ test("admin can reconnect an uncertain withdrawal only to the matching transfer"
     })
   }));
   documents.set(`escrowWithdrawals/${withdrawalId}`, {
-    vendorUid: "vendor", reference: "expected", netKobo: 145900, providerFeeKobo: 1075,
+    vendorUid: "vendor", reference: "expected", grossKobo: 200000, netKobo: 145900, providerFeeKobo: 1075,
     baseFeeKobo: 50000, commissionKobo: 3000, status: "INITIATING"
   });
   await assert.rejects(functions.reconcileEscrowWithdrawal(request("vendor", { withdrawalId, transferId: "123" })),

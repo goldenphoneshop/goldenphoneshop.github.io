@@ -1,6 +1,6 @@
 const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
-const { FieldPath, FieldValue, getFirestore } = require("firebase-admin/firestore");
+const { AggregateField, FieldPath, FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { getStorage } = require("firebase-admin/storage");
 const crypto = require("node:crypto");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
@@ -1034,6 +1034,79 @@ function escrowAmountKobo(amount, allowZero = false) {
   return kobo;
 }
 
+function requireEscrowAdmin(request) {
+  const auth = requireVerifiedUser(request);
+  if (auth.token.admin !== true) {
+    throw new HttpsError("permission-denied", "Administrator access is required.");
+  }
+  return auth;
+}
+
+exports.getEscrowAdminMetrics = onCall(async request => {
+  requireEscrowAdmin(request);
+  const day = new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 10);
+  const orders = db.collection("escrowOrders");
+  const statuses = ["HELD_IN_ESCROW", "SHIPPED", "DISPUTED", "AUTO_REFUND_REQUIRED",
+    "REFUND_INITIATING", "REFUND_PENDING", "REFUNDED", "RELEASED"];
+  const methods = ["delivery", "pickup"];
+  const activeOrders = orders.where("status", "in", ["HELD_IN_ESCROW", "SHIPPED", "DISPUTED",
+    "AUTO_REFUND_REQUIRED", "REFUND_INITIATING", "REFUND_PENDING"]);
+  const active = activeOrders.aggregate({ count: AggregateField.count(), total: AggregateField.sum("totalPaid") }).get();
+  const activeCount = activeOrders.count().get();
+  const checkIns = db.collection("quizWallets").where("dailyCheckInDay", "==", day).count().get();
+  const breakdown = methods.flatMap(method => statuses.map(async status => {
+    const result = await orders.where("fulfillment.method", "==", method)
+      .where("status", "==", status).count().get();
+    return { method, status, count: result.data().count };
+  }));
+  const [activeResult, activeCountResult, checkInResult, ...fulfillment] =
+    await Promise.all([active, activeCount, checkIns, ...breakdown]);
+  const count = checkInResult.data().count;
+  const amount = activeResult.data().total;
+  if (!Number.isSafeInteger(activeCountResult.data().count) || activeCountResult.data().count < 0 ||
+      activeCountResult.data().count !== activeResult.data().count ||
+      !Number.isSafeInteger(count) || count < 0 || !Number.isSafeInteger(count * 5) ||
+      typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) {
+    throw new HttpsError("failed-precondition", "Dashboard metrics require reconciliation.");
+  }
+  return { day, activeOrders: activeCountResult.data().count, activeTotal: amount,
+    dailyCheckIns: count, dailyCoins: count * 5, fulfillment };
+});
+
+exports.listEscrowAdminQueue = onCall(async request => {
+  requireEscrowAdmin(request);
+  const queues = {
+    disputes: { collection: "escrowOrders", statuses: ["DISPUTED"] },
+    refunds: { collection: "escrowRefunds", statuses: ["INITIATING", "PENDING"] },
+    payouts: { collection: "escrowWithdrawals", statuses: ["INITIATING", "PENDING"] }
+  };
+  const kind = request.data?.kind;
+  const cursor = request.data?.cursor;
+  if (!Object.hasOwn(queues, kind) ||
+      (cursor != null && (typeof cursor !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(cursor)))) {
+    throw new HttpsError("invalid-argument", "Choose a valid queue and cursor.");
+  }
+  const queue = queues[kind];
+  let query = db.collection(queue.collection).where("status", "in", queue.statuses)
+    .orderBy(FieldPath.documentId()).limit(51);
+  if (cursor) query = query.startAfter(cursor);
+  const snapshot = await query.get();
+  const page = snapshot.docs.slice(0, 50);
+  const items = page.map(doc => {
+    const data = doc.data();
+    if (kind === "disputes") return { id: doc.id, status: data.status, productTitle: data.productTitle,
+      buyerUid: data.buyerUid, vendorUid: data.vendorUid, disputeReason: data.disputeReason,
+      productPrice: data.productPrice, totalPaid: data.totalPaid, transactionId: data.transactionId,
+      dispatched: !!data.shippedAt, fulfillmentMethod: data.fulfillment?.method || "legacy" };
+    if (kind === "refunds") return { id: doc.id, status: data.status, amountKobo: data.amountKobo,
+      transactionId: data.transactionId, providerRefundId: data.providerRefundId || null,
+      mode: data.mode || "automatic-or-test", initiatedBy: data.initiatedBy };
+    return { id: doc.id, status: data.status, vendorUid: data.vendorUid, grossKobo: data.grossKobo,
+      netKobo: data.netKobo, bankLastFour: data.bankLastFour, providerTransferId: data.providerTransferId || null };
+  });
+  return { items, nextCursor: snapshot.docs.length > 50 ? page[page.length - 1].id : null };
+});
+
 function escrowStoredBalance(snapshot, field) {
   if (!snapshot.exists) return 0;
   const value = snapshot.data()?.[field];
@@ -2032,6 +2105,25 @@ exports.checkVendorWithdrawal = onCall(
   }
 );
 
+exports.adminCheckVendorWithdrawal = onCall(
+  { secrets: [FLW_SECRET_KEY] },
+  async request => {
+    requireEscrowAdmin(request);
+    const secret = escrowSandboxKey();
+    const withdrawalId = request.data?.withdrawalId;
+    if (typeof withdrawalId !== "string" || !/^[a-f0-9]{64}$/.test(withdrawalId)) {
+      throw new HttpsError("invalid-argument", "Choose a valid payout.");
+    }
+    const snapshot = await db.collection("escrowWithdrawals").doc(withdrawalId).get();
+    if (!snapshot.exists) throw new HttpsError("not-found", "Payout not found.");
+    const withdrawal = snapshot.data();
+    if (!Number.isSafeInteger(withdrawal.grossKobo) || withdrawal.grossKobo < 200000) {
+      throw new HttpsError("failed-precondition", "The payout is below the NGN 2,000 minimum or needs reconciliation.");
+    }
+    return checkEscrowWithdrawalStatus(withdrawalId, withdrawal.vendorUid, secret);
+  }
+);
+
 exports.reconcileEscrowWithdrawal = onCall(
   { secrets: [FLW_SECRET_KEY] },
   async request => {
@@ -2050,6 +2142,9 @@ exports.reconcileEscrowWithdrawal = onCall(
     const snapshot = await ref.get();
     if (!snapshot.exists) throw new HttpsError("not-found", "Withdrawal not found.");
     const withdrawal = snapshot.data();
+    if (!Number.isSafeInteger(withdrawal.grossKobo) || withdrawal.grossKobo < 200000) {
+      throw new HttpsError("failed-precondition", "The payout is below the NGN 2,000 minimum or needs reconciliation.");
+    }
     if (withdrawal.status !== "INITIATING") {
       throw new HttpsError("failed-precondition", "Only an uncertain withdrawal can be reconciled here.");
     }
@@ -2193,6 +2288,71 @@ async function initiateEscrowRefund(request) {
   return startEscrowRefund(orderId, secret, auth.uid, "DISPUTED");
 }
 
+exports.prepareManualEscrowRefund = onCall(async request => {
+  const auth = requireEscrowAdmin(request);
+  const orderId = request.data?.orderId;
+  if (typeof orderId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(orderId)) {
+    throw new HttpsError("invalid-argument", "Choose a valid escrow order.");
+  }
+  const orderRef = db.collection("escrowOrders").doc(orderId);
+  const refundRef = db.collection("escrowRefunds").doc(orderId);
+  return db.runTransaction(async transaction => {
+    const [orderSnapshot, refundSnapshot] = await Promise.all([
+      transaction.get(orderRef), transaction.get(refundRef)
+    ]);
+    if (!orderSnapshot.exists) throw new HttpsError("not-found", "Escrow order not found.");
+    const order = orderSnapshot.data();
+    if (refundSnapshot.exists) {
+      const refund = refundSnapshot.data();
+      if (refund.mode === "MANUAL" && ["INITIATING", "PENDING"].includes(refund.status) &&
+          ["REFUND_INITIATING", "REFUND_PENDING"].includes(order.status)) {
+        return { orderId, transactionId: refund.transactionId, amountKobo: refund.amountKobo, alreadyPrepared: true };
+      }
+      throw new HttpsError("failed-precondition", "This refund already exists or needs reconciliation.");
+    }
+    if (order.status !== "DISPUTED" ||
+        typeof order.transactionId !== "string" || !/^\d{1,32}$/.test(order.transactionId)) {
+      throw new HttpsError("failed-precondition", "Only a disputed order with a verified payment can be prepared.");
+    }
+    const productKobo = escrowAmountKobo(order.productPrice);
+    const feeKobo = escrowAmountKobo(order.platformFee, true);
+    const fulfillmentKobo = order.fulfillment ? escrowAmountKobo(order.fulfillmentFee, true) : 0;
+    const totalKobo = escrowAmountKobo(order.totalPaid);
+    if (!Number.isSafeInteger(productKobo + feeKobo + fulfillmentKobo) ||
+        productKobo + feeKobo + fulfillmentKobo !== totalKobo) {
+      throw new HttpsError("failed-precondition", "The order amount needs reconciliation.");
+    }
+    const amountKobo = order.fulfillment && order.shippedAt ? productKobo : totalKobo;
+    if (amountKobo < 10000) {
+      throw new HttpsError("failed-precondition", "Flutterwave's minimum refund is NGN 100; contact support.");
+    }
+    transaction.create(refundRef, { orderId, transactionId: order.transactionId, amountKobo,
+      retainedKobo: totalKobo - amountKobo, mode: "MANUAL", status: "INITIATING",
+      initiatedBy: auth.uid, createdAt: FieldValue.serverTimestamp() });
+    transaction.update(orderRef, { status: "REFUND_INITIATING",
+      refundRequestedAt: FieldValue.serverTimestamp() });
+    return { orderId, transactionId: order.transactionId, amountKobo, alreadyPrepared: false };
+  });
+});
+
+exports.verifyManualEscrowRefund = onCall(
+  { secrets: [FLW_SECRET_KEY, FLUTTERWAVE_SECRET_KEY] },
+  async request => {
+    const auth = requireEscrowAdmin(request);
+    const orderId = request.data?.orderId;
+    const refundId = request.data?.refundId;
+    if (typeof orderId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(orderId) ||
+        typeof refundId !== "string" || !/^\d{1,32}$/.test(refundId)) {
+      throw new HttpsError("invalid-argument", "Provide a valid order and Flutterwave refund ID.");
+    }
+    const snapshot = await db.collection("escrowRefunds").doc(orderId).get();
+    if (!snapshot.exists || snapshot.data().mode !== "MANUAL") {
+      throw new HttpsError("failed-precondition", "Prepare a manual refund before verifying it.");
+    }
+    return checkEscrowRefundStatus(orderId, escrowPaymentKey(), refundId, auth.uid);
+  }
+);
+
 async function startEscrowRefund(orderId, secret, initiatedBy, requiredStatus) {
   if (typeof orderId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(orderId)) {
     throw new HttpsError("invalid-argument", "Choose a valid escrow order.");
@@ -2290,7 +2450,7 @@ async function startEscrowRefund(orderId, secret, initiatedBy, requiredStatus) {
   return { status };
 }
 
-async function checkEscrowRefundStatus(orderId, secret, notifiedRefundId) {
+async function checkEscrowRefundStatus(orderId, secret, notifiedRefundId, verifiedBy) {
     if (typeof orderId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(orderId)) {
       throw new HttpsError("invalid-argument", "Choose a valid escrow order.");
     }
@@ -2354,6 +2514,7 @@ async function checkEscrowRefundStatus(orderId, secret, notifiedRefundId) {
       transaction.update(refundRef, {
         status: isFinal ? "REFUNDED" : "PENDING", providerRefundId: refundId,
         providerStatus: data.status, updatedAt: FieldValue.serverTimestamp(),
+        ...(verifiedBy ? { verifiedBy } : {}),
         ...(isFinal ? { completedAt: FieldValue.serverTimestamp() } : {})
       });
       transaction.update(orderRef, isFinal
