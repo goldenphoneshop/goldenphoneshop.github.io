@@ -318,6 +318,36 @@ function normalizedWallet(data = {}) {
   };
 }
 
+exports.claimDailyCheckIn = onCall(async request => {
+  const auth = requireVerifiedUser(request);
+  const day = new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 10);
+  const walletRef = accountWalletRef(auth.uid);
+  const profileRef = db.collection("users").doc(auth.uid);
+  return db.runTransaction(async transaction => {
+    const [profile, wallet] = await Promise.all([
+      transaction.get(profileRef), transaction.get(walletRef)
+    ]);
+    if (!profile.exists || !["Buyer", "Vendor"].includes(profile.data().role)) {
+      throw new HttpsError("failed-precondition", "Complete your marketplace profile before checking in.");
+    }
+    const data = wallet.data() || {};
+    if (wallet.exists && data.coins !== undefined &&
+        (typeof data.coins !== "number" || data.coins < 0 || !Number.isSafeInteger(data.coins * 2))) {
+      throw new HttpsError("failed-precondition", "Your coin balance needs reconciliation.");
+    }
+    const coins = normalizedWallet(data).coins;
+    if (typeof data.dailyCheckInDay === "string" && data.dailyCheckInDay >= day) {
+      return { awarded: false, coinsRemaining: coins, day };
+    }
+    if (!Number.isSafeInteger((coins + 5) * 2)) {
+      throw new HttpsError("failed-precondition", "Your coin balance needs reconciliation.");
+    }
+    transaction.set(walletRef, { coins: coins + 5, dailyCheckInDay: day,
+      dailyCheckInAt: FieldValue.serverTimestamp() }, { merge: true });
+    return { awarded: true, coinsRemaining: coins + 5, day };
+  });
+});
+
 function profileIsChatReady(uid, profile) {
   const photoPrefix = `profile-photos/${uid}/`;
   const photoName = typeof profile?.profilePhotoPath === "string" &&
@@ -1052,6 +1082,161 @@ function escrowCheckoutRedirectUrl() {
   return url.href;
 }
 
+function voucherCode(value) {
+  const code = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (!/^[A-Z0-9_-]{4,32}$/.test(code)) {
+    throw new HttpsError("invalid-argument", "Enter a voucher code of 4 to 32 letters, numbers, underscores or hyphens.");
+  }
+  return code;
+}
+
+function voucherPairRef(collection, code, uid) {
+  const id = crypto.createHash("sha256").update(`${code}\0${uid}`).digest("hex");
+  return db.collection(collection).doc(id);
+}
+
+exports.createStoreVoucher = onCall(async request => {
+  const auth = requireVerifiedUser(request);
+  const code = voucherCode(request.data?.code);
+  const scope = request.data?.scope;
+  const type = request.data?.type;
+  const value = request.data?.value;
+  if (!["platform", "store"].includes(scope) || !["fixed", "percent"].includes(type) ||
+      typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new HttpsError("invalid-argument", "Choose a valid voucher scope, type and discount.");
+  }
+  const units = Math.round(value * 100);
+  if (!Number.isSafeInteger(units) || units < 1 || Math.abs(value * 100 - units) > 0.00001 ||
+      (type === "percent" && units > 10000)) {
+    throw new HttpsError("invalid-argument", "Enter a valid discount with at most two decimal places.");
+  }
+  const profile = await db.collection("users").doc(auth.uid).get();
+  const isAdmin = auth.token.admin === true;
+  if (!isAdmin && (!profile.exists || profile.data().role !== "Vendor")) {
+    throw new HttpsError("permission-denied", "Only vendors and administrators can create vouchers.");
+  }
+  if (scope === "platform" && !isAdmin) {
+    throw new HttpsError("permission-denied", "Only administrators can create platform vouchers.");
+  }
+  const vendorUid = scope === "store" ? (isAdmin ? request.data?.vendorUid : auth.uid) : null;
+  if (scope === "store") {
+    if (typeof vendorUid !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(vendorUid)) {
+      throw new HttpsError("invalid-argument", "Choose a valid vendor.");
+    }
+    const vendor = await db.collection("users").doc(vendorUid).get();
+    if (!vendor.exists || vendor.data().role !== "Vendor") {
+      throw new HttpsError("failed-precondition", "Choose an existing vendor.");
+    }
+  }
+  const ref = db.collection("storeVouchers").doc(code);
+  const now = Date.now();
+  await db.runTransaction(async transaction => {
+    const existing = await transaction.get(ref);
+    if (existing.exists) throw new HttpsError("already-exists", "This voucher code is already in use.");
+    transaction.create(ref, { code, scope, vendorUid, type, units, createdBy: auth.uid,
+      expiresAtMs: now + 30 * 24 * 60 * 60 * 1000, createdAt: FieldValue.serverTimestamp() });
+  });
+  return { code, expiresAtMs: now + 30 * 24 * 60 * 60 * 1000 };
+});
+
+exports.setPlatformVoucherOptIn = onCall(async request => {
+  const auth = requireVerifiedUser(request);
+  const code = voucherCode(request.data?.code);
+  if (typeof request.data?.enabled !== "boolean") {
+    throw new HttpsError("invalid-argument", "Choose whether to participate.");
+  }
+  const profileRef = db.collection("users").doc(auth.uid);
+  const voucherRef = db.collection("storeVouchers").doc(code);
+  const optInRef = voucherPairRef("voucherOptIns", code, auth.uid);
+  await db.runTransaction(async transaction => {
+    const [profile, voucher] = await Promise.all([transaction.get(profileRef), transaction.get(voucherRef)]);
+    if (!profile.exists || profile.data().role !== "Vendor") {
+      throw new HttpsError("permission-denied", "Only vendors can opt in.");
+    }
+    if (!voucher.exists || voucher.data().scope !== "platform" ||
+        voucher.data().expiresAtMs <= Date.now()) {
+      throw new HttpsError("failed-precondition", "This platform voucher is unavailable.");
+    }
+    transaction.set(optInRef, { code, vendorUid: auth.uid, enabled: request.data.enabled,
+      updatedAt: FieldValue.serverTimestamp() });
+  });
+  return { enabled: request.data.enabled };
+});
+
+exports.getPlatformVoucher = onCall(async request => {
+  const auth = requireVerifiedUser(request);
+  const code = voucherCode(request.data?.code);
+  const [profile, voucher] = await Promise.all([
+    db.collection("users").doc(auth.uid).get(),
+    db.collection("storeVouchers").doc(code).get()
+  ]);
+  if (!profile.exists || profile.data().role !== "Vendor") {
+    throw new HttpsError("permission-denied", "Only vendors can view platform voucher terms.");
+  }
+  if (!voucher.exists || voucher.data().scope !== "platform" || voucher.data().expiresAtMs <= Date.now()) {
+    throw new HttpsError("failed-precondition", "This platform voucher is unavailable.");
+  }
+  const { type, units, expiresAtMs } = voucher.data();
+  return { code, type, value: units / 100, expiresAtMs };
+});
+
+async function readVoucherPrice(transaction, code, buyerUid, listing, priceKobo) {
+  const ref = db.collection("storeVouchers").doc(code);
+  const redemptionRef = voucherPairRef("voucherRedemptions", code, buyerUid);
+  const optInRef = voucherPairRef("voucherOptIns", code, listing.ownerUid);
+  const [voucher, redemption, optIn] = await Promise.all([
+    transaction.get(ref), transaction.get(redemptionRef), transaction.get(optInRef)
+  ]);
+  if (!voucher.exists || !Number.isSafeInteger(voucher.data().expiresAtMs) ||
+      voucher.data().expiresAtMs <= Date.now() ||
+      (voucher.data().scope === "store" && voucher.data().vendorUid !== listing.ownerUid) ||
+      (voucher.data().scope === "platform" && (!optIn.exists || optIn.data().enabled !== true)) ||
+      !["store", "platform"].includes(voucher.data().scope)) {
+    throw new HttpsError("failed-precondition", "This voucher is not available for this product.");
+  }
+  if (redemption.exists && redemption.data().status !== "RELEASED") {
+    throw new HttpsError("failed-precondition", "This voucher has already been used or is reserved for another checkout.");
+  }
+  const { type, units } = voucher.data();
+  if (!Number.isSafeInteger(units) || units <= 0 ||
+      !["fixed", "percent"].includes(type) || (type === "percent" && units > 10000)) {
+    throw new HttpsError("failed-precondition", "This voucher needs reconciliation.");
+  }
+  const discountKobo = type === "fixed" ? units
+    : Number((BigInt(priceKobo) * BigInt(units) + 5000n) / 10000n);
+  if (discountKobo <= 0 || priceKobo - discountKobo < 10000) {
+    throw new HttpsError("failed-precondition", "This discount cannot be applied to this product.");
+  }
+  return { discountKobo, redemptionRef };
+}
+
+exports.quoteStoreVoucher = onCall(async request => {
+  const auth = requireVerifiedUser(request);
+  const code = voucherCode(request.data?.code);
+  const productId = request.data?.productId;
+  if (typeof productId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(productId)) {
+    throw new HttpsError("invalid-argument", "Choose a valid product.");
+  }
+  return db.runTransaction(async transaction => {
+    const [buyer, product] = await Promise.all([
+      transaction.get(db.collection("users").doc(auth.uid)),
+      transaction.get(db.collection("products").doc(productId))
+    ]);
+    if (!buyer.exists || buyer.data().role !== "Buyer") {
+      throw new HttpsError("permission-denied", "Only buyers can use vouchers.");
+    }
+    if (!product.exists || !product.data().ownerUid || product.data().ownerUid === auth.uid ||
+        !Number.isSafeInteger(product.data().stock) || product.data().stock < 1) {
+      throw new HttpsError("failed-precondition", "This product is not available.");
+    }
+    const priceKobo = escrowAmountKobo(product.data().price);
+    const { discountKobo } = await readVoucherPrice(transaction, code, auth.uid, product.data(), priceKobo);
+    const discountedPrice = (priceKobo - discountKobo) / 100;
+    return { code, originalPrice: priceKobo / 100, discount: discountKobo / 100,
+      productPrice: discountedPrice, platformFee: calculateEscrowFee(discountedPrice) };
+  });
+});
+
 exports.initiateEscrowCheckout = onCall(
   { secrets: [FLW_SECRET_KEY, FLUTTERWAVE_SECRET_KEY] },
   async request => {
@@ -1085,7 +1270,8 @@ exports.initiateEscrowCheckout = onCall(
     if (escrowAmountKobo(request.data?.expectedPrice) !== priceKobo) {
       throw new HttpsError("failed-precondition", "The product price changed. Review it before checkout.");
     }
-    const feeKobo = escrowAmountKobo(calculateEscrowFee(listing.price), true);
+    const code = request.data?.voucherCode ? voucherCode(request.data.voucherCode) : null;
+    const expectedDiscountKobo = code ? escrowAmountKobo(request.data?.expectedDiscount, true) : 0;
     const selected = request.data?.fulfillment;
     let fulfillment;
     let fulfillmentFee;
@@ -1114,13 +1300,6 @@ exports.initiateEscrowCheckout = onCall(
       throw new HttpsError("invalid-argument", "Choose a fulfillment method.");
     }
     const fulfillmentKobo = escrowAmountKobo(fulfillmentFee, true);
-    const totalKobo = priceKobo + feeKobo + fulfillmentKobo;
-    if (!Number.isSafeInteger(totalKobo)) {
-      throw new HttpsError("failed-precondition", "The product total is too large.");
-    }
-    if (priceKobo < 10000) {
-      throw new HttpsError("failed-precondition", "The product price must be at least NGN 100 so it can be refunded after dispatch.");
-    }
     const email = auth.token.email_verified === true && typeof auth.token.email === "string"
       ? auth.token.email.trim()
       : typeof request.data?.checkoutEmail === "string" ? request.data.checkoutEmail.trim() : "";
@@ -1130,20 +1309,39 @@ exports.initiateEscrowCheckout = onCall(
     const txRef = `escrow-${crypto.randomUUID()}`;
     const pendingRef = db.collection("escrowPendingPayments").doc(txRef);
     const productRef = db.collection("products").doc(productId);
-    await db.runTransaction(async transaction => {
+    const pricing = await db.runTransaction(async transaction => {
       const current = await transaction.get(productRef);
       if (!current.exists || current.data().ownerUid !== listing.ownerUid ||
           current.data().price !== listing.price || current.data().title !== listing.title ||
           !Number.isSafeInteger(current.data().stock) || current.data().stock < 1) {
         throw new HttpsError("failed-precondition", "This listing changed or is out of stock. Review it again.");
       }
+      const voucher = code ? await readVoucherPrice(transaction, code, auth.uid, current.data(), priceKobo) : null;
+      const discountKobo = voucher ? voucher.discountKobo : 0;
+      if (discountKobo !== expectedDiscountKobo) {
+        throw new HttpsError("failed-precondition", "The voucher discount changed. Review it again.");
+      }
+      const productKobo = priceKobo - discountKobo;
+      if (productKobo < 10000) {
+        throw new HttpsError("failed-precondition", "The product price must be at least NGN 100 so it can be refunded after dispatch.");
+      }
+      const feeKobo = escrowAmountKobo(calculateEscrowFee(productKobo / 100), true);
+      const totalKobo = productKobo + feeKobo + fulfillmentKobo;
+      if (!Number.isSafeInteger(totalKobo)) {
+        throw new HttpsError("failed-precondition", "The product total is too large.");
+      }
       transaction.update(productRef, { stock: current.data().stock - 1 });
+      if (voucher) {
+        transaction.set(voucher.redemptionRef, { code, buyerUid: auth.uid, txRef, status: "RESERVED" });
+      }
       transaction.create(pendingRef, {
         buyerUid: auth.uid,
         vendorUid: listing.ownerUid,
         productId,
         productTitle: listing.title,
-        productPrice: priceKobo / 100,
+        productPrice: productKobo / 100,
+        ...(code ? { voucherCode: code, originalProductPrice: priceKobo / 100,
+          discount: discountKobo / 100 } : {}),
         platformFee: feeKobo / 100,
         fulfillment,
         fulfillmentFee,
@@ -1155,7 +1353,9 @@ exports.initiateEscrowCheckout = onCall(
         reservationExpiresAtMs: Date.now() + 15 * 60 * 1000,
         createdAt: FieldValue.serverTimestamp()
       });
+      return { productKobo, feeKobo, totalKobo, discountKobo };
     });
+    const { productKobo, feeKobo, totalKobo, discountKobo } = pricing;
     const response = await fetch("https://api.flutterwave.com/v3/payments", {
       method: "POST",
       headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json" },
@@ -1187,7 +1387,8 @@ exports.initiateEscrowCheckout = onCall(
         checkoutUrl.hostname !== "checkout.flutterwave.com") {
       throw new HttpsError("unavailable", "Flutterwave returned an invalid checkout link.");
     }
-    return { checkoutUrl: checkoutUrl.href, txRef, productPrice: priceKobo / 100,
+    return { checkoutUrl: checkoutUrl.href, txRef, productPrice: productKobo / 100,
+      originalProductPrice: priceKobo / 100, discount: discountKobo / 100,
       platformFee: feeKobo / 100, fulfillmentFee, totalPaid: totalKobo / 100 };
   }
 );
@@ -1231,17 +1432,25 @@ async function verifyEscrowTransaction(txRef, transactionId, secret) {
     const data = current.data();
     if (data.status === "VERIFIED" && data.transactionId === transactionId && order.exists &&
         claim.exists && claim.data().txRef === txRef) {
-      return { orderId: txRef, alreadyVerified: true, needsRefund: order.data().status === "AUTO_REFUND_REQUIRED" };
+      return { orderId: txRef, alreadyVerified: true, status: order.data().status,
+        needsRefund: order.data().status === "AUTO_REFUND_REQUIRED" };
     }
     if (data.status !== "PENDING" || order.exists || claim.exists ||
         data.totalPaid !== pending.totalPaid || data.buyerUid !== pending.buyerUid) {
       throw new HttpsError("failed-precondition", "The escrow payment needs reconciliation.");
     }
+    const redemptionRef = data.voucherCode ? voucherPairRef("voucherRedemptions", data.voucherCode, data.buyerUid) : null;
+    const redemption = redemptionRef ? await transaction.get(redemptionRef) : null;
+    if (redemptionRef && !redemption.exists) {
+      throw new HttpsError("failed-precondition", "The voucher payment needs reconciliation.");
+    }
+    const voucherAvailable = !redemptionRef || redemption.data().status === "RELEASED" ||
+      (redemption.data().status === "RESERVED" && redemption.data().txRef === txRef);
     let needsRefund = false;
     if (data.reservationStatus === "RELEASED") {
       const productRef = db.collection("products").doc(data.productId);
       const product = await transaction.get(productRef);
-      if (product.exists && product.data().ownerUid === data.vendorUid &&
+      if (voucherAvailable && product.exists && product.data().ownerUid === data.vendorUid &&
           Number.isSafeInteger(product.data().stock) && product.data().stock > 0) {
         transaction.update(productRef, { stock: product.data().stock - 1 });
       } else {
@@ -1249,6 +1458,15 @@ async function verifyEscrowTransaction(txRef, transactionId, secret) {
       }
     } else if (data.reservationStatus !== "HELD") {
       throw new HttpsError("failed-precondition", "The stock reservation needs reconciliation.");
+    } else if (!voucherAvailable || (redemptionRef &&
+        (redemption.data().status !== "RESERVED" || redemption.data().txRef !== txRef))) {
+      throw new HttpsError("failed-precondition", "The voucher reservation needs reconciliation.");
+    }
+    if (redemptionRef && !needsRefund) {
+      transaction.set(redemptionRef, { code: data.voucherCode, buyerUid: data.buyerUid,
+        txRef, status: "USED", usedAt: FieldValue.serverTimestamp() });
+    } else if (redemptionRef && redemption.data().status === "RESERVED" && redemption.data().txRef === txRef) {
+      transaction.update(redemptionRef, { status: "RELEASED" });
     }
     transaction.create(orderRef, {
       buyerUid: data.buyerUid,
@@ -1256,6 +1474,8 @@ async function verifyEscrowTransaction(txRef, transactionId, secret) {
       productId: data.productId,
       productTitle: data.productTitle,
       productPrice: data.productPrice,
+      ...(data.voucherCode ? { voucherCode: data.voucherCode, originalProductPrice: data.originalProductPrice,
+        discount: data.discount } : {}),
       platformFee: data.platformFee,
       ...(data.fulfillment ? { fulfillment: data.fulfillment, fulfillmentFee: data.fulfillmentFee } : {}),
       totalPaid: data.totalPaid,
@@ -1269,12 +1489,14 @@ async function verifyEscrowTransaction(txRef, transactionId, secret) {
       status: "VERIFIED", reservationStatus: needsRefund ? "REFUND_NEEDED" : "CONSUMED",
       transactionId, verifiedAt: FieldValue.serverTimestamp()
     });
-    return { orderId: txRef, alreadyVerified: false, needsRefund };
+    return { orderId: txRef, alreadyVerified: false,
+      status: needsRefund ? "AUTO_REFUND_REQUIRED" : "HELD_IN_ESCROW", needsRefund };
   });
   if (result.needsRefund) {
-    await startEscrowRefund(txRef, secret, "automatic", "AUTO_REFUND_REQUIRED");
+    const refund = await startEscrowRefund(txRef, secret, "automatic", "AUTO_REFUND_REQUIRED");
+    result.status = refund.status;
   }
-  return { orderId: result.orderId, alreadyVerified: result.alreadyVerified };
+  return { orderId: result.orderId, alreadyVerified: result.alreadyVerified, status: result.status };
 }
 
 exports.verifyEscrowPayment = onCall(
@@ -1308,6 +1530,12 @@ async function releaseExpiredEscrowStock(txRef, now, paymentFailed = false) {
     const data = pending.data();
     const productRef = db.collection("products").doc(data.productId);
     const product = await transaction.get(productRef);
+    const redemptionRef = data.voucherCode ? voucherPairRef("voucherRedemptions", data.voucherCode, data.buyerUid) : null;
+    const redemption = redemptionRef ? await transaction.get(redemptionRef) : null;
+    if (redemptionRef && (!redemption.exists || redemption.data().status !== "RESERVED" ||
+        redemption.data().txRef !== txRef)) {
+      throw new HttpsError("failed-precondition", "The voucher reservation needs reconciliation.");
+    }
     if (product.exists && product.data().ownerUid === data.vendorUid) {
       if (!Number.isSafeInteger(product.data().stock) || product.data().stock < 0 ||
           !Number.isSafeInteger(product.data().stock + 1)) {
@@ -1317,6 +1545,7 @@ async function releaseExpiredEscrowStock(txRef, now, paymentFailed = false) {
     } else {
       logger.error("Escrow reservation product no longer exists.", { txRef });
     }
+    if (redemptionRef) transaction.update(redemptionRef, { status: "RELEASED" });
     transaction.update(pendingRef, {
       reservationStatus: "RELEASED", reservationReleasedAt: FieldValue.serverTimestamp()
     });

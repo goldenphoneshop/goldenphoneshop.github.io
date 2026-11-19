@@ -679,7 +679,7 @@
                     <li>Open Golden Chat from a Vendor's listing or profile to ask about a product.</li>
                     <li>The sender pays 1 coin for text, 2 for a photo, 4 for a video clip, or 3 for a voice note. Only Buyer-to-Vendor text messages and voice notes share half their charge with the Vendor; photos and videos are not shared. The recipient is not charged.</li>
                 </ol>
-                <p class="mt-2"><strong class="text-gold">Available:</strong> coin purchases, paid Golden Chat messages/media, 24-hour listing boosts, monthly Verified Dealer Badges, stock-alert broadcasts, and referral rewards. <strong>Not available:</strong> voice/video calls, cash-outs, vouchers, escrow, or daily coins.</p>
+                <p class="mt-2"><strong class="text-gold">Available:</strong> coin purchases, paid Golden Chat messages/media, 24-hour listing boosts, monthly Verified Dealer Badges, stock-alert broadcasts, referral rewards, daily check-in coins, voucher codes, and escrow checkout. <strong>Not available:</strong> voice/video calls or live vendor cash-outs.</p>
             </div>
             <div class="mt-5 grid gap-5 md:grid-cols-2">
                 <section aria-labelledby="vendorCoinUtilitiesHeading">
@@ -691,7 +691,7 @@
                         </article>
                         <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
                             <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Vendor earnings and cash-out</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Not available</span></div>
-                            <p class="mt-1 text-[10px] text-gray-400">Buyer-to-Vendor messages credit Vendors with half the message charge as spendable Chat coins. These coins are not cash, and no bank payout can be requested or promised here.</p>
+                            <p class="mt-1 text-[10px] text-gray-400">Released escrow proceeds are recorded as vendor earnings, but live bank payouts are not yet available. Buyer-to-Vendor message rewards are spendable Chat coins, not cash.</p>
                         </article>
                         <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
                             <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Verified Dealer Badge</h4><span class="rounded-full bg-green-500/10 px-2 py-1 text-[9px] font-bold text-green-300">Active</span></div>
@@ -707,16 +707,16 @@
                     <h3 id="buyerCoinUtilitiesHeading" class="mb-2 text-sm font-extrabold text-gold">For Buyers</h3>
                     <div class="space-y-2">
                         <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
-                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Store discount vouchers</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Planned</span></div>
-                            <p class="mt-1 text-[10px] text-gray-400">No coin redemption or checkout discount is currently offered.</p>
+                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Store discount vouchers</h4><span class="rounded-full bg-green-500/10 px-2 py-1 text-[9px] font-bold text-green-300">Active</span></div>
+                            <p class="mt-1 text-[10px] text-gray-400">Apply an eligible promotional code at checkout. Vendors fund discounts; each code expires after 30 days and is usable once per buyer. Codes do not cost coins.</p>
                         </article>
                         <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
-                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Escrow protection</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Not available</span></div>
-                            <p class="mt-1 text-[10px] text-gray-400">The marketplace does not hold or protect transaction funds. Arrange purchases safely with the Vendor.</p>
+                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Escrow checkout</h4><span class="rounded-full bg-green-500/10 px-2 py-1 text-[9px] font-bold text-green-300">Active</span></div>
+                            <p class="mt-1 text-[10px] text-gray-400">Payments go to the marketplace merchant account; the order records release to the vendor after delivery confirmation. This is not a separately verified escrow account. Disputes and live refunds require manual review.</p>
                         </article>
                         <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
-                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Daily check-in coins</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Planned</span></div>
-                            <p class="mt-1 text-[10px] text-gray-400">Opening the app does not currently award Golden Coins.</p>
+                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Daily check-in coins</h4><span class="rounded-full bg-green-500/10 px-2 py-1 text-[9px] font-bold text-green-300">Active</span></div>
+                            <p class="mt-1 text-[10px] text-gray-400">Verified buyers and vendors receive 5 Golden Coins once per West Africa day when they sign in or reopen the app.</p>
                         </article>
                         <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
                             <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Refer and earn</h4><span class="rounded-full bg-green-500/10 px-2 py-1 text-[9px] font-bold text-green-300">Active</span></div>
@@ -725,6 +725,26 @@
                     </div>
                 </section>
             </div>
+            <section id="voucherManagement" class="hidden mt-5 border-t border-darkBorder pt-4 text-xs text-gray-300">
+                <h3 class="font-bold text-gold">Manage discount vouchers</h3>
+                <p class="mt-1">Discounts are deducted from vendor earnings. Codes expire after 30 days and can be used once per buyer.</p>
+                <form onsubmit="createStoreVoucherFromForm(event)" class="mt-3 space-y-2">
+                    <label class="block">Code <input id="voucherCreateCode" required minlength="4" maxlength="32" pattern="[A-Za-z0-9_-]+" class="w-full rounded-lg bg-darkBg border border-darkBorder p-2 text-white"></label>
+                    <label class="block">Discount type <select id="voucherCreateType" class="w-full rounded-lg bg-darkBg border border-darkBorder p-2 text-white"><option value="fixed">Fixed NGN</option><option value="percent">Percent</option></select></label>
+                    <label class="block">Amount <input id="voucherCreateValue" type="number" min="0.01" step="0.01" required class="w-full rounded-lg bg-darkBg border border-darkBorder p-2 text-white"></label>
+                    <div id="voucherAdminFields" class="hidden space-y-2">
+                        <label class="block">Scope <select id="voucherCreateScope" class="w-full rounded-lg bg-darkBg border border-darkBorder p-2 text-white"><option value="store">Specific vendor</option><option value="platform">Platform-wide (vendor opt-in)</option></select></label>
+                        <label class="block">Vendor UID (specific vendor only) <input id="voucherCreateVendor" maxlength="128" class="w-full rounded-lg bg-darkBg border border-darkBorder p-2 text-white"></label>
+                    </div>
+                    <button type="submit" class="rounded-lg border border-gold/40 px-3 py-2 text-gold">Create voucher</button>
+                </form>
+                <form id="voucherOptInForm" onsubmit="setVoucherOptInFromForm(event)" class="mt-4 space-y-2">
+                    <label class="block">Platform voucher code <input id="voucherOptInCode" required minlength="4" maxlength="32" pattern="[A-Za-z0-9_-]+" class="w-full rounded-lg bg-darkBg border border-darkBorder p-2 text-white"></label>
+                    <label class="block"><input id="voucherOptInEnabled" type="checkbox"> I opt in to fund this voucher on my products.</label>
+                    <button type="submit" class="rounded-lg border border-gold/40 px-3 py-2 text-gold">Save participation</button>
+                </form>
+                <p id="voucherManagementStatus" class="mt-2" role="status"></p>
+            </section>
             <footer class="mt-5 flex flex-wrap justify-end gap-2 border-t border-darkBorder pt-4">
                 <button type="button" onclick="closeGoldenCoinUtilities(); openChatCoinStore()" class="rounded-lg gold-gradient-bg px-4 py-2 text-xs font-bold text-black">Buy Golden Chat coins</button>
                 <button type="button" onclick="closeGoldenCoinUtilities(); openChatPage()" class="rounded-lg border border-gold/40 px-4 py-2 text-xs font-bold text-gold hover:bg-gold/10">Open Golden Chat</button>
@@ -1382,6 +1402,11 @@
                 <label class="block">Phone number <input id="escrowDeliveryPhone" type="tel" maxlength="25" class="mt-1 w-full rounded-lg bg-darkBg border border-darkBorder p-2 text-white"></label>
                 <label class="block">Nearest landmark (optional) <input id="escrowDeliveryLandmark" maxlength="200" class="mt-1 w-full rounded-lg bg-darkBg border border-darkBorder p-2 text-white"></label>
             </div>
+            <label class="block text-sm text-gray-300">Promotional code (optional)
+                <input id="escrowVoucherCode" maxlength="32" autocomplete="off" oninput="clearEscrowVoucher()" class="mt-1 w-full rounded-lg bg-darkBg border border-darkBorder p-2 text-white">
+            </label>
+            <button type="button" onclick="applyEscrowVoucher()" class="rounded-lg border border-gold/40 px-3 py-2 text-xs text-gold">Apply code</button>
+            <p id="escrowVoucherStatus" class="text-xs text-gray-400" role="status"></p>
             <p id="escrowCheckoutTotal" class="text-sm text-gold" aria-live="polite"></p>
             <p class="text-xs text-gray-400">Fulfillment details are shared with the vendor and Flutterwave. Before dispatch, refunds include the full amount; after dispatch, only the product price is refunded. Marking a pickup ready counts as dispatch. Live refunds require support.</p>
             <div class="flex gap-3">
@@ -1977,6 +2002,18 @@ function initializeFirebaseAuth() {
                 ...remoteProfile,
                 isAdmin
             };
+            firebaseFunctions.httpsCallable('claimDailyCheckIn')()
+                .then(result => {
+                    if (currentUser?.uid === user.uid && result.data?.awarded) {
+                        showToast('Daily check-in: 5 Golden Coins added.', 'success');
+                    }
+                })
+                .catch(error => {
+                    console.error('Unable to claim the daily check-in.', error);
+                    if (currentUser?.uid === user.uid) {
+                        showToast('Daily check-in could not be claimed. Reopen the app to retry.', 'error');
+                    }
+                });
             subscribeToVerifiedDealerSettings(user.uid);
             saveAccountProfile(user.uid, remoteProfile);
             renderAuthNav();
@@ -3726,6 +3763,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         <h3 class="font-bold text-white">${escapeHtml(order.productTitle || 'Product')}</h3>
                         <p class="mt-1">Status: ${status}</p>
                         <p class="mt-1">Vendor price: ${formatNaira(order.productPrice)} · Protection fee: ${formatNaira(order.platformFee)} · Total: ${formatNaira(order.totalPaid)}</p>
+                        ${order.voucherCode ? `<p class="mt-1">Voucher ${escapeHtml(order.voucherCode)}: ${formatNaira(order.discount)} off ${formatNaira(order.originalProductPrice)}</p>` : ''}
                         ${order.fulfillment ? `<p class="mt-1">Fulfillment: ${pickup ? 'Pickup Station' : 'Home/Location Delivery'} · Fee: ${formatNaira(order.fulfillmentFee)}</p>
                         <p class="mt-1">${pickup ? escapeHtml(order.fulfillment.stationName) : `${escapeHtml(order.fulfillment.address)}, ${escapeHtml(order.fulfillment.city)}, ${escapeHtml(order.fulfillment.state)} · ${escapeHtml(order.fulfillment.phone)}${order.fulfillment.landmark ? ` · Landmark: ${escapeHtml(order.fulfillment.landmark)}` : ''}`}</p>` : ''}
                         <p class="mt-1 break-all text-gray-500">Order: ${id}</p>
@@ -6069,6 +6107,10 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         }
 
         function openGoldenCoinUtilities() {
+            document.getElementById('voucherManagement').classList.toggle('hidden',
+                !currentUser || (!currentUser.isAdmin && currentUser.role !== 'Vendor'));
+            document.getElementById('voucherAdminFields').classList.toggle('hidden', !currentUser?.isAdmin);
+            document.getElementById('voucherOptInForm').classList.toggle('hidden', currentUser?.role !== 'Vendor');
             const modal = document.getElementById('goldenCoinUtilitiesModal');
             modal.classList.remove('hidden');
             modal.classList.add('flex');
@@ -6078,6 +6120,60 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const modal = document.getElementById('goldenCoinUtilitiesModal');
             modal.classList.add('hidden');
             modal.classList.remove('flex');
+        }
+
+        async function createStoreVoucherFromForm(event) {
+            event.preventDefault();
+            const button = event.currentTarget.querySelector('button[type="submit"]');
+            const status = document.getElementById('voucherManagementStatus');
+            button.disabled = true;
+            status.textContent = 'Creating voucher…';
+            try {
+                const result = await firebaseFunctions.httpsCallable('createStoreVoucher')({
+                    code: document.getElementById('voucherCreateCode').value,
+                    type: document.getElementById('voucherCreateType').value,
+                    value: Number(document.getElementById('voucherCreateValue').value),
+                    scope: currentUser?.isAdmin ? document.getElementById('voucherCreateScope').value : 'store',
+                    vendorUid: document.getElementById('voucherCreateVendor').value.trim()
+                });
+                status.textContent = `Voucher ${result.data.code} created for 30 days.`;
+                event.currentTarget.reset();
+            } catch (error) {
+                console.error('Unable to create voucher.', error);
+                status.textContent = error.message || 'Voucher could not be created.';
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        async function setVoucherOptInFromForm(event) {
+            event.preventDefault();
+            const button = event.currentTarget.querySelector('button[type="submit"]');
+            const status = document.getElementById('voucherManagementStatus');
+            button.disabled = true;
+            status.textContent = 'Saving voucher participation…';
+            try {
+                const code = document.getElementById('voucherOptInCode').value;
+                const enabled = document.getElementById('voucherOptInEnabled').checked;
+                if (enabled) {
+                    const terms = await firebaseFunctions.httpsCallable('getPlatformVoucher')({ code });
+                    const discount = terms.data.type === 'percent'
+                        ? `${terms.data.value}%` : formatNaira(terms.data.value);
+                    if (!window.confirm(`Fund a ${discount} discount on your products for voucher ${terms.data.code}? It expires ${new Date(terms.data.expiresAtMs).toLocaleString('en-NG')}.`)) {
+                        status.textContent = 'Voucher participation not changed.';
+                        return;
+                    }
+                }
+                const result = await firebaseFunctions.httpsCallable('setPlatformVoucherOptIn')({
+                    code, enabled
+                });
+                status.textContent = result.data.enabled ? 'Your store is opted in to this voucher.' : 'Your store is opted out of this voucher.';
+            } catch (error) {
+                console.error('Unable to save voucher participation.', error);
+                status.textContent = error.message || 'Voucher participation could not be saved.';
+            } finally {
+                button.disabled = false;
+            }
         }
 
         function openNotificationsModal() {
@@ -7863,6 +7959,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             subscribeToProductDiscussion(prod.id);
         }
 
+        let escrowVoucherQuote = null;
+        let escrowVoucherRevision = 0;
+
         function startEscrowCheckout(productId) {
             if (!currentUser) {
                 openAuthModal('signin');
@@ -7881,6 +7980,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const form = document.getElementById('escrowCheckoutForm');
             form.reset();
             form.dataset.productId = productId;
+            escrowVoucherQuote = null;
+            escrowVoucherRevision += 1;
+            document.getElementById('escrowVoucherStatus').textContent = '';
             document.querySelector('#escrowFulfillmentMethod option[value="delivery"]').textContent =
                 `Home/Location Delivery — ${formatNaira(escrowFulfillment.homeDeliveryFee)}`;
             document.getElementById('escrowStation').innerHTML = '<option value="">Choose a station</option>' +
@@ -7891,8 +7993,51 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         }
 
         function closeEscrowCheckout() {
+            escrowVoucherRevision += 1;
             document.getElementById('escrowCheckoutModal').classList.add('hidden');
             document.getElementById('escrowCheckoutModal').classList.remove('flex');
+        }
+
+        function clearEscrowVoucher() {
+            escrowVoucherQuote = null;
+            escrowVoucherRevision += 1;
+            document.getElementById('escrowVoucherStatus').textContent = '';
+            updateEscrowFulfillmentForm();
+        }
+
+        async function applyEscrowVoucher() {
+            const form = document.getElementById('escrowCheckoutForm');
+            const code = document.getElementById('escrowVoucherCode').value.trim().toUpperCase();
+            const status = document.getElementById('escrowVoucherStatus');
+            const uid = currentUser?.uid;
+            const productId = form.dataset.productId;
+            const revision = ++escrowVoucherRevision;
+            escrowVoucherQuote = null;
+            updateEscrowFulfillmentForm();
+            if (!uid || !code) {
+                status.textContent = 'Enter a promotional code.';
+                return;
+            }
+            status.textContent = 'Checking voucher…';
+            try {
+                const result = await firebaseFunctions.httpsCallable('quoteStoreVoucher')({ code, productId });
+                if (revision !== escrowVoucherRevision || currentUser?.uid !== uid ||
+                    form.dataset.productId !== productId) return;
+                const quote = result.data;
+                const product = products.find(item => item.id === productId);
+                if (!product || quote.code !== code || quote.originalPrice !== Number(product.price) ||
+                    !Number.isFinite(quote.discount) || quote.discount <= 0 ||
+                    Math.round(quote.originalPrice * 100) - Math.round(quote.discount * 100) !== Math.round(quote.productPrice * 100) ||
+                    quote.platformFee !== calculateEscrowFee(quote.productPrice)) {
+                    throw new Error('Voucher price changed. Refresh and try again.');
+                }
+                escrowVoucherQuote = { ...quote, productId };
+                status.textContent = `Voucher applied: ${formatNaira(quote.discount)} discount.`;
+                updateEscrowFulfillmentForm();
+            } catch (error) {
+                console.error('Unable to apply voucher.', error);
+                if (revision === escrowVoucherRevision) status.textContent = error.message || 'Voucher could not be applied.';
+            }
         }
 
         function updateEscrowFulfillmentForm() {
@@ -7907,7 +8052,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
             const product = products.find(item => item.id === document.getElementById('escrowCheckoutForm').dataset.productId);
             try {
-                const price = Number(product.price);
+                const price = escrowVoucherQuote?.productId === product.id &&
+                    escrowVoucherQuote.originalPrice === Number(product.price)
+                    ? escrowVoucherQuote.productPrice : Number(product.price);
                 const fee = calculateEscrowFee(price);
                 const fulfillmentFee = delivery ? escrowFulfillment.homeDeliveryFee : 0;
                 const totalKobo = Math.round(price * 100) + Math.round(fee * 100) + Math.round(fulfillmentFee * 100);
@@ -7945,7 +8092,16 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     phone: document.getElementById('escrowDeliveryPhone').value.trim(),
                     landmark: document.getElementById('escrowDeliveryLandmark').value.trim() };
             const fulfillmentFee = method === 'delivery' ? escrowFulfillment.homeDeliveryFee : 0;
-            const price = Number(product.price);
+            const originalPrice = Number(product.price);
+            const code = document.getElementById('escrowVoucherCode').value.trim().toUpperCase();
+            const voucher = code && escrowVoucherQuote?.code === code &&
+                escrowVoucherQuote.productId === productId && escrowVoucherQuote.originalPrice === originalPrice
+                ? escrowVoucherQuote : null;
+            if (code && !voucher) {
+                showToast('Apply the promotional code and review the total before paying.', 'error');
+                return;
+            }
+            const price = voucher ? voucher.productPrice : originalPrice;
             let fee;
             try {
                 fee = calculateEscrowFee(price);
@@ -7967,7 +8123,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             button.disabled = true;
             try {
                 const result = await firebaseFunctions.httpsCallable('initiateEscrowCheckout')({
-                    productId, expectedPrice: price, checkoutEmail: checkoutEmail.trim(), fulfillment
+                    productId, expectedPrice: originalPrice, checkoutEmail: checkoutEmail.trim(), fulfillment,
+                    ...(voucher ? { voucherCode: code, expectedDiscount: voucher.discount } : {})
                 });
                 if (result.data?.productPrice !== price || result.data?.platformFee !== fee ||
                     result.data?.fulfillmentFee !== fulfillmentFee || result.data?.totalPaid !== total) {
@@ -8424,12 +8581,16 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         return;
                     }
                     try {
-                        await firebaseFunctions.httpsCallable('verifyEscrowPayment')({ txRef, transactionId });
+                        const verification = await firebaseFunctions.httpsCallable('verifyEscrowPayment')({ txRef, transactionId });
                         url.searchParams.delete('tx_ref');
                         url.searchParams.delete('transaction_id');
                         url.searchParams.delete('status');
                         window.history.replaceState({}, document.title, url.toString());
-                        showToast('Payment verified.', 'success');
+                        if (['AUTO_REFUND_REQUIRED', 'REFUND_INITIATING', 'REFUND_PENDING', 'REFUNDED'].includes(verification.data?.status)) {
+                            showToast('Payment verified, but the order could not be completed. Check your refund status or contact support.', 'info');
+                        } else {
+                            showToast('Payment verified.', 'success');
+                        }
                     } catch (error) {
                         console.error('Unable to verify escrow payment.', error);
                         showToast(error.message || 'Payment verification is pending. Keep your receipt and retry.', 'error');

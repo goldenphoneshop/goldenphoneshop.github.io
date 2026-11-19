@@ -431,6 +431,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /storeVouchers/{code} {
+      allow read, write: if false;
+    }
+
+    match /voucherOptIns/{id} {
+      allow read, write: if false;
+    }
+
+    match /voucherRedemptions/{id} {
+      allow read, write: if false;
+    }
+
     match /escrowReleases/{orderId} {
       allow read, write: if false;
     }

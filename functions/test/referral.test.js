@@ -107,7 +107,7 @@ function setup() {
     console
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8"), context);
-  return { functions: context.exports, documents, users, photos };
+  return { functions: context.exports, documents, users, photos, context };
 }
 
 function auth(uid, verified = true) {
@@ -126,6 +126,40 @@ function completeProfile(uid, role = "Buyer") {
     profilePhotoPath: `profile-photos/${uid}/photo`
   };
 }
+
+test("daily check-in credits both roles once per West Africa day, including concurrent calls", async () => {
+  const state = setup();
+  for (const [uid, role] of [["buyer", "Buyer"], ["vendor", "Vendor"]]) {
+    state.documents.set(`users/${uid}`, { role });
+    state.documents.set(`quizWallets/${uid}`, { coins: 2.5 });
+    const request = { auth: auth(uid), data: {} };
+    const results = await Promise.all([
+      state.functions.claimDailyCheckIn(request),
+      state.functions.claimDailyCheckIn(request)
+    ]);
+    assert.equal(results.filter(result => result.awarded).length, 1);
+    assert.equal(state.documents.get(`quizWallets/${uid}`).coins, 7.5);
+    assert.equal(results[0].day, new Date(Date.now() + 3600000).toISOString().slice(0, 10));
+    state.documents.get(`quizWallets/${uid}`).dailyCheckInDay = "2000-01-01";
+    await state.functions.claimDailyCheckIn(request);
+    assert.equal(state.documents.get(`quizWallets/${uid}`).coins, 12.5);
+  }
+  await assert.rejects(state.functions.claimDailyCheckIn({ auth: auth("buyer", false), data: {} }),
+    error => error.code === "permission-denied");
+  let now = Date.parse("2026-01-01T22:59:59Z");
+  state.context.Date = class extends Date { static now() { return now; } };
+  state.documents.get("quizWallets/buyer").dailyCheckInDay = "2025-12-31";
+  const first = await state.functions.claimDailyCheckIn({ auth: auth("buyer"), data: {} });
+  now += 1000;
+  const second = await state.functions.claimDailyCheckIn({ auth: auth("buyer"), data: {} });
+  assert.equal(first.day, "2026-01-01");
+  assert.equal(second.day, "2026-01-02");
+  assert.equal(second.awarded, true);
+  now -= 1000;
+  const stale = await state.functions.claimDailyCheckIn({ auth: auth("buyer"), data: {} });
+  assert.equal(stale.awarded, false);
+  assert.equal(state.documents.get("quizWallets/buyer").dailyCheckInDay, "2026-01-02");
+});
 
 function seedAccount(state, uid, verified = true) {
   state.documents.set(`users/${uid}`, completeProfile(uid));

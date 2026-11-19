@@ -21,6 +21,7 @@ test("checkout confirms server totals before opening Flutterwave", async () => {
   const nodes = {
     escrowFulfillmentMethod: { value: "pickup" },
     escrowStation: { value: "oshodi" },
+    escrowVoucherCode: { value: "" },
     escrowCheckoutSubmit: { disabled: false }
   };
   const requests = [];
@@ -38,7 +39,7 @@ test("checkout confirms server totals before opening Flutterwave", async () => {
     console: { error() {} },
     URL
   };
-  vm.runInNewContext(extract("function startEscrowCheckout", "function updateDiscussionComposer"), context);
+  vm.runInNewContext(extract("let escrowVoucherQuote", "function updateDiscussionComposer"), context);
   const event = { preventDefault() {}, currentTarget: { dataset: { productId: "p1" } } };
   await context.submitEscrowCheckout(event);
   assert.match(destination, /^https:\/\/checkout\.flutterwave\.com\//);
@@ -62,7 +63,7 @@ test("an escrow return is verified without invoking the wallet purchase handler"
       history: { replaceState: (state, title, url) => { replaced = url; } }
     },
     document: { title: "Test" },
-    firebaseFunctions: { httpsCallable: name => async () => { called.push(name); } },
+    firebaseFunctions: { httpsCallable: name => async () => { called.push(name); return { data: { status: "HELD_IN_ESCROW" } }; } },
     showToast() {},
     console,
     URL
@@ -73,11 +74,29 @@ test("an escrow return is verified without invoking the wallet purchase handler"
   assert.equal(new URL(replaced).search, "");
 });
 
+test("an escrow return reports a pending refund instead of completed checkout", async () => {
+  const toasts = [];
+  const context = {
+    walletPaymentReturnPromise: null,
+    currentUser: { uid: "buyer" },
+    window: {
+      location: { href: "https://escrow-test.example.test/?tx_ref=escrow-test&transaction_id=123&status=successful" },
+      history: { replaceState() {} }
+    },
+    document: { title: "Test" },
+    firebaseFunctions: { httpsCallable: () => async () => ({ data: { status: "REFUND_PENDING" } }) },
+    showToast: message => toasts.push(message), console, URL
+  };
+  vm.runInNewContext(extract("async function confirmFlutterwaveReturn", "async function startTimedQuiz"), context);
+  await context.confirmFlutterwaveReturn();
+  assert.match(toasts[0], /refund status/i);
+});
+
 test("fulfillment form lists stations and requires the selected delivery details", () => {
   const nodes = {};
   for (const id of ["escrowCheckoutForm", "escrowFulfillmentMethod", "escrowStation", "escrowStationField",
     "escrowDeliveryFields", "escrowDeliveryAddress", "escrowDeliveryCity", "escrowDeliveryState",
-    "escrowDeliveryPhone", "escrowCheckoutTotal", "escrowCheckoutModal"]) {
+    "escrowDeliveryPhone", "escrowCheckoutTotal", "escrowCheckoutModal", "escrowVoucherStatus"]) {
     nodes[id] = { value: "", dataset: {}, classList: {
       hidden: true, add() {}, remove() {}, toggle(name, hidden) { this.hidden = hidden; }
     } };
@@ -90,7 +109,7 @@ test("fulfillment form lists stations and requires the selected delivery details
     document: { getElementById: id => nodes[id], querySelector: () => option },
     escapeHtml: String, formatNaira: String, console
   };
-  vm.runInNewContext(extract("function startEscrowCheckout", "function updateDiscussionComposer"), context);
+  vm.runInNewContext(extract("let escrowVoucherQuote", "function updateDiscussionComposer"), context);
   context.startEscrowCheckout("p1");
   assert.match(nodes.escrowStation.innerHTML, /Computer Village/);
   assert.match(option.textContent, /2750/);
@@ -116,6 +135,7 @@ test("delivery checkout sends the entered details and verifies the fulfillment f
     escrowDeliveryState: { value: "Lagos" },
     escrowDeliveryPhone: { value: "08012345678" },
     escrowDeliveryLandmark: { value: "Market" },
+    escrowVoucherCode: { value: "" },
     escrowCheckoutSubmit: { disabled: false }
   };
   let fulfillmentFee = 2750;
@@ -134,7 +154,7 @@ test("delivery checkout sends the entered details and verifies the fulfillment f
     window: { confirm: () => true, location: { assign: url => { destination = url; } } },
     showToast() {}, console: { error() {} }, URL
   };
-  vm.runInNewContext(extract("function startEscrowCheckout", "function updateDiscussionComposer"), context);
+  vm.runInNewContext(extract("let escrowVoucherQuote", "function updateDiscussionComposer"), context);
   const event = { preventDefault() {}, currentTarget: { dataset: { productId: "p1" } } };
   await context.submitEscrowCheckout(event);
   assert.equal(calls[0].name, "initiateEscrowCheckout");
@@ -144,6 +164,51 @@ test("delivery checkout sends the entered details and verifies the fulfillment f
   destination = "";
   fulfillmentFee = 0;
   await context.submitEscrowCheckout(event);
+  assert.equal(destination, "");
+});
+
+test("voucher quote is displayed and sent with checkout, and edits invalidate it", async () => {
+  const calls = [];
+  let destination = "";
+  const nodes = {
+    escrowCheckoutForm: { dataset: { productId: "p1" } },
+    escrowFulfillmentMethod: { value: "pickup" },
+    escrowStation: { value: "oshodi" },
+    escrowStationField: { classList: { toggle() {} } },
+    escrowDeliveryFields: { classList: { toggle() {} } },
+    escrowDeliveryAddress: {}, escrowDeliveryCity: {}, escrowDeliveryState: {}, escrowDeliveryPhone: {},
+    escrowVoucherCode: { value: "save10" }, escrowVoucherStatus: {}, escrowCheckoutTotal: {},
+    escrowCheckoutSubmit: { disabled: false }
+  };
+  const context = {
+    currentUser: { uid: "buyer", email: "buyer@example.test" },
+    products: [{ id: "p1", price: 7500 }], calculateEscrowFee,
+    escrowFulfillment: require("../escrow-fulfillment"), formatNaira: String,
+    document: { getElementById: id => nodes[id] },
+    firebaseFunctions: { httpsCallable: name => async data => {
+      calls.push({ name, data });
+      if (name === "quoteStoreVoucher") return { data: {
+        code: "SAVE10", originalPrice: 7500, discount: 750, productPrice: 6750, platformFee: 506.25
+      } };
+      return { data: { checkoutUrl: "https://checkout.flutterwave.com/v3/hosted/pay/test",
+        productPrice: 6750, platformFee: 506.25, fulfillmentFee: 0, totalPaid: 7256.25 } };
+    } },
+    window: { confirm: () => true, location: { assign: url => { destination = url; } } },
+    showToast() {}, console: { error() {} }, URL
+  };
+  vm.runInNewContext(extract("let escrowVoucherQuote", "function updateDiscussionComposer"), context);
+  await context.applyEscrowVoucher();
+  assert.match(nodes.escrowVoucherStatus.textContent, /750 discount/);
+  assert.match(nodes.escrowCheckoutTotal.textContent, /7256\.25/);
+  const event = { preventDefault() {}, currentTarget: nodes.escrowCheckoutForm };
+  await context.submitEscrowCheckout(event);
+  assert.equal(calls[1].data.voucherCode, "SAVE10");
+  assert.equal(calls[1].data.expectedDiscount, 750);
+  assert.match(destination, /^https:\/\/checkout\.flutterwave\.com\//);
+  destination = "";
+  context.clearEscrowVoucher();
+  await context.submitEscrowCheckout(event);
+  assert.equal(calls.length, 2);
   assert.equal(destination, "");
 });
 

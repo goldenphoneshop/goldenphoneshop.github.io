@@ -529,6 +529,116 @@ test("checkout recalculates the fee when a vendor changes a listing price", asyn
   assert.deepEqual(amounts, [1327.15, 2641.04]);
 });
 
+test("vendor vouchers discount checkout once per buyer and reduce vendor proceeds", async () => {
+  let payload;
+  const { documents, functions } = setup(async (url, options) => {
+    if (url.endsWith("/payments")) {
+      payload = JSON.parse(options.body);
+      return { ok: true, json: async () => ({ status: "success",
+        data: { link: "https://checkout.flutterwave.com/v3/hosted/pay/test" } }) };
+    }
+    return { ok: true, json: async () => ({ status: "success", data: {
+      id: 123, status: "successful", tx_ref: payload.tx_ref, amount: 7256.25,
+      currency: "NGN", customer: { email: "buyer@example.test" }
+    } }) };
+  });
+  documents.set("users/buyer", { role: "Buyer" });
+  documents.set("users/vendor", { role: "Vendor" });
+  documents.set("products/product1", { ownerUid: "vendor", title: "Phone", stock: 2, price: 7500 });
+  await functions.createStoreVoucher(request("vendor", { code: "SAVE10", scope: "store", type: "percent", value: 10 }));
+  const quote = await functions.quoteStoreVoucher(request("buyer", { code: "save10", productId: "product1" }));
+  assert.equal(quote.discount, 750);
+  assert.equal(quote.productPrice, 6750);
+  assert.equal(quote.platformFee, 506.25);
+  const data = { productId: "product1", expectedPrice: 7500, checkoutEmail: "buyer@example.test",
+    voucherCode: "SAVE10", expectedDiscount: 750 };
+  const attempts = await Promise.allSettled([
+    functions.initiateEscrowCheckout(request("buyer", data)),
+    functions.initiateEscrowCheckout(request("buyer", data))
+  ]);
+  assert.equal(attempts.filter(result => result.status === "fulfilled").length, 1);
+  const checkout = attempts.find(result => result.status === "fulfilled").value;
+  assert.equal(payload.amount, 7256.25);
+  await functions.verifyEscrowPayment(request("buyer", { txRef: checkout.txRef, transactionId: "123" }));
+  const order = documents.get(`escrowOrders/${checkout.txRef}`);
+  assert.equal(order.productPrice, 6750);
+  assert.equal(order.originalProductPrice, 7500);
+  assert.equal(order.discount, 750);
+  await functions.markOrderShipped(request("vendor", { orderId: checkout.txRef }));
+  await functions.confirmDeliveryAndRelease(request("buyer", { orderId: checkout.txRef }));
+  assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, 675000);
+  await assert.rejects(functions.quoteStoreVoucher(request("buyer", { code: "SAVE10", productId: "product1" })),
+    error => error.code === "failed-precondition");
+});
+
+test("platform vouchers require informed vendor participation and enforce expiry and price checks", async () => {
+  const { documents, functions } = setup();
+  documents.set("users/buyer", { role: "Buyer" });
+  documents.set("users/vendor", { role: "Vendor" });
+  documents.set("products/product1", { ownerUid: "vendor", title: "Phone", stock: 1, price: 7500 });
+  await assert.rejects(functions.createStoreVoucher(request("vendor", {
+    code: "GLOBAL", scope: "platform", type: "fixed", value: 500
+  })), error => error.code === "permission-denied");
+  await functions.createStoreVoucher(request("admin", { code: "GLOBAL", scope: "platform", type: "fixed", value: 500 }, true));
+  const terms = await functions.getPlatformVoucher(request("vendor", { code: "GLOBAL" }));
+  assert.equal(terms.value, 500);
+  assert.equal(terms.type, "fixed");
+  await assert.rejects(functions.quoteStoreVoucher(request("buyer", { code: "GLOBAL", productId: "product1" })),
+    error => error.code === "failed-precondition");
+  await functions.setPlatformVoucherOptIn(request("vendor", { code: "GLOBAL", enabled: true }));
+  const quote = await functions.quoteStoreVoucher(request("buyer", { code: "GLOBAL", productId: "product1" }));
+  assert.equal(quote.productPrice, 7000);
+  await assert.rejects(functions.initiateEscrowCheckout(request("buyer", {
+    productId: "product1", expectedPrice: 7500, checkoutEmail: "buyer@example.test",
+    voucherCode: "GLOBAL", expectedDiscount: 1
+  })), error => error.code === "failed-precondition");
+  await functions.setPlatformVoucherOptIn(request("vendor", { code: "GLOBAL", enabled: false }));
+  await assert.rejects(functions.quoteStoreVoucher(request("buyer", { code: "GLOBAL", productId: "product1" })),
+    error => error.code === "failed-precondition");
+  documents.get("storeVouchers/GLOBAL").expiresAtMs = Date.now() - 1;
+  await assert.rejects(functions.setPlatformVoucherOptIn(request("vendor", { code: "GLOBAL", enabled: true })),
+    error => error.code === "failed-precondition");
+});
+
+test("a late voucher payment is refunded instead of reusing a voucher reserved by another checkout", async () => {
+  const payments = [];
+  const { documents, functions } = setup(async (url, options) => {
+    if (url.endsWith("/payments")) {
+      payments.push(JSON.parse(options.body));
+      return { ok: true, json: async () => ({ status: "success",
+        data: { link: "https://checkout.flutterwave.com/v3/hosted/pay/test" } }) };
+    }
+    if (url.includes("verify_by_reference")) {
+      return { ok: true, json: async () => ({ status: "success", data: { status: "failed" } }) };
+    }
+    if (url.endsWith("/refund")) {
+      assert.equal(JSON.parse(options.body).amount, 7256.25);
+      return { ok: true, json: async () => ({ status: "success",
+        data: { id: 501, tx_id: 123, amount_refunded: 7256.25, status: "completed" } }) };
+    }
+    return { ok: true, json: async () => ({ status: "success", data: {
+      id: 123, status: "successful", tx_ref: payments[0].tx_ref, amount: 7256.25,
+      currency: "NGN", customer: { email: "buyer@example.test" }
+    } }) };
+  });
+  documents.set("users/buyer", { role: "Buyer" });
+  documents.set("users/vendor", { role: "Vendor" });
+  documents.set("products/product1", { ownerUid: "vendor", title: "Phone", stock: 2, price: 7500 });
+  await functions.createStoreVoucher(request("vendor", { code: "SAVE10", scope: "store", type: "percent", value: 10 }));
+  const data = { productId: "product1", expectedPrice: 7500, checkoutEmail: "buyer@example.test",
+    voucherCode: "SAVE10", expectedDiscount: 750 };
+  const first = await functions.initiateEscrowCheckout(request("buyer", data));
+  documents.get(`escrowPendingPayments/${first.txRef}`).reservationExpiresAtMs = Date.now() - 1;
+  await functions.reconcileExpiredEscrowPayments();
+  const second = await functions.initiateEscrowCheckout(request("buyer", data));
+  const verification = await functions.verifyEscrowPayment(request("buyer", { txRef: first.txRef, transactionId: "123" }));
+  assert.equal(verification.status, "REFUND_PENDING");
+  assert.equal(documents.get(`escrowOrders/${first.txRef}`).status, "REFUND_PENDING");
+  const redemption = [...documents.entries()].find(([key]) => key.startsWith("voucherRedemptions/"))[1];
+  assert.equal(redemption.txRef, second.txRef);
+  assert.equal(redemption.status, "RESERVED");
+});
+
 test("delivery checkout validates details, charges the trusted fee and settles it to the marketplace", async () => {
   let payload;
   const { documents, functions } = setup(async (url, options) => {
