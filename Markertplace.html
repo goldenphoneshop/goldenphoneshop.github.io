@@ -1538,7 +1538,7 @@
                         Golden Eagle AI Assistant
                         <span class="w-2 h-2 rounded-full bg-green-500 inline-block animate-pulse"></span>
                     </h4>
-                    <p class="text-[10px] text-gray-400">Powered by Gemini AI • Smart & Fast</p>
+                    <p class="text-[10px] text-gray-400">Read-only guidance • Powered by Gemini</p>
                 </div>
             </div>
             <button onclick="toggleAiDrawer()" class="text-gray-400 hover:text-white text-sm">
@@ -1560,7 +1560,7 @@
         </div>
 
         <!-- Chat History -->
-        <div id="aiChatBox" class="flex-1 p-3 overflow-y-auto space-y-3 text-xs">
+        <div id="aiChatBox" role="log" aria-live="polite" class="flex-1 p-3 overflow-y-auto space-y-3 text-xs">
             <div class="flex gap-2 items-start">
                 <div class="w-6 h-6 rounded-full gold-gradient-bg flex-shrink-0 flex items-center justify-center text-[10px] text-black font-bold">🦅</div>
                 <div class="bg-darkBg border border-darkBorder rounded-xl p-3 text-gray-200 max-w-[85%] leading-relaxed">
@@ -1570,9 +1570,10 @@
         </div>
 
         <!-- Chat Input Form -->
+        <p class="px-3 py-1 text-[10px] text-gray-400">Questions may be sent to Google. Do not share personal details, passwords, payment information, or order numbers. The assistant cannot view or change your account or orders.</p>
         <form onsubmit="handleAiSendMessage(event)" class="p-3 bg-darkBg border-t border-darkBorder flex gap-2">
-            <input type="text" id="aiInput" placeholder="Ask AI about GSM parts, repairs, rules..." class="flex-1 bg-darkCard border border-darkBorder text-xs text-white rounded-xl px-3 py-2 gold-border-glow">
-            <button type="submit" id="aiSendBtn" class="px-3 py-2 gold-gradient-bg text-black font-bold rounded-xl text-xs hover:opacity-90 transition">
+            <input type="text" id="aiInput" maxlength="800" aria-label="Ask the assistant" placeholder="Ask about products, orders, or platform rules..." class="flex-1 bg-darkCard border border-darkBorder text-xs text-white rounded-xl px-3 py-2 gold-border-glow">
+            <button type="submit" id="aiSendBtn" aria-label="Send question" class="px-3 py-2 gold-gradient-bg text-black font-bold rounded-xl text-xs hover:opacity-90 transition disabled:opacity-50">
                 <i class="fa-solid fa-paper-plane"></i>
             </button>
         </form>
@@ -9530,7 +9531,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         function askAiAboutItem(title) {
             closeDetailModal();
             toggleAiDrawer(true);
-            sendQuickPrompt(`Tell me more about ${title}, its compatibility, and typical usage in GSM repairs.`);
+            sendQuickPrompt(`Show the current product listing for ${title}.`);
         }
 
         /* ==========================================================================
@@ -9596,31 +9597,54 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
         }
 
-        function appendAiMessage(sender, text) {
+        function appendAiMessage(sender, text, sources = [], suggestions = '') {
             const chatBox = document.getElementById('aiChatBox');
             const isUser = sender === 'user';
-
-            const msgHtml = isUser ? `
-                <div class="flex gap-2 items-start justify-end">
-                    <div class="bg-gold/10 border border-gold/30 rounded-xl p-3 text-white max-w-[85%] leading-relaxed">
-                        ${escapeHtml(text)}
-                    </div>
-                    <div class="w-6 h-6 rounded-full bg-gold flex-shrink-0 flex items-center justify-center text-[10px] text-black font-bold">U</div>
-                </div>
-            ` : `
-                <div class="flex gap-2 items-start">
-                    <div class="w-6 h-6 rounded-full gold-gradient-bg flex-shrink-0 flex items-center justify-center text-[10px] text-black font-bold">🦅</div>
-                    <div class="bg-darkBg border border-darkBorder rounded-xl p-3 text-gray-200 max-w-[85%] leading-relaxed">
-                        ${text}
-                    </div>
-                </div>
-            `;
-
-            chatBox.insertAdjacentHTML('beforeend', msgHtml);
+            const row = document.createElement('div');
+            row.className = `flex gap-2 items-start${isUser ? ' justify-end' : ''}`;
+            const icon = document.createElement('div');
+            icon.className = 'w-6 h-6 rounded-full gold-gradient-bg flex-shrink-0 flex items-center justify-center text-[10px] text-black font-bold';
+            icon.textContent = isUser ? 'U' : '🦅';
+            const bubble = document.createElement('div');
+            bubble.className = `${isUser ? 'bg-gold/10 border-gold/30 text-white' : 'bg-darkBg border-darkBorder text-gray-200'} border rounded-xl p-3 max-w-[85%] leading-relaxed whitespace-pre-wrap`;
+            const message = document.createElement('div');
+            message.textContent = text;
+            bubble.appendChild(message);
+            if (!isUser && Array.isArray(sources)) {
+                for (const source of sources.slice(0, 5)) {
+                    try {
+                        const url = new URL(source.url);
+                        if (url.protocol !== 'https:' || typeof source.title !== 'string') continue;
+                        const link = document.createElement('a');
+                        link.href = url.href;
+                        link.target = '_blank';
+                        link.rel = 'noopener noreferrer';
+                        link.className = 'block text-gold underline mt-1';
+                        link.textContent = source.title;
+                        bubble.appendChild(link);
+                    } catch (error) {
+                        console.error('Invalid assistant source URL.', error);
+                    }
+                }
+            }
+            if (!isUser && typeof suggestions === 'string' && suggestions) {
+                const frame = document.createElement('iframe');
+                frame.title = 'Google Search suggestions';
+                frame.setAttribute('sandbox', 'allow-popups');
+                frame.referrerPolicy = 'no-referrer';
+                frame.className = 'w-full h-20 mt-2 border-0';
+                frame.srcdoc = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src https: data:">${suggestions}`;
+                bubble.appendChild(frame);
+            }
+            if (isUser) row.append(bubble, icon);
+            else row.append(icon, bubble);
+            chatBox.appendChild(row);
             chatBox.scrollTop = chatBox.scrollHeight;
+            return row;
         }
 
         function sendQuickPrompt(promptText) {
+            if (document.getElementById('aiSendBtn').disabled) return;
             document.getElementById('aiInput').value = promptText;
             handleAiSendMessage(new Event('submit'));
         }
@@ -9630,63 +9654,38 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const input = document.getElementById('aiInput');
             const userPrompt = input.value.trim();
             if (!userPrompt) return;
-
-            // Clear input & display user message
+            const button = document.getElementById('aiSendBtn');
+            if (button.disabled) return;
+            if (!firebaseAuth.currentUser || !currentUser) {
+                appendAiMessage('ai', 'Sign in with a verified account to use the assistant.');
+                return;
+            }
+            if (userPrompt.length > 800) {
+                appendAiMessage('ai', 'Please shorten your question to 800 characters.');
+                return;
+            }
             input.value = '';
             appendAiMessage('user', userPrompt);
-
-            // Show loading indicator
-            const loadingId = 'loading-' + Date.now();
-            const chatBox = document.getElementById('aiChatBox');
-            chatBox.insertAdjacentHTML('beforeend', `
-                <div id="${loadingId}" class="flex gap-2 items-start">
-                    <div class="w-6 h-6 rounded-full gold-gradient-bg flex-shrink-0 flex items-center justify-center text-[10px] text-black font-bold">🦅</div>
-                    <div class="bg-darkBg border border-darkBorder rounded-xl p-3 text-gold text-xs animate-pulse">
-                        <i class="fa-solid fa-spinner fa-spin mr-1"></i> Golden Eagle AI is thinking...
-                    </div>
-                </div>
-            `);
-            chatBox.scrollTop = chatBox.scrollHeight;
-
-            // Call Gemini API
+            button.disabled = true;
+            const loading = appendAiMessage('ai', 'Thinking…');
             try {
-                const systemPrompt = `You are the Golden Eagle Smart Assistant, an AI expert embedded in the "GOLDEN EAGLE" GSM & Electronics Marketplace. 
-                Your expertise includes mobile device specifications, micro-soldering, GSM repair tools (hot air stations, soldering irons, programmers), screen replacements, marketplace vendor guidelines, anti-spam policies, and platform navigation.
-                Provide concise, smart, friendly, and direct answers in clean text with simple line breaks or bullet points if needed. Keep answers concise.`;
-
-                const apiKey = "";
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-
-                const payload = {
-                    contents: [{ parts: [{ text: userPrompt }] }],
-                    systemInstruction: {
-                        parts: [{ text: systemPrompt }]
-                    }
-                };
-
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                const result = await response.json();
-                const loadingElem = document.getElementById(loadingId);
-                if (loadingElem) loadingElem.remove();
-
-                if (result.candidates && result.candidates[0]?.content?.parts?.[0]?.text) {
-                    let aiText = result.candidates[0].content.parts[0].text;
-                    // Format basic markdown bolding to HTML
-                    aiText = aiText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                    aiText = aiText.replace(/\n/g, '<br>');
-                    appendAiMessage('ai', aiText);
-                } else {
-                    appendAiMessage('ai', 'I am currently processing high request volume. Please try asking your question again in a moment!');
+                const result = await firebaseFunctions.httpsCallable('askGoldenAi', { timeout: 45000 })({ prompt: userPrompt });
+                if (typeof result.data?.answer !== 'string' || !result.data.answer.trim()) {
+                    throw new Error('The assistant returned an invalid response.');
                 }
+                appendAiMessage('ai', result.data.answer, result.data.sources, result.data.searchSuggestions);
             } catch (error) {
-                const loadingElem = document.getElementById(loadingId);
-                if (loadingElem) loadingElem.remove();
-                appendAiMessage('ai', 'Notice: Unable to reach AI servers right now. For instant help, you can check our Platform Anti-Spam Guidance or reach out to verified vendors directly!');
+                console.error('Golden AI request failed.', error);
+                const code = error?.code || '';
+                const message = code === 'functions/unauthenticated' || code === 'functions/permission-denied'
+                    ? 'Please sign in with a verified account and try again.'
+                    : code === 'functions/resource-exhausted'
+                        ? 'The assistant is busy. Please wait a minute and try again.'
+                        : 'The assistant is unavailable right now. Please try again; for order guidance, open My profile > Escrow orders.';
+                appendAiMessage('ai', message);
+            } finally {
+                loading.remove();
+                button.disabled = false;
             }
         }
 

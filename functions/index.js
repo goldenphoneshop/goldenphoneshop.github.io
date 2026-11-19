@@ -10,10 +10,11 @@ const {
   onDocumentWritten
 } = require("firebase-functions/v2/firestore");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
-const { defineSecret } = require("firebase-functions/params");
+const { defineSecret, defineString } = require("firebase-functions/params");
 const { logger } = require("firebase-functions");
 const { calculateEscrowFee } = require("./escrow-fee");
 const escrowFulfillment = require("./escrow-fulfillment");
+const { answerGoldenAi } = require("./golden-ai");
 
 initializeApp();
 
@@ -22,6 +23,8 @@ const FLUTTERWAVE_SECRET_KEY = defineSecret("FLUTTERWAVE_SECRET_KEY");
 const FLUTTERWAVE_WEBHOOK_HASH = defineSecret("FLUTTERWAVE_WEBHOOK_HASH");
 const FLW_SECRET_KEY = defineSecret("FLW_SECRET_KEY");
 const FLW_SECRET_HASH = defineSecret("FLW_SECRET_HASH");
+const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
+const GOLDEN_AI_SERVICE_ACCOUNT = defineString("GOLDEN_AI_SERVICE_ACCOUNT");
 const PAYMENT_REDIRECT_URL = "https://goldenphoneshop.github.io/Markertplace.html";
 const QUIZ_QUESTION_COUNT = 5;
 const QUIZ_SECONDS_PER_QUESTION = 30;
@@ -62,6 +65,44 @@ function requireVerifiedUser(request) {
   }
   return request.auth;
 }
+
+const goldenAiLimits = new Map();
+exports.askGoldenAi = onCall(
+  { secrets: [GEMINI_API_KEY], serviceAccount: GOLDEN_AI_SERVICE_ACCOUNT,
+    maxInstances: 2, concurrency: 20, timeoutSeconds: 40 },
+  async request => {
+    const auth = requireVerifiedUser(request);
+    if (!request.data || Object.keys(request.data).some(key => key !== "prompt")) {
+      throw new HttpsError("invalid-argument", "Send only a question.");
+    }
+    const now = Date.now();
+    for (const [key, value] of goldenAiLimits) {
+      if (value.expiresAt <= now) goldenAiLimits.delete(key);
+    }
+    const key = crypto.createHash("sha256").update(auth.uid).digest("hex");
+    const current = goldenAiLimits.get(key);
+    if (current && current.count >= 8) {
+      throw new HttpsError("resource-exhausted", "Too many questions. Please wait a minute and try again.");
+    }
+    if (!current && goldenAiLimits.size >= 2000) {
+      throw new HttpsError("resource-exhausted", "The assistant is busy. Please try again shortly.");
+    }
+    goldenAiLimits.set(key, current
+      ? { ...current, count: current.count + 1 }
+      : { count: 1, expiresAt: now + 60000 });
+    try {
+      const result = await answerGoldenAi({ prompt: request.data.prompt,
+        projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
+        apiKey: GEMINI_API_KEY.value() });
+      if (result.error) throw new HttpsError(result.error, result.message);
+      return result;
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      logger.error("Golden AI assistant request failed.");
+      throw new HttpsError("unavailable", "The assistant is temporarily unavailable. Please try again.");
+    }
+  }
+);
 
 function requireQuizAdmin(request) {
   const auth = requireVerifiedUser(request);

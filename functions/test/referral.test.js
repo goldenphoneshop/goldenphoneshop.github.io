@@ -58,6 +58,7 @@ function setup() {
   const modules = {
     "./escrow-fee": require("../escrow-fee"),
     "./escrow-fulfillment": require("../escrow-fulfillment"),
+    "./golden-ai": require("../golden-ai"),
     "firebase-admin/app": { initializeApp() {} },
     "firebase-admin/auth": {
       getAuth: () => ({
@@ -92,7 +93,7 @@ function setup() {
       onDocumentWritten: handler
     },
     "firebase-functions/v2/https": { onCall: handler, onRequest: handler, HttpsError },
-    "firebase-functions/params": { defineSecret: () => ({}) },
+    "firebase-functions/params": { defineSecret: () => ({}), defineString: () => ({}) },
     "firebase-functions": { logger: { error() {}, warn() {}, info() {} } }
   };
   const context = {

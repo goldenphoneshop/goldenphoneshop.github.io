@@ -117,6 +117,8 @@ function setup(fetchMock) {
     FLW_SECRET_HASH: { value: () => "test-webhook-hash" },
     FLUTTERWAVE_SECRET_KEY: { value: () => "FLWSECK_TEST-wallet" },
     FLUTTERWAVE_WEBHOOK_HASH: { value: () => "wallet-webhook-hash" },
+    GEMINI_API_KEY: { value: () => "test-ai-key" },
+    GOLDEN_AI_SERVICE_ACCOUNT: "test-ai-service-account",
     PAYMENT_REDIRECT_URL: "https://goldenphoneshop.github.io/Markertplace.html",
     onCall: (...args) => {
       const handler = args.at(-1);
