@@ -19,21 +19,9 @@
       throw new RangeError("Product price must be a safe amount with at most two decimal places.");
     }
 
-    if (priceKobo < 500000) {
-      return Math.round(priceKobo * 0.15 / 5000) * 50;
-    }
-
-    let feeKobo = 75000;
-    feeKobo += Math.min(priceKobo - 500000, 500000) * 0.25;
-    if (priceKobo > 1000000) {
-      feeKobo += Math.min(priceKobo - 1000000, 1000000) * 0.30;
-    }
-    if (priceKobo > 2000000) {
-      feeKobo += Math.min(priceKobo - 2000000, 3000000) / 6;
-    }
-    if (priceKobo > 5000000) {
-      feeKobo += (priceKobo - 5000000) * 0.20;
-    }
-    return Math.round(feeKobo) / 100;
+    // 7.5% is 3/40; splitting the division avoids unsafe integer multiplication.
+    const feeKobo = Math.floor(priceKobo / 40) * 3 +
+      Math.floor(((priceKobo % 40) * 3 + 20) / 40);
+    return feeKobo / 100;
   };
 });

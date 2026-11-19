@@ -7301,7 +7301,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 if (!Number.isSafeInteger(totalKobo)) throw new RangeError('Total price is too large.');
                 return `<div class="mt-2 space-y-1 text-[10px] text-gray-300">
                     <p>Vendor Product Price: ${formatNaira(price)}</p>
-                    <p>Escrow &amp; Service Protection Fee: ${formatNaira(fee)}</p>
+                    <p>Escrow &amp; Service Protection Fee (7.5%): ${formatNaira(fee)}</p>
                     <p class="font-bold text-gold">Estimated Total Payable: ${formatNaira(totalKobo / 100)}</p>
                     <p class="text-gray-500">Live escrow checkout is unavailable; amounts shown are estimates.</p>
                 </div>`;

@@ -455,7 +455,7 @@ test("sandbox checkout uses the server listing price and creates an order exactl
     return { ok: true, json: async () => ({
       status: "success",
       data: { id: 123, status: "successful", tx_ref: payload.tx_ref,
-        amount: 8875, currency: "NGN", customer: { email: "buyer@example.test" } }
+        amount: 8062.5, currency: "NGN", customer: { email: "buyer@example.test" } }
     }) };
   });
   documents.set("users/buyer", { role: "Buyer" });
@@ -469,7 +469,9 @@ test("sandbox checkout uses the server listing price and creates an order exactl
   const checkout = await functions.initiateEscrowCheckout(request("buyer", {
     productId: "product1", expectedPrice: 7500, checkoutEmail: "buyer@example.test"
   }));
-  assert.equal(payload.amount, 8875);
+  assert.equal(payload.amount, 8062.5);
+  assert.equal(checkout.platformFee, 562.5);
+  assert.equal(checkout.totalPaid, 8062.5);
   assert.equal(payload.configurations.session_duration, 15);
   assert.equal(documents.get("products/product1").stock, 0);
   assert.equal(documents.get(`escrowPendingPayments/${checkout.txRef}`).reservationStatus, "HELD");
@@ -483,7 +485,7 @@ test("sandbox checkout uses the server listing price and creates an order exactl
   ]);
   assert.equal(attempts.filter(result => !result.alreadyVerified).length, 1);
   assert.equal(documents.get(`escrowOrders/${checkout.txRef}`).status, "HELD_IN_ESCROW");
-  assert.equal(documents.get(`escrowOrders/${checkout.txRef}`).totalPaid, 8875);
+  assert.equal(documents.get(`escrowOrders/${checkout.txRef}`).totalPaid, 8062.5);
 });
 
 test("concurrent checkout requests cannot reserve the same final item", async () => {
@@ -501,6 +503,29 @@ test("concurrent checkout requests cannot reserve the same final item", async ()
   ]);
   assert.equal(results.filter(result => result.status === "fulfilled").length, 1);
   assert.equal(documents.get("products/product1").stock, 0);
+});
+
+test("checkout recalculates the fee when a vendor changes a listing price", async () => {
+  const amounts = [];
+  const { documents, functions } = setup(async (url, options) => {
+    amounts.push(JSON.parse(options.body).amount);
+    return { ok: true, json: async () => ({ status: "success",
+      data: { link: "https://checkout.flutterwave.com/v3/hosted/pay/test" } }) };
+  });
+  documents.set("users/buyer", { role: "Buyer" });
+  documents.set("users/vendor", { role: "Vendor" });
+  documents.set("products/product1", { ownerUid: "vendor", title: "Phone", stock: 2, price: 1234.56 });
+  const data = { productId: "product1", expectedPrice: 1234.56, checkoutEmail: "buyer@example.test" };
+  const first = await functions.initiateEscrowCheckout(request("buyer", data));
+  assert.equal(first.platformFee, 92.59);
+  assert.equal(first.totalPaid, 1327.15);
+  documents.get("products/product1").price = 2456.78;
+  await assert.rejects(functions.initiateEscrowCheckout(request("buyer", data)),
+    error => error.code === "failed-precondition");
+  const second = await functions.initiateEscrowCheckout(request("buyer", { ...data, expectedPrice: 2456.78 }));
+  assert.equal(second.platformFee, 184.26);
+  assert.equal(second.totalPaid, 2641.04);
+  assert.deepEqual(amounts, [1327.15, 2641.04]);
 });
 
 test("expired stock is released once and missed successful payment is recovered", async () => {
@@ -660,7 +685,7 @@ test("production checkout, verification and webhook use the wallet merchant key"
     assert.match(url, /\/transactions\/123\/verify$/);
     return { ok: true, json: async () => ({
       status: "success", data: {
-        id: 123, status: "successful", tx_ref: payment.tx_ref, amount: 8875, currency: "NGN",
+        id: 123, status: "successful", tx_ref: payment.tx_ref, amount: 91375, currency: "NGN",
         customer: { email: "buyer@example.test" }
       }
     }) };
@@ -670,10 +695,12 @@ test("production checkout, verification and webhook use the wallet merchant key"
   context.FLUTTERWAVE_SECRET_KEY.value = () => "FLWSECK-live";
   documents.set("users/buyer", { role: "Buyer" });
   documents.set("users/vendor", { role: "Vendor" });
-  documents.set("products/product1", { ownerUid: "vendor", title: "Phone", stock: 1, price: 7500 });
+  documents.set("products/product1", { ownerUid: "vendor", title: "Phone", stock: 1, price: 85000 });
   const checkout = await functions.initiateEscrowCheckout(request("buyer", {
-    productId: "product1", expectedPrice: 7500, checkoutEmail: "buyer@example.test"
+    productId: "product1", expectedPrice: 85000, checkoutEmail: "buyer@example.test"
   }));
+  assert.equal(payment.amount, 91375);
+  assert.equal(checkout.platformFee, 6375);
   assert.equal(payment.redirect_url, "https://goldenphoneshop.github.io/Markertplace.html");
   await functions.verifyEscrowPayment(request("buyer", { txRef: checkout.txRef, transactionId: "123" }));
   assert.equal(documents.get(`escrowOrders/${checkout.txRef}`).status, "HELD_IN_ESCROW");

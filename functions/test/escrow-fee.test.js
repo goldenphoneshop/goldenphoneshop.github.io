@@ -5,29 +5,27 @@ const path = require("node:path");
 const vm = require("node:vm");
 const { calculateEscrowFee } = require("../escrow-fee");
 
-test("the agreed marginal schedule and boundary amounts are calculated in kobo", () => {
+test("the 7.5% fee is calculated in kobo across prices", () => {
   const examples = [
-    [1000, 150],
-    [4999, 750],
-    [5000, 750],
-    [7500, 1375],
-    [10000, 2000],
-    [10001, 2000.30],
-    [19999, 4999.70],
-    [20000, 5000],
-    [20001, 5000.17],
-    [50000, 10000],
-    [50001, 10000.20]
+    [1000, 75],
+    [4999, 374.93],
+    [5000, 375],
+    [7500, 562.50],
+    [10000, 750],
+    [20000, 1500],
+    [50000, 3750],
+    [85000, 6375]
   ];
   for (const [price, expected] of examples) {
     assert.equal(calculateEscrowFee(price), expected, `price ${price}`);
   }
 });
 
-test("fees below NGN 5000 round to the nearest NGN 50", () => {
-  assert.equal(calculateEscrowFee(100), 0);
-  assert.equal(calculateEscrowFee(500), 100);
-  assert.equal(calculateEscrowFee(833.34), 150);
+test("fees round to the nearest kobo, with half a kobo rounded up", () => {
+  assert.equal(calculateEscrowFee(0.06), 0);
+  assert.equal(calculateEscrowFee(0.07), 0.01);
+  assert.equal(calculateEscrowFee(0.20), 0.02);
+  assert.equal(calculateEscrowFee(0.21), 0.02);
 });
 
 test("invalid or unrepresentable prices are rejected", () => {

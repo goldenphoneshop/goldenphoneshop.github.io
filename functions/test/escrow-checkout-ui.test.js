@@ -16,7 +16,7 @@ function extract(start, end) {
 test("checkout confirms server totals before opening Flutterwave", async () => {
   let destination = "";
   let result = { checkoutUrl: "https://checkout.flutterwave.com/v3/hosted/pay/test",
-    productPrice: 7500, platformFee: 1375, totalPaid: 8875 };
+    productPrice: 7500, platformFee: 562.5, totalPaid: 8062.5 };
   const toasts = [];
   const context = {
     firebaseConfig: { projectId: "golden-eagle-marketplace" },
@@ -91,11 +91,15 @@ test("the cart offers checkout only for a single vendor product", () => {
     context
   );
   context.renderCart();
-  assert.match(nodes.cartEscrowPreview.innerHTML, /NGN 1375/);
-  assert.match(nodes.cartEscrowPreview.innerHTML, /NGN 8875/);
+  assert.match(nodes.cartEscrowPreview.innerHTML, /Fee \(7\.5%\): NGN 562\.5/);
+  assert.match(nodes.cartEscrowPreview.innerHTML, /NGN 8062\.5/);
   assert.match(nodes.cartEscrowPreview.innerHTML, /live escrow checkout is unavailable/i);
   assert.match(nodes.cartCheckout.innerHTML, /startEscrowCheckout/);
   assert.match(nodes.cartCheckout.innerHTML, /Pay with Escrow Protection/i);
+  context.products[0].price = 85000;
+  context.renderCart();
+  assert.match(nodes.cartEscrowPreview.innerHTML, /Fee \(7\.5%\): NGN 6375/);
+  assert.match(nodes.cartEscrowPreview.innerHTML, /NGN 91375/);
   context.cartItems[0].quantity = 2;
   context.renderCart();
   assert.match(nodes.cartEscrowPreview.textContent, /one listed product at a time/i);
