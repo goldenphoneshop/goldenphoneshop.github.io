@@ -112,6 +112,7 @@ function setup(fetchMock) {
     Buffer,
     crypto,
     calculateEscrowFee,
+    escrowFulfillment: require("../escrow-fulfillment"),
     process: { env: {
       GCLOUD_PROJECT: "escrow-test", ESCROW_TEST_PROJECT_ID: "escrow-test",
       ESCROW_TEST_REDIRECT_URL: "https://escrow-test.example.test/"
@@ -133,7 +134,7 @@ function setup(fetchMock) {
 function request(uid, data = {}, admin = false) {
   return {
     auth: { uid, token: { email_verified: true, firebase: {}, admin } },
-    data: { orderId: "order1", ...data }
+    data: { orderId: "order1", ...(data.productId ? { fulfillment: { method: "pickup", stationId: "oshodi" } } : {}), ...data }
   };
 }
 
@@ -528,6 +529,74 @@ test("checkout recalculates the fee when a vendor changes a listing price", asyn
   assert.deepEqual(amounts, [1327.15, 2641.04]);
 });
 
+test("delivery checkout validates details, charges the trusted fee and settles it to the marketplace", async () => {
+  let payload;
+  const { documents, functions } = setup(async (url, options) => {
+    if (url.endsWith("/payments")) {
+      payload = JSON.parse(options.body);
+      return { ok: true, json: async () => ({ status: "success",
+        data: { link: "https://checkout.flutterwave.com/v3/hosted/pay/test" } }) };
+    }
+    return { ok: true, json: async () => ({ status: "success", data: {
+      id: 123, status: "successful", tx_ref: payload.tx_ref, amount: 10812.5,
+      currency: "NGN", customer: { email: "buyer@example.test" }
+    } }) };
+  });
+  documents.set("users/buyer", { role: "Buyer" });
+  documents.set("users/vendor", { role: "Vendor" });
+  documents.set("products/product1", { ownerUid: "vendor", title: "Phone", stock: 1, price: 7500 });
+  const delivery = { method: "delivery", address: "12 Main Street", city: "Ikeja",
+    state: "Lagos", phone: "08012345678", landmark: "Market" };
+  const data = { productId: "product1", expectedPrice: 7500, checkoutEmail: "buyer@example.test" };
+  for (const fulfillment of [null, { method: "pickup", stationId: "invalid" },
+    { ...delivery, address: " " }, { ...delivery, phone: "abc" }]) {
+    await assert.rejects(functions.initiateEscrowCheckout(request("buyer", { ...data, fulfillment })),
+      error => error.code === "invalid-argument");
+  }
+  assert.equal(documents.get("products/product1").stock, 1);
+  const checkout = await functions.initiateEscrowCheckout(request("buyer", {
+    ...data, fulfillment: delivery, fulfillmentFee: 0
+  }));
+  assert.equal(checkout.fulfillmentFee, 2750);
+  assert.equal(payload.amount, 10812.5);
+  assert.equal(payload.meta.fulfillment.address, delivery.address);
+  assert.equal(payload.meta.fulfillmentFee, 2750);
+  await functions.verifyEscrowPayment(request("buyer", { txRef: checkout.txRef, transactionId: "123" }));
+  const order = documents.get(`escrowOrders/${checkout.txRef}`);
+  assert.equal(order.fulfillment.phone, delivery.phone);
+  assert.equal(order.fulfillmentFee, 2750);
+  await functions.markOrderShipped(request("vendor", { orderId: checkout.txRef }));
+  await functions.confirmDeliveryAndRelease(request("buyer", { orderId: checkout.txRef }));
+  assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, 750000);
+  assert.equal(documents.get("escrowPlatformAccounting/revenue").retainedKobo, 331250);
+});
+
+test("pickup details are persisted using the selected server-side station", async () => {
+  let payload;
+  const { documents, functions } = setup(async (url, options) => {
+    if (url.endsWith("/payments")) {
+      payload = JSON.parse(options.body);
+      return { ok: true, json: async () => ({ status: "success",
+        data: { link: "https://checkout.flutterwave.com/v3/hosted/pay/test" } }) };
+    }
+    return { ok: true, json: async () => ({ status: "success", data: {
+      id: 123, status: "successful", tx_ref: payload.tx_ref, amount: 8062.5,
+      currency: "NGN", customer: { email: "buyer@example.test" }
+    } }) };
+  });
+  documents.set("users/buyer", { role: "Buyer" });
+  documents.set("users/vendor", { role: "Vendor" });
+  documents.set("products/product1", { ownerUid: "vendor", title: "Phone", stock: 1, price: 7500 });
+  const checkout = await functions.initiateEscrowCheckout(request("buyer", {
+    productId: "product1", expectedPrice: 7500, checkoutEmail: "buyer@example.test",
+    fulfillment: { method: "pickup", stationId: "ikeja", stationName: "untrusted" }
+  }));
+  assert.equal(checkout.fulfillmentFee, 0);
+  assert.match(payload.meta.fulfillment.stationName, /Computer Village/);
+  await functions.verifyEscrowPayment(request("buyer", { txRef: checkout.txRef, transactionId: "123" }));
+  assert.match(documents.get(`escrowOrders/${checkout.txRef}`).fulfillment.stationName, /Computer Village/);
+});
+
 test("expired stock is released once and missed successful payment is recovered", async () => {
   const txRef = "escrow-12345678-1234-1234-1234-123456789abc";
   let successful = false;
@@ -648,6 +717,11 @@ test("sandbox checkout rejects totals below Flutterwave's minimum refund", async
   documents.set("products/product1", { ownerUid: "vendor", title: "Phone", stock: 1, price: 50 });
   await assert.rejects(functions.initiateEscrowCheckout(request("buyer", {
     productId: "product1", expectedPrice: 50, checkoutEmail: "buyer@example.test"
+  })), error => error.code === "failed-precondition");
+  await assert.rejects(functions.initiateEscrowCheckout(request("buyer", {
+    productId: "product1", expectedPrice: 50, checkoutEmail: "buyer@example.test",
+    fulfillment: { method: "delivery", address: "12 Main Street", city: "Ikeja",
+      state: "Lagos", phone: "08012345678" }
   })), error => error.code === "failed-precondition");
   assert.equal(called, false);
 });
@@ -994,6 +1068,34 @@ test("admin refund remains pending until Flutterwave confirms final disbursement
   assert.equal((await functions.checkEscrowRefund(request("admin", {}, true))).status, "REFUNDED");
   assert.equal(documents.get("escrowOrders/order1").status, "REFUNDED");
   assert.equal(documents.has("vendorPayoutBalances/vendor"), false);
+});
+
+test("fulfillment refunds are full before dispatch and product-only afterward", async () => {
+  for (const dispatched of [false, true]) {
+    const expected = dispatched ? 7500 : 10812.5;
+    const { documents, functions } = setup(async (url, options) => {
+      if (options.method === "POST") {
+        assert.equal(JSON.parse(options.body).amount, expected);
+        return { ok: true, json: async () => ({ status: "success",
+          data: { id: 501, tx_id: 123, amount_refunded: expected, status: "completed" } }) };
+      }
+      return { ok: true, json: async () => ({
+        id: 501, transaction_id: 123, amount_refunded: expected, status: "completed-bank-transfer"
+      }) };
+    });
+    documents.set("escrowOrders/order1", {
+      ...heldOrder(), platformFee: 562.5, fulfillment: { method: "delivery" },
+      fulfillmentFee: 2750, totalPaid: 10812.5, transactionId: "123",
+      ...(dispatched ? { shippedAt: "time" } : {})
+    });
+    await functions.openEscrowDispute(request("buyer", { reason: "Issue" }));
+    await functions.resolveEscrowDispute(request("admin", { decision: "refund" }, true));
+    await functions.checkEscrowRefund(request("admin", {}, true));
+    await functions.checkEscrowRefund(request("admin", {}, true));
+    assert.equal(documents.get("escrowOrders/order1").status, "REFUNDED");
+    assert.equal(documents.get("escrowPlatformAccounting/revenue")?.retainedKobo || 0,
+      dispatched ? 331250 : 0);
+  }
 });
 
 test("an uncertain refund cannot be retried or released", async () => {

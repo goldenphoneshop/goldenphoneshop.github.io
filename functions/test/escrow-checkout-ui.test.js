@@ -16,28 +16,37 @@ function extract(start, end) {
 test("checkout confirms server totals before opening Flutterwave", async () => {
   let destination = "";
   let result = { checkoutUrl: "https://checkout.flutterwave.com/v3/hosted/pay/test",
-    productPrice: 7500, platformFee: 562.5, totalPaid: 8062.5 };
+    productPrice: 7500, platformFee: 562.5, fulfillmentFee: 0, totalPaid: 8062.5 };
   const toasts = [];
+  const nodes = {
+    escrowFulfillmentMethod: { value: "pickup" },
+    escrowStation: { value: "oshodi" },
+    escrowCheckoutSubmit: { disabled: false }
+  };
+  const requests = [];
   const context = {
     firebaseConfig: { projectId: "golden-eagle-marketplace" },
     currentUser: { email: "buyer@example.test" },
     products: [{ id: "p1", price: 7500 }],
     calculateEscrowFee,
     formatNaira: String,
-    firebaseFunctions: { httpsCallable: () => async () => ({ data: result }) },
+    escrowFulfillment: require("../escrow-fulfillment"),
+    document: { getElementById: id => nodes[id] },
+    firebaseFunctions: { httpsCallable: () => async data => { requests.push(data); return { data: result }; } },
     window: { confirm: () => true, location: { assign: url => { destination = url; } } },
     showToast: message => toasts.push(message),
     console: { error() {} },
     URL
   };
-  vm.runInNewContext(extract("async function startEscrowCheckout", "function updateDiscussionComposer"), context);
-  const button = { disabled: false };
-  await context.startEscrowCheckout("p1", button);
+  vm.runInNewContext(extract("function startEscrowCheckout", "function updateDiscussionComposer"), context);
+  const event = { preventDefault() {}, currentTarget: { dataset: { productId: "p1" } } };
+  await context.submitEscrowCheckout(event);
   assert.match(destination, /^https:\/\/checkout\.flutterwave\.com\//);
-  assert.equal(button.disabled, false);
+  assert.equal(requests[0].fulfillment.stationId, "oshodi");
+  assert.equal(nodes.escrowCheckoutSubmit.disabled, false);
   destination = "";
   result = { ...result, totalPaid: 1 };
-  await context.startEscrowCheckout("p1", button);
+  await context.submitEscrowCheckout(event);
   assert.equal(destination, "");
   assert.match(toasts.at(-1), /checkout total changed/i);
 });
@@ -62,6 +71,80 @@ test("an escrow return is verified without invoking the wallet purchase handler"
   await context.confirmFlutterwaveReturn();
   assert.deepEqual(called, ["verifyEscrowPayment"]);
   assert.equal(new URL(replaced).search, "");
+});
+
+test("fulfillment form lists stations and requires the selected delivery details", () => {
+  const nodes = {};
+  for (const id of ["escrowCheckoutForm", "escrowFulfillmentMethod", "escrowStation", "escrowStationField",
+    "escrowDeliveryFields", "escrowDeliveryAddress", "escrowDeliveryCity", "escrowDeliveryState",
+    "escrowDeliveryPhone", "escrowCheckoutTotal", "escrowCheckoutModal"]) {
+    nodes[id] = { value: "", dataset: {}, classList: {
+      hidden: true, add() {}, remove() {}, toggle(name, hidden) { this.hidden = hidden; }
+    } };
+  }
+  nodes.escrowCheckoutForm.reset = () => {};
+  const option = {};
+  const context = {
+    currentUser: { uid: "buyer" }, products: [{ id: "p1", price: 7500 }],
+    escrowFulfillment: require("../escrow-fulfillment"), calculateEscrowFee,
+    document: { getElementById: id => nodes[id], querySelector: () => option },
+    escapeHtml: String, formatNaira: String, console
+  };
+  vm.runInNewContext(extract("function startEscrowCheckout", "function updateDiscussionComposer"), context);
+  context.startEscrowCheckout("p1");
+  assert.match(nodes.escrowStation.innerHTML, /Computer Village/);
+  assert.match(option.textContent, /2750/);
+  nodes.escrowFulfillmentMethod.value = "delivery";
+  context.updateEscrowFulfillmentForm();
+  assert.equal(nodes.escrowDeliveryAddress.required, true);
+  assert.equal(nodes.escrowStation.required, false);
+  assert.match(nodes.escrowCheckoutTotal.textContent, /10812\.5/);
+  nodes.escrowFulfillmentMethod.value = "pickup";
+  context.updateEscrowFulfillmentForm();
+  assert.equal(nodes.escrowDeliveryAddress.required, false);
+  assert.equal(nodes.escrowStation.required, true);
+  assert.match(nodes.escrowCheckoutTotal.textContent, /8062\.5/);
+});
+
+test("delivery checkout sends the entered details and verifies the fulfillment fee", async () => {
+  let destination = "";
+  const calls = [];
+  const nodes = {
+    escrowFulfillmentMethod: { value: "delivery" },
+    escrowDeliveryAddress: { value: " 12 Main Street " },
+    escrowDeliveryCity: { value: "Ikeja" },
+    escrowDeliveryState: { value: "Lagos" },
+    escrowDeliveryPhone: { value: "08012345678" },
+    escrowDeliveryLandmark: { value: "Market" },
+    escrowCheckoutSubmit: { disabled: false }
+  };
+  let fulfillmentFee = 2750;
+  const context = {
+    currentUser: { email: "buyer@example.test" },
+    products: [{ id: "p1", price: 7500 }],
+    calculateEscrowFee,
+    escrowFulfillment: require("../escrow-fulfillment"),
+    formatNaira: String,
+    document: { getElementById: id => nodes[id] },
+    firebaseFunctions: { httpsCallable: name => async data => {
+      calls.push({ name, data });
+      return { data: { checkoutUrl: "https://checkout.flutterwave.com/v3/hosted/pay/test",
+        productPrice: 7500, platformFee: 562.5, fulfillmentFee, totalPaid: 10812.5 } };
+    } },
+    window: { confirm: () => true, location: { assign: url => { destination = url; } } },
+    showToast() {}, console: { error() {} }, URL
+  };
+  vm.runInNewContext(extract("function startEscrowCheckout", "function updateDiscussionComposer"), context);
+  const event = { preventDefault() {}, currentTarget: { dataset: { productId: "p1" } } };
+  await context.submitEscrowCheckout(event);
+  assert.equal(calls[0].name, "initiateEscrowCheckout");
+  assert.equal(calls[0].data.fulfillment.address, "12 Main Street");
+  assert.equal(calls[0].data.fulfillment.phone, "08012345678");
+  assert.match(destination, /^https:\/\/checkout\.flutterwave\.com\//);
+  destination = "";
+  fulfillmentFee = 0;
+  await context.submitEscrowCheckout(event);
+  assert.equal(destination, "");
 });
 
 test("the cart offers checkout only for a single vendor product", () => {
@@ -93,7 +176,7 @@ test("the cart offers checkout only for a single vendor product", () => {
   context.renderCart();
   assert.match(nodes.cartEscrowPreview.innerHTML, /Fee \(7\.5%\): NGN 562\.5/);
   assert.match(nodes.cartEscrowPreview.innerHTML, /NGN 8062\.5/);
-  assert.match(nodes.cartEscrowPreview.innerHTML, /live escrow checkout is unavailable/i);
+  assert.match(nodes.cartEscrowPreview.innerHTML, /estimate excludes delivery or pickup fees/i);
   assert.match(nodes.cartCheckout.innerHTML, /startEscrowCheckout/);
   assert.match(nodes.cartCheckout.innerHTML, /Pay with Escrow Protection/i);
   context.products[0].price = 85000;
@@ -170,6 +253,16 @@ test("order controls match the participant and status and call the protected fun
   assert.equal(queries.at(-1).field, "vendorUid");
   assert.match(list.innerHTML, /Mark shipped/);
   assert.doesNotMatch(list.innerHTML, /Confirm delivery|Open dispute/);
+  order = { ...order, fulfillment: { method: "pickup", stationName: "Computer Village" }, fulfillmentFee: 0 };
+  await context.loadEscrowOrders();
+  assert.match(list.innerHTML, /Pickup Station/);
+  assert.match(list.innerHTML, /Computer Village/);
+  assert.match(list.innerHTML, /Mark ready for pickup/);
+  context.currentUser = { uid: "buyer", role: "Buyer" };
+  order.status = "SHIPPED";
+  await context.loadEscrowOrders();
+  assert.match(list.innerHTML, /Ready for pickup/);
+  assert.match(list.innerHTML, /Confirm pickup/);
 });
 
 test("production account navigation opens the escrow orders section", () => {

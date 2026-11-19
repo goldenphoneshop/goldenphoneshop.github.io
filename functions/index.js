@@ -13,6 +13,7 @@ const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https")
 const { defineSecret } = require("firebase-functions/params");
 const { logger } = require("firebase-functions");
 const { calculateEscrowFee } = require("./escrow-fee");
+const escrowFulfillment = require("./escrow-fulfillment");
 
 initializeApp();
 
@@ -1085,12 +1086,40 @@ exports.initiateEscrowCheckout = onCall(
       throw new HttpsError("failed-precondition", "The product price changed. Review it before checkout.");
     }
     const feeKobo = escrowAmountKobo(calculateEscrowFee(listing.price), true);
-    const totalKobo = priceKobo + feeKobo;
+    const selected = request.data?.fulfillment;
+    let fulfillment;
+    let fulfillmentFee;
+    if (selected?.method === "pickup") {
+      const station = escrowFulfillment.stations.find(item => item.id === selected.stationId);
+      if (!station) throw new HttpsError("invalid-argument", "Choose a valid pickup station.");
+      fulfillment = { method: "pickup", stationId: station.id, stationName: station.label };
+      fulfillmentFee = 0;
+    } else if (selected?.method === "delivery") {
+      const field = (name, max, required = true) => {
+        const value = typeof selected[name] === "string" ? selected[name].trim() : "";
+        if ((required && !value) || value.length > max) {
+          throw new HttpsError("invalid-argument", `Enter a valid ${name}.`);
+        }
+        return value;
+      };
+      const phone = field("phone", 25);
+      if (!/^\+?[0-9][0-9 ()-]{6,23}[0-9]$/.test(phone) ||
+          phone.replace(/\D/g, "").length < 8) {
+        throw new HttpsError("invalid-argument", "Enter a valid phone number.");
+      }
+      fulfillment = { method: "delivery", address: field("address", 200), city: field("city", 100),
+        state: field("state", 100), phone, landmark: field("landmark", 200, false) };
+      fulfillmentFee = escrowFulfillment.homeDeliveryFee;
+    } else {
+      throw new HttpsError("invalid-argument", "Choose a fulfillment method.");
+    }
+    const fulfillmentKobo = escrowAmountKobo(fulfillmentFee, true);
+    const totalKobo = priceKobo + feeKobo + fulfillmentKobo;
     if (!Number.isSafeInteger(totalKobo)) {
       throw new HttpsError("failed-precondition", "The product total is too large.");
     }
-    if (totalKobo < 10000) {
-      throw new HttpsError("failed-precondition", "The escrow total must be at least NGN 100 so it can be refunded.");
+    if (priceKobo < 10000) {
+      throw new HttpsError("failed-precondition", "The product price must be at least NGN 100 so it can be refunded after dispatch.");
     }
     const email = auth.token.email_verified === true && typeof auth.token.email === "string"
       ? auth.token.email.trim()
@@ -1116,6 +1145,8 @@ exports.initiateEscrowCheckout = onCall(
         productTitle: listing.title,
         productPrice: priceKobo / 100,
         platformFee: feeKobo / 100,
+        fulfillment,
+        fulfillmentFee,
         totalPaid: totalKobo / 100,
         currency: "NGN",
         email,
@@ -1134,6 +1165,7 @@ exports.initiateEscrowCheckout = onCall(
         currency: "NGN",
         redirect_url: redirectUrl,
         customer: { email },
+        meta: { fulfillment, fulfillmentFee },
         configurations: { session_duration: 15 },
         customizations: { title: "Golden Eagle escrow checkout" }
       }),
@@ -1156,7 +1188,7 @@ exports.initiateEscrowCheckout = onCall(
       throw new HttpsError("unavailable", "Flutterwave returned an invalid checkout link.");
     }
     return { checkoutUrl: checkoutUrl.href, txRef, productPrice: priceKobo / 100,
-      platformFee: feeKobo / 100, totalPaid: totalKobo / 100 };
+      platformFee: feeKobo / 100, fulfillmentFee, totalPaid: totalKobo / 100 };
   }
 );
 
@@ -1225,6 +1257,7 @@ async function verifyEscrowTransaction(txRef, transactionId, secret) {
       productTitle: data.productTitle,
       productPrice: data.productPrice,
       platformFee: data.platformFee,
+      ...(data.fulfillment ? { fulfillment: data.fulfillment, fulfillmentFee: data.fulfillmentFee } : {}),
       totalPaid: data.totalPaid,
       currency: data.currency,
       transactionId,
@@ -1880,8 +1913,10 @@ async function updateEscrowOrder(request, action) {
     }
     const productKobo = escrowAmountKobo(order.productPrice);
     const feeKobo = escrowAmountKobo(order.platformFee, true);
+    const fulfillmentKobo = order.fulfillment ? escrowAmountKobo(order.fulfillmentFee, true) : 0;
     const totalKobo = escrowAmountKobo(order.totalPaid);
-    if (!Number.isSafeInteger(productKobo + feeKobo) || productKobo + feeKobo !== totalKobo) {
+    if (!Number.isSafeInteger(productKobo + feeKobo + fulfillmentKobo) ||
+        productKobo + feeKobo + fulfillmentKobo !== totalKobo) {
       throw new HttpsError("failed-precondition", "The order amount needs reconciliation.");
     }
     const balanceRef = db.collection("vendorPayoutBalances").doc(order.vendorUid);
@@ -1896,7 +1931,7 @@ async function updateEscrowOrder(request, action) {
       throw new HttpsError("failed-precondition", "The order release needs reconciliation.");
     }
     const balanceKobo = escrowStoredBalance(balanceSnapshot, "availableKobo") + productKobo;
-    const revenueKobo = escrowStoredBalance(revenueSnapshot, "retainedKobo") + feeKobo;
+    const revenueKobo = escrowStoredBalance(revenueSnapshot, "retainedKobo") + feeKobo + fulfillmentKobo;
     if (!Number.isSafeInteger(balanceKobo) || !Number.isSafeInteger(revenueKobo)) {
       throw new HttpsError("failed-precondition", "The escrow ledger needs reconciliation.");
     }
@@ -1906,6 +1941,7 @@ async function updateEscrowOrder(request, action) {
       vendorUid: order.vendorUid,
       productKobo,
       feeKobo,
+      fulfillmentKobo,
       releasedBy: auth.uid,
       releasedAt: FieldValue.serverTimestamp()
     });
@@ -1952,12 +1988,14 @@ async function startEscrowRefund(orderId, secret, initiatedBy, requiredStatus) {
     if (typeof order.transactionId !== "string" || !/^\d{1,32}$/.test(order.transactionId)) {
       throw new HttpsError("failed-precondition", "The payment needs reconciliation before refund.");
     }
-    const amountKobo = escrowAmountKobo(order.totalPaid);
+    const amountKobo = initiatedBy !== "automatic" && order.fulfillment && order.shippedAt
+      ? escrowAmountKobo(order.productPrice) : escrowAmountKobo(order.totalPaid);
     if (amountKobo < 10000) {
       throw new HttpsError("failed-precondition", "Flutterwave's minimum refund is NGN 100; contact support.");
     }
     transaction.create(refundRef, {
       orderId, transactionId: order.transactionId, amountKobo,
+      retainedKobo: escrowAmountKobo(order.totalPaid) - amountKobo,
       status: "INITIATING", initiatedBy, createdAt: FieldValue.serverTimestamp()
     });
     transaction.update(orderRef, {
@@ -2061,8 +2099,9 @@ async function checkEscrowRefundStatus(orderId, secret, notifiedRefundId) {
       "completed-offline", "completed-preauth"];
     const isFinal = finalStatuses.includes(data.status);
     const status = await db.runTransaction(async transaction => {
-      const [orderSnapshot, current] = await Promise.all([
-        transaction.get(orderRef), transaction.get(refundRef)
+      const revenueRef = db.collection("escrowPlatformAccounting").doc("revenue");
+      const [orderSnapshot, current, revenueSnapshot] = await Promise.all([
+        transaction.get(orderRef), transaction.get(refundRef), transaction.get(revenueRef)
       ]);
       if (!orderSnapshot.exists || !current.exists ||
           !["INITIATING", "PENDING", "REFUNDED"].includes(current.data().status) ||
@@ -2074,6 +2113,14 @@ async function checkEscrowRefundStatus(orderId, secret, notifiedRefundId) {
       if (current.data().status === "REFUNDED" && orderSnapshot.data().status === "REFUNDED") return "REFUNDED";
       if (!["REFUND_INITIATING", "REFUND_PENDING"].includes(orderSnapshot.data().status)) {
         throw new HttpsError("failed-precondition", "The refund needs reconciliation.");
+      }
+      if (isFinal && current.data().retainedKobo) {
+        const retainedKobo = current.data().retainedKobo;
+        const revenueKobo = escrowStoredBalance(revenueSnapshot, "retainedKobo") + retainedKobo;
+        if (!Number.isSafeInteger(retainedKobo) || retainedKobo < 0 || !Number.isSafeInteger(revenueKobo)) {
+          throw new HttpsError("failed-precondition", "The refund ledger needs reconciliation.");
+        }
+        transaction.set(revenueRef, { retainedKobo: revenueKobo, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       }
       transaction.update(refundRef, {
         status: isFinal ? "REFUNDED" : "PENDING", providerRefundId: refundId,

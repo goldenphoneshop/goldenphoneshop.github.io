@@ -57,6 +57,7 @@ function setup() {
   const handler = (...args) => args.at(-1);
   const modules = {
     "./escrow-fee": require("../escrow-fee"),
+    "./escrow-fulfillment": require("../escrow-fulfillment"),
     "firebase-admin/app": { initializeApp() {} },
     "firebase-admin/auth": {
       getAuth: () => ({
