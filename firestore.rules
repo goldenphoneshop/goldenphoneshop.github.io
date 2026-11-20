@@ -145,6 +145,7 @@ service cloud.firestore {
       allow list: if false;
       allow create: if signedIn()
         && request.auth.uid == userId
+        && request.resource.data.role == 'Buyer'
         && !request.resource.data.keys().hasAny([
           'verifiedDealerUntil',
           'verifiedDealerAutoRenew',
@@ -483,6 +484,23 @@ service cloud.firestore {
     }
 
     match /quizQuestions/{questionId} {
+      allow read, write: if false;
+    }
+
+    match /vendorApplications/{uid} {
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'status', 'createdAt'])
+        && request.resource.data.uid == uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
+      allow read, update, delete: if false;
+    }
+
+    match /adminSecurityAudit/{id} {
       allow read, write: if false;
     }
 

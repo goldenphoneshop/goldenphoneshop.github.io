@@ -3119,7 +3119,117 @@ exports.deliverStockAlertNotifications = onDocumentCreated(
   }
 );
 
+exports.listVendorApplications = onCall(async request => {
+  requireEscrowAdmin(request);
+  const snapshot = await db.collection("vendorApplications")
+    .where("status", "==", "pending")
+    .limit(50)
+    .get();
+  return {
+    items: snapshot.docs.map(document => ({
+      uid: document.id,
+      name: document.data().name,
+      status: document.data().status
+    }))
+  };
+});
+
+exports.adminSetVendorApproval = onCall(async request => {
+  const auth = requireEscrowAdmin(request);
+  const { uid, approved } = request.data || {};
+  if (typeof uid !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(uid) ||
+      typeof approved !== "boolean") {
+    throw new HttpsError("invalid-argument", "Choose a valid vendor application.");
+  }
+  const profileRef = db.collection("users").doc(uid);
+  const applicationRef = db.collection("vendorApplications").doc(uid);
+  await db.runTransaction(async transaction => {
+    const [profileSnapshot, applicationSnapshot] = await Promise.all([
+      transaction.get(profileRef),
+      transaction.get(applicationRef)
+    ]);
+    if (!profileSnapshot.exists || !applicationSnapshot.exists) {
+      throw new HttpsError("not-found", "This vendor application could not be found.");
+    }
+    transaction.set(profileRef, {
+      role: approved ? "Vendor" : "Buyer",
+      ...(approved ? {} : {
+        verifiedDealerUntil: FieldValue.delete(),
+        verifiedDealerAutoRenew: FieldValue.delete(),
+        verifiedDealerRenewalDueAt: FieldValue.delete(),
+        verifiedDealerAutoRenewPaused: FieldValue.delete()
+      })
+    }, { merge: true });
+    transaction.set(applicationRef, {
+      status: approved ? "approved" : "rejected",
+      reviewedBy: auth.uid,
+      reviewedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    if (!approved) transaction.delete(db.collection("verifiedDealers").doc(uid));
+    transaction.create(db.collection("adminSecurityAudit").doc(), {
+      action: approved ? "approve-vendor" : "reject-vendor",
+      targetUid: uid,
+      actorUid: auth.uid,
+      createdAt: FieldValue.serverTimestamp()
+    });
+  });
+  return { uid, approved };
+});
+
+exports.adminSetVerifiedDealerBadge = onCall(async request => {
+  const auth = requireEscrowAdmin(request);
+  const { uid, enabled } = request.data || {};
+  if (typeof uid !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(uid) ||
+      typeof enabled !== "boolean") {
+    throw new HttpsError("invalid-argument", "Choose a valid verified dealer request.");
+  }
+  const profileRef = db.collection("users").doc(uid);
+  const publicBadgeRef = db.collection("verifiedDealers").doc(uid);
+  let verifiedUntilMs = null;
+  await db.runTransaction(async transaction => {
+    const profileSnapshot = await transaction.get(profileRef);
+    if (!profileSnapshot.exists || profileSnapshot.data().role !== "Vendor") {
+      throw new HttpsError("failed-precondition", "Approve this account as a Vendor first.");
+    }
+    if (enabled) {
+      const verifiedUntil = addOneUtcCalendarMonth(new Date());
+      verifiedUntilMs = verifiedUntil.getTime();
+      transaction.set(profileRef, {
+        verifiedDealerUntil: verifiedUntil,
+        verifiedDealerAutoRenew: false,
+        verifiedDealerRenewalDueAt: FieldValue.delete(),
+        verifiedDealerAutoRenewPaused: false
+      }, { merge: true });
+      transaction.set(publicBadgeRef, {
+        verifiedUntil,
+        approvedBy: auth.uid,
+        updatedAt: FieldValue.serverTimestamp()
+      });
+    } else {
+      transaction.set(profileRef, {
+        verifiedDealerUntil: FieldValue.delete(),
+        verifiedDealerAutoRenew: FieldValue.delete(),
+        verifiedDealerRenewalDueAt: FieldValue.delete(),
+        verifiedDealerAutoRenewPaused: FieldValue.delete()
+      }, { merge: true });
+      transaction.delete(publicBadgeRef);
+    }
+    transaction.create(db.collection("adminSecurityAudit").doc(), {
+      action: enabled ? "grant-dealer-badge" : "revoke-dealer-badge",
+      targetUid: uid,
+      actorUid: auth.uid,
+      createdAt: FieldValue.serverTimestamp()
+    });
+  });
+  return { uid, enabled, verifiedUntilMs };
+});
+
 exports.purchaseVerifiedDealerBadge = onCall(async request => {
+  requireVerifiedUser(request);
+  throw new HttpsError(
+    "permission-denied",
+    "Dealer verification badges are granted only after owner review. Contact support."
+  );
   const auth = requireVerifiedUser(request);
   const profileRef = db.collection("users").doc(auth.uid);
   const walletRef = accountWalletRef(auth.uid);
@@ -3200,6 +3310,11 @@ exports.purchaseVerifiedDealerBadge = onCall(async request => {
 });
 
 exports.setVerifiedDealerAutoRenew = onCall(async request => {
+  requireVerifiedUser(request);
+  throw new HttpsError(
+    "permission-denied",
+    "Dealer verification is managed by the owner and is not automatically renewed."
+  );
   const auth = requireVerifiedUser(request);
   const enabled = request.data?.enabled;
   if (typeof enabled !== "boolean") {
@@ -3294,6 +3409,7 @@ exports.setVerifiedDealerAutoRenew = onCall(async request => {
 });
 
 exports.processVerifiedDealerBadgeRenewals = onSchedule("every 10 minutes", async () => {
+  return { renewed: 0, pausedForInsufficientCoins: 0, skipped: 0 };
   const nowMs = Date.now();
   const query = db.collection("users")
     .where("verifiedDealerRenewalDueAt", "<=", new Date(nowMs))

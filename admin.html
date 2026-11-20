@@ -26,7 +26,7 @@
 <body>
 <main>
   <h1>Golden Eagle administration</h1>
-  <p class="muted">Only verified accounts with the Firebase administrator claim can access dashboard functions.</p>
+  <p class="muted">Only the protected owner account can access dashboard functions.</p>
   <p id="authStatus" role="status">Checking your account…</p>
   <section id="signIn" class="card" hidden>
     <h2>Administrator sign in</h2>
@@ -42,6 +42,15 @@
     <p class="muted">Live cash-outs require the launch flag. Vendors submit payouts; administrators can check or reconcile them here. Never retry a failed or uncertain transfer in Flutterwave after cash has been restored. Manual refunds must be initiated separately in Flutterwave.</p>
     <button id="refresh" type="button">Refresh dashboard</button>
     <p id="actionStatus" role="status" aria-live="polite"></p>
+    <section class="card">
+      <h2>Vendor approvals and verification badges</h2>
+      <p class="muted">Approve the account as a Vendor only after manual identity/business review. Dealer badges are separately granted for one calendar month and never auto-renew.</p>
+      <p id="vendorsStatus" role="status">Loading…</p>
+      <div id="vendorApplications"></div>
+      <label>Verified dealer UID <input id="dealerUid" autocomplete="off" placeholder="Firebase user UID"></label>
+      <button id="grantDealerBadge" type="button">Grant dealer badge</button>
+      <button id="revokeDealerBadge" type="button" class="secondary">Revoke dealer badge</button>
+    </section>
     <section class="card">
       <h2>Platform metrics</h2>
       <p class="muted">Recorded totals include held, shipped, disputed and awaiting-refund orders; they are not a verified bank or segregated escrow balance. Metrics are current snapshots, not historical totals.</p>
@@ -243,13 +252,51 @@
       showError('metricsStatus', error);
     }
   }
+  async function loadVendorApplications() {
+    message('vendorsStatus', 'Loading…');
+    try {
+      const data = await call('listVendorApplications', {});
+      const container = el('vendorApplications');
+      container.replaceChildren();
+      data.items.forEach(item => {
+        const card = document.createElement('article');
+        card.className = 'entry';
+        line(card, 'UID', item.uid);
+        line(card, 'Name', item.name);
+        line(card, 'Status', item.status);
+        button(card, 'Approve vendor', async () => {
+          if (!window.confirm(`Approve ${item.name} as a Vendor?`)) return null;
+          await call('adminSetVendorApproval', { uid: item.uid, approved: true });
+          return `Vendor ${item.name} approved.`;
+        });
+        button(card, 'Reject vendor', async () => {
+          if (!window.confirm(`Reject ${item.name}'s Vendor application?`)) return null;
+          await call('adminSetVendorApproval', { uid: item.uid, approved: false });
+          return `Vendor application ${item.name} rejected.`;
+        });
+        container.appendChild(card);
+      });
+      message('vendorsStatus', data.items.length ? '' : 'No pending vendor applications.');
+    } catch (error) {
+      showError('vendorsStatus', error);
+    }
+  }
   async function refreshAll() {
-    await Promise.all([loadMetrics(), ...Object.keys(cursors).map(kind => loadQueue(kind))]);
+    await Promise.all([loadVendorApplications(), loadMetrics(),
+      ...Object.keys(cursors).map(kind => loadQueue(kind))]);
   }
   for (const kind of Object.keys(cursors)) {
     el(`${kind}More`).addEventListener('click', () => loadQueue(kind, true));
   }
   el('refresh').addEventListener('click', refreshAll);
+  for (const [id, enabled] of [['grantDealerBadge', true], ['revokeDealerBadge', false]]) {
+    el(id).addEventListener('click', () => perform(el(id), async () => {
+      const uid = el('dealerUid').value.trim();
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(uid)) throw new Error('Enter a valid Firebase user UID.');
+      const result = await call('adminSetVerifiedDealerBadge', { uid, enabled });
+      return `${enabled ? 'Granted' : 'Revoked'} dealer badge for ${result.uid}.`;
+    }));
+  }
   el('signInForm').addEventListener('submit', async event => {
     event.preventDefault();
     try {

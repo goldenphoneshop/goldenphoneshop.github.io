@@ -7,6 +7,7 @@ const vm = require("node:vm");
 const root = path.join(__dirname, "..", "..");
 const source = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
 const html = fs.readFileSync(path.join(root, "Markertplace.html"), "utf8");
+const firestoreRules = fs.readFileSync(path.join(root, "firestore.rules"), "utf8");
 
 function extract(start, end) {
   const first = source.indexOf(start);
@@ -71,4 +72,13 @@ test("marketplace cards do not claim every listing is verified", () => {
   assert.doesNotMatch(html, /<span>🦅 Verified<\/span>/);
   assert.doesNotMatch(html, /aria-label="Verified Dealer"/);
   assert.doesNotMatch(html, /Purchase Verified Dealer Badge/);
+  assert.doesNotMatch(html, /Purchase Marketplace Dealer Badge/);
+  assert.match(html, /Vendor application will require owner approval/);
+});
+
+test("new accounts cannot self-assign Vendor and badges require owner administration", () => {
+  assert.match(firestoreRules, /request\.resource\.data\.role == 'Buyer'/);
+  assert.match(source, /exports\.adminSetVendorApproval = onCall/);
+  assert.match(source, /exports\.adminSetVerifiedDealerBadge = onCall/);
+  assert.match(source, /Dealer verification badges are granted only after owner review/);
 });
