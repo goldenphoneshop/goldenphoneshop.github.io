@@ -93,7 +93,9 @@ exports.askGoldenAi = onCall(
     try {
       const result = await answerGoldenAi({ prompt: request.data.prompt,
         projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
-        apiKey: GEMINI_API_KEY.value() });
+        apiKey: GEMINI_API_KEY.value(),
+        payoutsEnabled: process.env.GCLOUD_PROJECT === "golden-eagle-marketplace" &&
+          process.env.ESCROW_LIVE_PAYOUTS_ENABLED === "true" });
       if (result.error) throw new HttpsError(result.error, result.message);
       return result;
     } catch (error) {
@@ -1179,6 +1181,18 @@ function escrowPaymentKey() {
   return key;
 }
 
+function vendorPayoutsEnabled() {
+  return process.env.GCLOUD_PROJECT !== "golden-eagle-marketplace" ||
+    process.env.ESCROW_LIVE_PAYOUTS_ENABLED === "true";
+}
+
+function vendorPayoutKey(requireEnabled = true) {
+  if (requireEnabled && !vendorPayoutsEnabled()) {
+    throw new HttpsError("failed-precondition", "Live vendor payouts are not enabled yet.");
+  }
+  return escrowPaymentKey();
+}
+
 function escrowCheckoutRedirectUrl() {
   if (process.env.GCLOUD_PROJECT === "golden-eagle-marketplace") {
     return PAYMENT_REDIRECT_URL;
@@ -1801,42 +1815,32 @@ async function routeEscrowWebhookEvent(body, secret) {
   return false;
 }
 
-async function findVendorPayoutQuote(grossKobo, quoteFeeKobo) {
-  const maxGrossKobo = 2147483647 * 100;
-  if (!Number.isSafeInteger(grossKobo) || grossKobo < 200000 || grossKobo > maxGrossKobo) {
-    throw new HttpsError("invalid-argument", "Withdraw between NGN 2,000 and NGN 2,147,483,647.");
+async function findVendorPayoutQuote(netKobo, quoteFeeKobo) {
+  const maxNetKobo = 2147483647 * 100;
+  if (!Number.isSafeInteger(netKobo) || netKobo < 200000 ||
+      netKobo > maxNetKobo || netKobo % 100 !== 0) {
+    throw new HttpsError("invalid-argument", "Withdraw a whole-naira amount between NGN 2,000 and NGN 2,147,483,647.");
   }
-  const commissionRate = grossKobo < 1000000 ? 15
-    : grossKobo < 5000000 ? 25
-      : grossKobo < 20000000 ? 35 : 50;
+  const commissionRate = netKobo < 1000000 ? 15
+    : netKobo < 5000000 ? 25
+      : netKobo < 20000000 ? 35 : 50;
   const baseFeeKobo = 50000;
-  const commissionKobo = Math.round(grossKobo * commissionRate / 1000);
-  const availableKobo = grossKobo - baseFeeKobo - commissionKobo;
-  let low = 1;
-  let high = Math.floor(availableKobo / 100);
-  let best = null;
-  while (low <= high) {
-    const netNaira = Math.floor((low + high) / 2);
-    const providerFeeKobo = await quoteFeeKobo(netNaira);
-    if (!Number.isSafeInteger(providerFeeKobo) || providerFeeKobo < 0) {
-      throw new HttpsError("unavailable", "Flutterwave returned an invalid transfer fee.");
-    }
-    if (netNaira * 100 + providerFeeKobo <= availableKobo) {
-      best = { netNaira, providerFeeKobo };
-      low = netNaira + 1;
-    } else {
-      high = netNaira - 1;
-    }
+  const commissionKobo = Math.round(netKobo * commissionRate / 1000);
+  const providerFeeKobo = await quoteFeeKobo(netKobo / 100);
+  if (!Number.isSafeInteger(providerFeeKobo) || providerFeeKobo < 0) {
+    throw new HttpsError("unavailable", "Flutterwave returned an invalid transfer fee.");
   }
-  if (!best) throw new HttpsError("failed-precondition", "The withdrawal does not cover its fees.");
-  const debitedKobo = baseFeeKobo + commissionKobo + best.providerFeeKobo + best.netNaira * 100;
+  const debitedKobo = baseFeeKobo + commissionKobo + providerFeeKobo + netKobo;
+  if (!Number.isSafeInteger(debitedKobo)) {
+    throw new HttpsError("failed-precondition", "The payout amount needs reconciliation.");
+  }
   return {
-    grossKobo,
+    grossKobo: debitedKobo,
     baseFeeKobo,
     commissionKobo,
-    providerFeeKobo: best.providerFeeKobo,
-    netKobo: best.netNaira * 100,
-    retainedBalanceKobo: grossKobo - debitedKobo,
+    providerFeeKobo,
+    netKobo,
+    retainedBalanceKobo: 0,
     debitedKobo
   };
 }
@@ -1866,11 +1870,11 @@ async function fetchVendorTransferFee(secret, netNaira) {
 }
 
 exports.getVendorPayoutQuote = onCall(
-  { secrets: [FLW_SECRET_KEY], timeoutSeconds: 120 },
+  { secrets: [FLW_SECRET_KEY, FLUTTERWAVE_SECRET_KEY], timeoutSeconds: 120 },
   async request => {
     const auth = requireVerifiedUser(request);
-    const secret = escrowSandboxKey();
-    const grossKobo = escrowAmountKobo(request.data?.amount);
+    const secret = vendorPayoutKey();
+    const netKobo = escrowAmountKobo(request.data?.amount);
     const [profile, balance] = await Promise.all([
       db.collection("users").doc(auth.uid).get(),
       db.collection("vendorPayoutBalances").doc(auth.uid).get()
@@ -1878,19 +1882,47 @@ exports.getVendorPayoutQuote = onCall(
     if (!profile.exists || profile.data()?.role !== "Vendor") {
       throw new HttpsError("permission-denied", "Only vendors can request a payout quote.");
     }
-    if (grossKobo > escrowStoredBalance(balance, "availableKobo")) {
+    const quote = await findVendorPayoutQuote(netKobo, netNaira =>
+      fetchVendorTransferFee(secret, netNaira));
+    if (quote.debitedKobo > escrowStoredBalance(balance, "availableKobo")) {
       throw new HttpsError("failed-precondition", "Your releasable payout balance is too low.");
     }
-    return findVendorPayoutQuote(grossKobo, netNaira =>
-      fetchVendorTransferFee(secret, netNaira));
+    return quote;
+  }
+);
+
+exports.getVendorPayoutBanks = onCall(
+  { secrets: [FLW_SECRET_KEY, FLUTTERWAVE_SECRET_KEY] },
+  async request => {
+    const auth = requireVerifiedUser(request);
+    const secret = vendorPayoutKey();
+    const profile = await db.collection("users").doc(auth.uid).get();
+    if (!profile.exists || profile.data()?.role !== "Vendor") {
+      throw new HttpsError("permission-denied", "Only vendors can access payout banks.");
+    }
+    const response = await fetch("https://api.flutterwave.com/v3/banks/NG", {
+      headers: { Authorization: `Bearer ${secret}` }, signal: AbortSignal.timeout(15000)
+    });
+    if (!response.ok) throw new HttpsError("unavailable", "Flutterwave could not load Nigerian banks.");
+    const result = await response.json();
+    if (result.status !== "success" || !Array.isArray(result.data)) {
+      throw new HttpsError("unavailable", "Flutterwave returned an invalid bank list.");
+    }
+    const banks = result.data.filter(bank => typeof bank?.code === "string" &&
+      /^\d{3,6}$/.test(bank.code) && typeof bank.name === "string" &&
+      bank.name.trim() && bank.name.length <= 200)
+      .map(bank => ({ code: bank.code, name: bank.name.trim() }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    if (!banks.length) throw new HttpsError("unavailable", "Flutterwave returned no supported banks.");
+    return { banks };
   }
 );
 
 exports.saveVendorBankAccount = onCall(
-  { secrets: [FLW_SECRET_KEY] },
+  { secrets: [FLW_SECRET_KEY, FLUTTERWAVE_SECRET_KEY] },
   async request => {
     const auth = requireVerifiedUser(request);
-    const secret = escrowSandboxKey();
+    const secret = vendorPayoutKey();
     const bankCode = request.data?.bankCode;
     const accountNumber = request.data?.accountNumber;
     if (typeof bankCode !== "string" || !/^\d{3,6}$/.test(bankCode) ||
@@ -1932,37 +1964,42 @@ exports.saveVendorBankAccount = onCall(
 );
 
 exports.getVendorBankAccount = onCall(
-  { secrets: [FLW_SECRET_KEY] },
+  { secrets: [FLW_SECRET_KEY, FLUTTERWAVE_SECRET_KEY] },
   async request => {
     const auth = requireVerifiedUser(request);
-    escrowSandboxKey();
+    const profile = await db.collection("users").doc(auth.uid).get();
+    if (!profile.exists || profile.data()?.role !== "Vendor") {
+      throw new HttpsError("permission-denied", "Only vendors can view payout accounts.");
+    }
+    if (!vendorPayoutsEnabled()) return { configured: false, payoutsEnabled: false };
+    vendorPayoutKey();
     const snapshot = await db.collection("escrowVendorBankAccounts").doc(auth.uid).get();
-    if (!snapshot.exists) return { configured: false };
+    if (!snapshot.exists) return { configured: false, payoutsEnabled: true };
     const account = snapshot.data();
     if (typeof account.bankCode !== "string" || !/^\d{3,6}$/.test(account.bankCode) ||
         typeof account.accountNumber !== "string" || !/^\d{10}$/.test(account.accountNumber) ||
         typeof account.accountName !== "string" || typeof account.version !== "string") {
       throw new HttpsError("failed-precondition", "The payout account needs reconciliation.");
     }
-    return { configured: true, bankCode: account.bankCode, lastFour: account.accountNumber.slice(-4),
+    return { configured: true, payoutsEnabled: true, bankCode: account.bankCode, lastFour: account.accountNumber.slice(-4),
       accountName: account.accountName, version: account.version };
   }
 );
 
 exports.requestVendorWithdrawal = onCall(
-  { secrets: [FLW_SECRET_KEY], timeoutSeconds: 120 },
+  { secrets: [FLW_SECRET_KEY, FLUTTERWAVE_SECRET_KEY], timeoutSeconds: 120 },
   async request => {
     const auth = requireVerifiedUser(request);
-    const secret = escrowSandboxKey();
     const operationId = request.data?.operationId;
     if (typeof operationId !== "string" || !/^[A-Za-z0-9_-]{20,128}$/.test(operationId)) {
       throw new HttpsError("invalid-argument", "A valid withdrawal request ID is required.");
     }
-    const grossKobo = escrowAmountKobo(request.data?.amount);
+    const netKobo = escrowAmountKobo(request.data?.amount);
     const withdrawalId = crypto.createHash("sha256").update(`${auth.uid}\0${operationId}`).digest("hex");
     const withdrawalRef = db.collection("escrowWithdrawals").doc(withdrawalId);
     const prior = await withdrawalRef.get();
     if (prior.exists) return { withdrawalId, status: prior.data().status, alreadyRequested: true };
+    const secret = vendorPayoutKey();
     const bankRef = db.collection("escrowVendorBankAccounts").doc(auth.uid);
     const bankSnapshot = await bankRef.get();
     if (!bankSnapshot.exists || bankSnapshot.data().version !== request.data?.bankVersion) {
@@ -1972,7 +2009,7 @@ exports.requestVendorWithdrawal = onCall(
     if (!/^\d{3,6}$/.test(bank.bankCode || "") || !/^\d{10}$/.test(bank.accountNumber || "")) {
       throw new HttpsError("failed-precondition", "The payout bank account needs reconciliation.");
     }
-    const quote = await findVendorPayoutQuote(grossKobo, netNaira => fetchVendorTransferFee(secret, netNaira));
+    const quote = await findVendorPayoutQuote(netKobo, netNaira => fetchVendorTransferFee(secret, netNaira));
     const expected = request.data?.quote;
     const fields = ["grossKobo", "baseFeeKobo", "commissionKobo", "providerFeeKobo",
       "netKobo", "retainedBalanceKobo", "debitedKobo"];
@@ -1995,7 +2032,7 @@ exports.requestVendorWithdrawal = onCall(
         throw new HttpsError("failed-precondition", "The payout bank account changed. Review it again.");
       }
       const availableKobo = escrowStoredBalance(balance, "availableKobo");
-      if (availableKobo < grossKobo) {
+      if (availableKobo < quote.debitedKobo) {
         throw new HttpsError("failed-precondition", "Your releasable payout balance is too low.");
       }
       transaction.set(balanceRef, {
@@ -2021,14 +2058,14 @@ exports.requestVendorWithdrawal = onCall(
         body: JSON.stringify({
           account_bank: bank.bankCode, account_number: bank.accountNumber,
           amount: quote.netKobo / 100, currency: "NGN", debit_currency: "NGN",
-          reference, narration: "Escrow test vendor payout"
+          reference, narration: "Escrow vendor payout"
         }),
         signal: AbortSignal.timeout(15000)
       });
       if (!response.ok) throw new Error(`Transfer request returned HTTP ${response.status}.`);
       result = await response.json();
     } catch (error) {
-      logger.error("Escrow test payout requires reconciliation.", { withdrawalId, error: error.message });
+      logger.error("Escrow payout requires reconciliation.", { withdrawalId, error: error.message });
       throw new HttpsError("unavailable", "Payout status is uncertain. Contact support; do not retry.");
     }
     const transfer = result.data;
@@ -2037,10 +2074,11 @@ exports.requestVendorWithdrawal = onCall(
     if (result.status !== "success" || !/^\d{1,32}$/.test(transferId) ||
         transfer.reference !== reference || transfer.currency !== "NGN" ||
         Number(transfer.amount) !== quote.netKobo / 100 ||
-        typeof transferFee !== "number" || !Number.isFinite(transferFee) ||
-        Math.ceil(transferFee * 100 - 0.00000001) !== quote.providerFeeKobo ||
-        !["NEW", "PENDING", "SUCCESSFUL"].includes(transfer.status)) {
-      logger.error("Escrow test payout response needs reconciliation.", { withdrawalId });
+        (transfer.status !== "FAILED" && (typeof transferFee !== "number" ||
+          !Number.isFinite(transferFee) ||
+          Math.ceil(transferFee * 100 - 0.00000001) !== quote.providerFeeKobo)) ||
+        !["NEW", "PENDING", "SUCCESSFUL", "FAILED"].includes(transfer.status)) {
+      logger.error("Escrow payout response needs reconciliation.", { withdrawalId });
       throw new HttpsError("unavailable", "Payout status is uncertain. Contact support; do not retry.");
     }
     await db.runTransaction(async transaction => {
@@ -2048,7 +2086,7 @@ exports.requestVendorWithdrawal = onCall(
       if (!current.exists) {
         throw new HttpsError("failed-precondition", "The payout needs reconciliation.");
       }
-      if (["PENDING", "PAID"].includes(current.data().status) &&
+      if (["PENDING", "PAID", "FAILED"].includes(current.data().status) &&
           current.data().providerTransferId === transferId) return;
       if (current.data().status !== "INITIATING") {
         throw new HttpsError("failed-precondition", "The payout needs reconciliation.");
@@ -2058,6 +2096,9 @@ exports.requestVendorWithdrawal = onCall(
         updatedAt: FieldValue.serverTimestamp()
       });
     });
+    if (transfer.status === "FAILED") {
+      await checkEscrowWithdrawalStatus(withdrawalId, auth.uid, secret, transferId);
+    }
     const current = await withdrawalRef.get();
     return { withdrawalId, status: current.data().status, alreadyRequested: false };
   }
@@ -2073,11 +2114,11 @@ async function checkEscrowWithdrawalStatus(withdrawalId, vendorUid, secret, noti
       throw new HttpsError("not-found", "Payout not found.");
     }
     const withdrawal = snapshot.data();
-    if (withdrawal.status === "PAID") {
+    if (["PAID", "FAILED"].includes(withdrawal.status)) {
       if (notifiedTransferId && notifiedTransferId !== withdrawal.providerTransferId) {
         throw new HttpsError("failed-precondition", "The payout needs reconciliation.");
       }
-      return { status: "PAID" };
+      return { status: withdrawal.status };
     }
     const transferId = withdrawal.providerTransferId || notifiedTransferId;
     if (!["INITIATING", "PENDING"].includes(withdrawal.status) ||
@@ -2095,29 +2136,58 @@ async function checkEscrowWithdrawalStatus(withdrawalId, vendorUid, secret, noti
     const fee = transfer?.fee;
     if (result.status !== "success" || String(transfer?.id) !== transferId ||
         transfer.reference !== withdrawal.reference || transfer.currency !== "NGN" ||
-        Number(transfer.amount) !== withdrawal.netKobo / 100 ||
-        typeof fee !== "number" || !Number.isFinite(fee) ||
-        Math.ceil(fee * 100 - 0.00000001) !== withdrawal.providerFeeKobo) {
+        Number(transfer.amount) !== withdrawal.netKobo / 100) {
       throw new HttpsError("failed-precondition", "The payout needs reconciliation.");
     }
-    if (!["NEW", "PENDING", "SUCCESSFUL"].includes(transfer.status)) {
+    if (!["NEW", "PENDING", "SUCCESSFUL", "FAILED"].includes(transfer.status)) {
       throw new HttpsError("failed-precondition", "The payout did not complete and requires support review.");
     }
+    if (transfer.status !== "FAILED" &&
+        (typeof fee !== "number" || !Number.isFinite(fee) ||
+        Math.ceil(fee * 100 - 0.00000001) !== withdrawal.providerFeeKobo)) {
+      throw new HttpsError("failed-precondition", "The payout fee needs reconciliation.");
+    }
     const revenueRef = db.collection("escrowPlatformAccounting").doc("withdrawalRevenue");
+    const balanceRef = db.collection("vendorPayoutBalances").doc(vendorUid);
     await db.runTransaction(async transaction => {
-      const [current, revenue] = await Promise.all([
-        transaction.get(withdrawalRef), transaction.get(revenueRef)
+      const [current, revenue, balance] = await Promise.all([
+        transaction.get(withdrawalRef), transaction.get(revenueRef), transaction.get(balanceRef)
       ]);
       if (!current.exists || current.data().vendorUid !== vendorUid ||
           current.data().reference !== withdrawal.reference ||
           (current.data().providerTransferId && current.data().providerTransferId !== transferId)) {
         throw new HttpsError("failed-precondition", "The payout needs reconciliation.");
       }
-      if (current.data().status === "PAID") return;
+      if (["PAID", "FAILED"].includes(current.data().status)) {
+        if (["SUCCESSFUL", "FAILED"].includes(transfer.status) &&
+            (current.data().status === "PAID") !== (transfer.status === "SUCCESSFUL")) {
+          throw new HttpsError("failed-precondition", "The payout status changed and needs reconciliation.");
+        }
+        return;
+      }
       if (!["INITIATING", "PENDING"].includes(current.data().status)) {
         throw new HttpsError("failed-precondition", "The payout needs reconciliation.");
       }
       if (transfer.status !== "SUCCESSFUL") {
+        if (transfer.status === "FAILED") {
+          const debit = current.data().debitedKobo;
+          const parts = ["netKobo", "baseFeeKobo", "commissionKobo", "providerFeeKobo"]
+            .map(field => current.data()[field]);
+          const restored = escrowStoredBalance(balance, "availableKobo") + debit;
+          if (!balance.exists || !Number.isSafeInteger(debit) || debit <= 0 ||
+              parts.some(value => !Number.isSafeInteger(value) || value < 0) ||
+              parts.reduce((sum, value) => sum + value, 0) !== debit ||
+              !Number.isSafeInteger(restored)) {
+            throw new HttpsError("failed-precondition", "The payout ledger needs reconciliation.");
+          }
+          transaction.set(balanceRef, { availableKobo: restored,
+            updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+          transaction.update(withdrawalRef, {
+            status: "FAILED", providerTransferId: transferId,
+            refundedAt: FieldValue.serverTimestamp()
+          });
+          return;
+        }
         transaction.update(withdrawalRef, {
           status: "PENDING", providerTransferId: transferId, updatedAt: FieldValue.serverTimestamp()
         });
@@ -2138,19 +2208,19 @@ async function checkEscrowWithdrawalStatus(withdrawalId, vendorUid, secret, noti
 }
 
 exports.checkVendorWithdrawal = onCall(
-  { secrets: [FLW_SECRET_KEY] },
+  { secrets: [FLW_SECRET_KEY, FLUTTERWAVE_SECRET_KEY] },
   async request => {
     const auth = requireVerifiedUser(request);
-    const secret = escrowSandboxKey();
+    const secret = vendorPayoutKey(false);
     return checkEscrowWithdrawalStatus(request.data?.withdrawalId, auth.uid, secret);
   }
 );
 
 exports.adminCheckVendorWithdrawal = onCall(
-  { secrets: [FLW_SECRET_KEY] },
+  { secrets: [FLW_SECRET_KEY, FLUTTERWAVE_SECRET_KEY] },
   async request => {
     requireEscrowAdmin(request);
-    const secret = escrowSandboxKey();
+    const secret = vendorPayoutKey(false);
     const withdrawalId = request.data?.withdrawalId;
     if (typeof withdrawalId !== "string" || !/^[a-f0-9]{64}$/.test(withdrawalId)) {
       throw new HttpsError("invalid-argument", "Choose a valid payout.");
@@ -2166,13 +2236,13 @@ exports.adminCheckVendorWithdrawal = onCall(
 );
 
 exports.reconcileEscrowWithdrawal = onCall(
-  { secrets: [FLW_SECRET_KEY] },
+  { secrets: [FLW_SECRET_KEY, FLUTTERWAVE_SECRET_KEY] },
   async request => {
     const auth = requireVerifiedUser(request);
     if (auth.token.admin !== true) {
       throw new HttpsError("permission-denied", "Administrator access is required.");
     }
-    const secret = escrowSandboxKey();
+    const secret = vendorPayoutKey(false);
     const withdrawalId = request.data?.withdrawalId;
     const transferId = request.data?.transferId;
     if (typeof withdrawalId !== "string" || !/^[a-f0-9]{64}$/.test(withdrawalId) ||
@@ -2198,9 +2268,10 @@ exports.reconcileEscrowWithdrawal = onCall(
     if (result.status !== "success" || String(transfer?.id) !== transferId ||
         transfer.reference !== withdrawal.reference || transfer.currency !== "NGN" ||
         Number(transfer.amount) !== withdrawal.netKobo / 100 ||
-        typeof transfer.fee !== "number" || !Number.isFinite(transfer.fee) ||
-        Math.ceil(transfer.fee * 100 - 0.00000001) !== withdrawal.providerFeeKobo ||
-        !["NEW", "PENDING", "SUCCESSFUL"].includes(transfer.status)) {
+        (transfer.status !== "FAILED" && (typeof transfer.fee !== "number" ||
+          !Number.isFinite(transfer.fee) ||
+          Math.ceil(transfer.fee * 100 - 0.00000001) !== withdrawal.providerFeeKobo)) ||
+        !["NEW", "PENDING", "SUCCESSFUL", "FAILED"].includes(transfer.status)) {
       throw new HttpsError("failed-precondition", "The transfer does not match the reserved withdrawal.");
     }
     await db.runTransaction(async transaction => {

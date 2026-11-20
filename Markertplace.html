@@ -679,7 +679,7 @@
                     <li>Open Golden Chat from a Vendor's listing or profile to ask about a product.</li>
                     <li>The sender pays 1 coin for text, 2 for a photo, 4 for a video clip, or 3 for a voice note. Only Buyer-to-Vendor text messages and voice notes share half their charge with the Vendor; photos and videos are not shared. The recipient is not charged.</li>
                 </ol>
-                <p class="mt-2"><strong class="text-gold">Available:</strong> coin purchases, paid Golden Chat messages/media, 24-hour listing boosts, monthly Verified Dealer Badges, stock-alert broadcasts, referral rewards, daily check-in coins, voucher codes, and escrow checkout. <strong>Not available:</strong> voice/video calls or live vendor cash-outs.</p>
+                <p class="mt-2"><strong class="text-gold">Available:</strong> coin purchases, paid Golden Chat messages/media, 24-hour listing boosts, monthly Verified Dealer Badges, stock-alert broadcasts, referral rewards, daily check-in coins, voucher codes, and escrow checkout. Voice/video calls are not available. Vendor cash-out availability is controlled at launch.</p>
             </div>
             <div class="mt-5 grid gap-5 md:grid-cols-2">
                 <section aria-labelledby="vendorCoinUtilitiesHeading">
@@ -690,8 +690,8 @@
                             <p class="mt-1 text-[10px] text-gray-400">Vendors can spend 5 Golden Chat coins to place one of their products at the top of the marketplace feed for 24 hours. Buying another boost extends the current expiry.</p>
                         </article>
                         <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
-                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Vendor earnings and cash-out</h4><span class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Not available</span></div>
-                            <p class="mt-1 text-[10px] text-gray-400">Released escrow proceeds are recorded as vendor earnings, but live bank payouts are not yet available. Buyer-to-Vendor message rewards are spendable Chat coins, not cash.</p>
+                            <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Vendor earnings and cash-out</h4><span id="vendorCashoutFeatureStatus" class="rounded-full bg-darkCard px-2 py-1 text-[9px] font-bold text-gray-400">Launch controlled</span></div>
+                            <p class="mt-1 text-[10px] text-gray-400">Released escrow proceeds are withdrawable cash when payouts are enabled. Buyer-to-Vendor message rewards are spendable Chat coins, not cash.</p>
                         </article>
                         <article class="rounded-xl border border-darkBorder bg-darkBg p-3">
                             <div class="flex items-center justify-between gap-2"><h4 class="text-xs font-bold text-white">Verified Dealer Badge</h4><span class="rounded-full bg-green-500/10 px-2 py-1 text-[9px] font-bold text-green-300">Active</span></div>
@@ -906,25 +906,35 @@
                 </div>
                 <section id="vendorEscrowPayoutSettings" class="hidden mt-6 max-w-lg rounded-xl border border-darkBorder p-4">
                     <h3 class="text-sm font-extrabold text-gold">Escrow bank payouts</h3>
+                    <div class="mt-3 grid grid-cols-2 gap-3">
+                        <div class="rounded-lg border border-darkBorder bg-darkBg p-3"><p class="text-xs text-gray-400">Available Cash (Escrow)</p><p id="vendorAvailableCash" class="mt-1 font-bold text-white">Loading…</p></div>
+                        <div class="rounded-lg border border-darkBorder bg-darkBg p-3"><p class="text-xs text-gray-400">Spendable Chat Coins</p><p id="vendorSpendableCoins" class="mt-1 font-bold text-white">Loading…</p></div>
+                    </div>
+                    <p class="mt-2 text-[10px] text-gray-400">Chat coins are for in-app spending and cannot be withdrawn as cash.</p>
                     <p id="vendorEscrowPayoutStatus" class="mt-2 text-xs text-gray-300" role="status" aria-live="polite"></p>
-                    <div id="vendorEscrowPayoutControls" class="hidden">
+                    <div id="vendorEscrowPayoutControls">
+                      <div id="vendorEscrowPayoutLaunchFields" class="hidden">
                         <form class="mt-3 space-y-2" onsubmit="saveEscrowBankAccount(event)">
-                            <label for="escrowBankCode" class="block text-xs text-gray-300">Nigerian bank code</label>
-                            <input id="escrowBankCode" required inputmode="numeric" pattern="[0-9]{3,6}" maxlength="6" autocomplete="off" class="w-full rounded-lg border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white">
+                            <label for="escrowBankCode" class="block text-xs text-gray-300">Nigerian bank</label>
+                            <select id="escrowBankCode" required class="w-full rounded-lg border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white"><option value="">Loading banks…</option></select>
                             <label for="escrowAccountNumber" class="block text-xs text-gray-300">Bank account number</label>
                             <input id="escrowAccountNumber" required inputmode="numeric" pattern="[0-9]{10}" maxlength="10" autocomplete="off" class="w-full rounded-lg border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white">
                             <button type="submit" class="rounded-lg border border-gold/40 px-4 py-2 text-xs font-bold text-gold">Verify and save bank account</button>
                         </form>
                         <p id="escrowBankSummary" class="mt-3 text-xs text-gray-300"></p>
                         <form class="mt-4 space-y-2" onsubmit="quoteEscrowWithdrawal(event)">
-                            <label for="escrowWithdrawalAmount" class="block text-xs text-gray-300">Withdrawal amount (NGN, minimum 2,000)</label>
-                            <input id="escrowWithdrawalAmount" required type="number" min="2000" step="0.01" oninput="clearEscrowWithdrawalQuote()" class="w-full rounded-lg border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white">
+                            <label for="escrowWithdrawalAmount" class="block text-xs text-gray-300">Amount sent to bank (whole NGN, minimum 2,000; fees added)</label>
+                            <input id="escrowWithdrawalAmount" required type="number" min="2000" step="1" oninput="clearEscrowWithdrawalQuote()" class="w-full rounded-lg border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white">
                             <button type="submit" class="rounded-lg border border-gold/40 px-4 py-2 text-xs font-bold text-gold">Review withdrawal fees</button>
                         </form>
                         <p id="escrowWithdrawalQuote" class="mt-3 whitespace-pre-line text-xs text-gray-300" aria-live="polite"></p>
                         <button id="escrowWithdrawalConfirm" type="button" onclick="submitEscrowWithdrawal()" class="hidden mt-3 rounded-lg gold-gradient-bg px-4 py-2 text-xs font-bold text-black">Confirm withdrawal</button>
+                      </div>
                         <button id="escrowWithdrawalRetry" type="button" onclick="retryEscrowWithdrawal()" class="hidden mt-3 rounded-lg border border-gold/40 px-4 py-2 text-xs font-bold text-gold">Check previous withdrawal request</button>
                         <button id="escrowWithdrawalCheck" type="button" onclick="checkEscrowWithdrawal()" class="hidden mt-3 rounded-lg border border-gold/40 px-4 py-2 text-xs font-bold text-gold">Check transfer status</button>
+                        <h4 class="mt-4 text-xs font-bold text-white">Payout history</h4>
+                        <p class="mt-1 text-[10px] text-gray-400">Up to 25 recorded payouts are shown; contact support for older records.</p>
+                        <div id="vendorPayoutHistory" class="mt-2 space-y-2 text-xs text-gray-300" role="status"></div>
                     </div>
                 </section>
             </section>
@@ -3884,33 +3894,139 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             document.getElementById('escrowWithdrawalConfirm').classList.add('hidden');
         }
 
+        async function loadVendorEscrowBalances(uid) {
+            const cash = document.getElementById('vendorAvailableCash');
+            const coins = document.getElementById('vendorSpendableCoins');
+            cash.textContent = 'Loading…';
+            coins.textContent = 'Loading…';
+            await Promise.all([
+                ['vendorPayoutBalances', cash, 'availableKobo'],
+                ['quizWallets', coins, 'coins']
+            ].map(async ([collection, node, field]) => {
+                try {
+                    const snapshot = await firebaseFirestore.collection(collection).doc(uid).get({ source: 'server' });
+                    if (currentUser?.uid !== uid) return;
+                    const value = snapshot.exists ? snapshot.data()[field] : 0;
+                    const balance = field === 'coins' && value === undefined ? 0 : value;
+                    if (typeof balance !== 'number' || balance < 0 ||
+                        !(field === 'coins' ? Number.isSafeInteger(balance * 2) : Number.isSafeInteger(balance))) {
+                        throw new Error('Balance needs reconciliation.');
+                    }
+                    node.textContent = field === 'coins' ? balance.toLocaleString() : formatNaira(balance / 100);
+                } catch (error) {
+                    console.error(`Unable to load ${collection} balance.`, error);
+                    if (currentUser?.uid === uid) node.textContent = 'Unavailable';
+                }
+            }));
+        }
+
+        async function loadVendorPayoutHistory(uid) {
+            const history = document.getElementById('vendorPayoutHistory');
+            history.textContent = 'Loading payout history…';
+            try {
+                const snapshot = await firebaseFirestore.collection('escrowWithdrawals')
+                    .where('vendorUid', '==', uid).limit(25).get({ source: 'server' });
+                if (currentUser?.uid !== uid) return;
+                history.textContent = '';
+                if (snapshot.empty) {
+                    history.textContent = 'No payouts recorded.';
+                    return;
+                }
+                for (const doc of snapshot.docs) {
+                    const payout = doc.data();
+                    const row = document.createElement('div');
+                    row.className = 'rounded-lg border border-darkBorder p-2';
+                    const text = document.createElement('span');
+                    text.textContent = `${Number.isSafeInteger(payout.netKobo) ? formatNaira(payout.netKobo / 100) : 'Amount unavailable'} · ${payout.status || 'Unknown'}`;
+                    row.appendChild(text);
+                    if (['INITIATING', 'PENDING'].includes(payout.status)) {
+                        const button = document.createElement('button');
+                        button.type = 'button';
+                        button.className = 'ml-2 font-semibold text-gold underline';
+                        button.textContent = 'Check status';
+                        button.onclick = () => checkVendorPayoutHistory(doc.id, button);
+                        row.appendChild(button);
+                    }
+                    history.appendChild(row);
+                }
+            } catch (error) {
+                console.error('Unable to load payout history.', error);
+                if (currentUser?.uid === uid) history.textContent = 'Payout history could not be loaded.';
+            }
+        }
+
+        async function checkVendorPayoutHistory(withdrawalId, button) {
+            if (escrowPayoutBusy || !currentUser) return;
+            const uid = currentUser.uid;
+            escrowPayoutBusy = true;
+            button.disabled = true;
+            try {
+                const result = await firebaseFunctions.httpsCallable('checkVendorWithdrawal')({ withdrawalId });
+                if (currentUser?.uid !== uid) return;
+                if (result.data.status === 'FAILED') {
+                    showToast('Transfer failed. The reserved cash was restored.', 'info');
+                } else {
+                    showToast(`Transfer status: ${result.data.status}.`, 'info');
+                }
+                if (['PAID', 'FAILED'].includes(result.data.status) &&
+                    localStorage.getItem(`escrowWithdrawalCheck:${uid}`) === withdrawalId) {
+                    localStorage.removeItem(`escrowWithdrawalCheck:${uid}`);
+                    document.getElementById('escrowWithdrawalCheck').classList.add('hidden');
+                }
+                await Promise.all([loadVendorEscrowBalances(uid), loadVendorPayoutHistory(uid)]);
+            } catch (error) {
+                console.error('Unable to check payout history.', error);
+                showToast(error.message || 'Payout needs support review.', 'error');
+            } finally {
+                escrowPayoutBusy = false;
+                button.disabled = false;
+            }
+        }
+
         async function loadVendorEscrowPayoutSettings() {
             const section = document.getElementById('vendorEscrowPayoutSettings');
-            const controls = document.getElementById('vendorEscrowPayoutControls');
+            const launchFields = document.getElementById('vendorEscrowPayoutLaunchFields');
             const status = document.getElementById('vendorEscrowPayoutStatus');
             const uid = currentUser?.uid;
             const isVendor = currentUser?.role === 'Vendor';
             section.classList.toggle('hidden', !isVendor);
-            controls.classList.add('hidden');
+            launchFields.classList.add('hidden');
+            document.getElementById('vendorCashoutFeatureStatus').textContent = 'Launch controlled';
             escrowBankAccount = null;
             clearEscrowWithdrawalQuote();
-            document.getElementById('escrowBankCode').value = '';
+            document.getElementById('escrowBankCode').replaceChildren(new Option('Loading banks…', ''));
             document.getElementById('escrowAccountNumber').value = '';
             document.getElementById('escrowWithdrawalAmount').value = '';
             if (!isVendor) return;
+            loadVendorEscrowBalances(uid);
+            loadVendorPayoutHistory(uid);
+            const pending = localStorage.getItem(escrowWithdrawalStorageKey(uid));
+            document.getElementById('escrowWithdrawalRetry').classList.toggle('hidden', !pending);
+            document.getElementById('escrowWithdrawalCheck').classList.toggle('hidden',
+                !localStorage.getItem(`escrowWithdrawalCheck:${uid}`));
             status.textContent = 'Checking payout availability…';
             try {
                 const result = await firebaseFunctions.httpsCallable('getVendorBankAccount')();
                 if (currentUser?.uid !== uid) return;
+                if (result.data.payoutsEnabled !== true) {
+                    status.textContent = 'Cash-out is awaiting launch. Existing payouts can still be checked below.';
+                    return;
+                }
                 escrowBankAccount = result.data.configured ? result.data : null;
                 document.getElementById('escrowBankSummary').textContent = escrowBankAccount
                     ? `${escrowBankAccount.accountName} · bank ${escrowBankAccount.bankCode} · ending ${escrowBankAccount.lastFour}`
                     : 'No payout bank account is saved.';
-                const pending = localStorage.getItem(escrowWithdrawalStorageKey(uid));
-                document.getElementById('escrowWithdrawalRetry').classList.toggle('hidden', !pending);
-                document.getElementById('escrowWithdrawalCheck').classList.toggle('hidden',
-                    !localStorage.getItem(`escrowWithdrawalCheck:${uid}`));
-                controls.classList.remove('hidden');
+                const bankResult = await firebaseFunctions.httpsCallable('getVendorPayoutBanks')();
+                if (currentUser?.uid !== uid) return;
+                if (!Array.isArray(bankResult.data.banks) || !bankResult.data.banks.length) {
+                    throw new Error('No payout banks are available.');
+                }
+                const bankSelect = document.getElementById('escrowBankCode');
+                bankSelect.replaceChildren(new Option('Choose your bank', ''));
+                bankResult.data.banks.forEach(bank => bankSelect.add(new Option(bank.name, bank.code)));
+                if (escrowBankAccount) bankSelect.value = escrowBankAccount.bankCode;
+                launchFields.classList.remove('hidden');
+                document.getElementById('vendorCashoutFeatureStatus').textContent = 'Active';
                 status.textContent = pending
                     ? 'A previous withdrawal needs checking. Do not start another until it is resolved.'
                     : 'Verify your bank account and review fees before requesting a withdrawal.';
@@ -3977,7 +4093,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 escrowWithdrawalQuote = { amount, bankVersion, quote: result.data };
                 const q = result.data;
                 document.getElementById('escrowWithdrawalQuote').textContent =
-                    `Requested: ${formatNaira(q.grossKobo / 100)}\nBase fee: ${formatNaira(q.baseFeeKobo / 100)}\nCommission: ${formatNaira(q.commissionKobo / 100)}\nFlutterwave fee: ${formatNaira(q.providerFeeKobo / 100)}\nBank transfer: ${formatNaira(q.netKobo / 100)}\nLeft from requested amount: ${formatNaira(q.retainedBalanceKobo / 100)}`;
+                    `Bank transfer: ${formatNaira(q.netKobo / 100)}\nBase fee: ${formatNaira(q.baseFeeKobo / 100)}\nCommission: ${formatNaira(q.commissionKobo / 100)}\nFlutterwave fee: ${formatNaira(q.providerFeeKobo / 100)}\nTotal cash debited: ${formatNaira(q.debitedKobo / 100)}`;
                 document.getElementById('escrowWithdrawalConfirm').classList.remove('hidden');
             } catch (error) {
                 console.error('Unable to quote escrow withdrawal.', error);
@@ -4022,6 +4138,13 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 if (!stored) throw new Error('No withdrawal request is saved on this device.');
                 const result = await firebaseFunctions.httpsCallable('requestVendorWithdrawal')(JSON.parse(stored));
                 if (currentUser?.uid !== uid) return;
+                if (result.data.status === 'FAILED') {
+                    localStorage.removeItem(key);
+                    button.classList.add('hidden');
+                    showToast('Transfer failed. The reserved cash was restored.', 'info');
+                    await Promise.all([loadVendorEscrowBalances(uid), loadVendorPayoutHistory(uid)]);
+                    return;
+                }
                 if (result.data.status === 'INITIATING') {
                     throw new Error('Withdrawal status is uncertain. Contact support; do not make another request.');
                 }
@@ -4033,6 +4156,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 localStorage.removeItem(key);
                 button.classList.add('hidden');
                 document.getElementById('escrowWithdrawalCheck').classList.remove('hidden');
+                await Promise.all([loadVendorEscrowBalances(uid), loadVendorPayoutHistory(uid)]);
                 showToast(`Withdrawal ${result.data.status.toLowerCase()}. Check its transfer status.`, 'info');
             } catch (error) {
                 console.error('Unable to confirm escrow withdrawal.', error);
@@ -4055,10 +4179,13 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 if (!withdrawalId) throw new Error('No transfer is saved on this device.');
                 const result = await firebaseFunctions.httpsCallable('checkVendorWithdrawal')({ withdrawalId });
                 if (currentUser?.uid !== uid) return;
-                if (result.data.status === 'PAID') {
+                if (['PAID', 'FAILED'].includes(result.data.status)) {
                     localStorage.removeItem(key);
                     button.classList.add('hidden');
-                    showToast('Bank transfer completed.', 'success');
+                    showToast(result.data.status === 'PAID'
+                        ? 'Bank transfer completed.' : 'Transfer failed. The reserved cash was restored.',
+                        result.data.status === 'PAID' ? 'success' : 'info');
+                    await Promise.all([loadVendorEscrowBalances(uid), loadVendorPayoutHistory(uid)]);
                 } else if (result.data.status === 'PENDING') {
                     showToast('Bank transfer is still pending.', 'info');
                 } else {
@@ -6127,6 +6254,16 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         }
 
         function openGoldenCoinUtilities() {
+            const featureStatus = document.getElementById('vendorCashoutFeatureStatus');
+            featureStatus.textContent = 'Launch controlled';
+            const uid = currentUser?.uid;
+            if (uid && currentUser.role === 'Vendor') {
+                firebaseFunctions.httpsCallable('getVendorBankAccount')().then(result => {
+                    if (currentUser?.uid === uid && result.data.payoutsEnabled === true) {
+                        featureStatus.textContent = 'Active';
+                    }
+                }).catch(error => console.error('Unable to check vendor cash-out status.', error));
+            }
             document.getElementById('voucherManagement').classList.toggle('hidden',
                 !currentUser || (!currentUser.isAdmin && currentUser.role !== 'Vendor'));
             document.getElementById('voucherAdminFields').classList.toggle('hidden', !currentUser?.isAdmin);

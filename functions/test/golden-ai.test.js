@@ -44,6 +44,15 @@ test("escrow guidance uses platform policy without requesting account data", asy
   assert.match(result.answer, /cannot view or change your order/i);
 });
 
+test("payout guidance follows the launch flag and keeps coins separate", async () => {
+  const disabled = await answerGoldenAi(request("How do I request a payout?"));
+  const enabled = await answerGoldenAi({ ...request("How do I request a payout?"), payoutsEnabled: true });
+  assert.match(disabled.answer, /not yet enabled/i);
+  assert.match(enabled.answer, /verify a bank account/i);
+  assert.match(enabled.answer, /fees are added/i);
+  assert.match(enabled.answer, /coins cannot be withdrawn/i);
+});
+
 test("posting guidance is not mistaken for a catalog search", async () => {
   const result = await answerGoldenAi({ ...request("How do I post a product as a vendor?"),
     fetchImpl: () => { throw new Error("Unexpected network request"); } });

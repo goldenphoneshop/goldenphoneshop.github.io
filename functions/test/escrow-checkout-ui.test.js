@@ -260,7 +260,7 @@ test("the cart offers checkout only for a single vendor product", () => {
 test("vendor payout controls stay unavailable when the backend rejects access", async () => {
   const nodes = {};
   const document = { getElementById(id) {
-    if (!nodes[id]) nodes[id] = { value: "", textContent: "", classList: {
+    if (!nodes[id]) nodes[id] = { value: "", textContent: "", replaceChildren() {}, classList: {
       hidden: false,
       add() { this.hidden = true; },
       remove() { this.hidden = false; },
@@ -270,13 +270,50 @@ test("vendor payout controls stay unavailable when the backend rejects access", 
   } };
   const context = {
     currentUser: { uid: "vendor", role: "Vendor" }, document,
+    Option: function(text, value) { this.text = text; this.value = value; },
+    localStorage: { getItem: () => null },
+    firebaseFirestore: { collection: () => ({
+      doc: () => ({ get: async () => ({ exists: false }) }),
+      where: () => ({ limit: () => ({ get: async () => ({ empty: true }) }) })
+    }) },
+    formatNaira: String,
     firebaseFunctions: { httpsCallable: () => async () => { throw new Error("unavailable"); } },
     console: { error() {} }
   };
   vm.runInNewContext(extract("let escrowBankAccount", "function renderVerifiedDealerBadgeSettings"), context);
   await context.loadVendorEscrowPayoutSettings();
-  assert.equal(nodes.vendorEscrowPayoutControls.classList.hidden, true);
+  assert.equal(nodes.vendorEscrowPayoutLaunchFields.classList.hidden, true);
   assert.match(nodes.vendorEscrowPayoutStatus.textContent, /unavailable/i);
+});
+
+test("vendor cash and chat balances load independently of the payout launch gate", async () => {
+  const nodes = {};
+  const document = { getElementById(id) {
+    if (!nodes[id]) nodes[id] = { value: "", textContent: "", replaceChildren() {}, classList: {
+      hidden: false, add() { this.hidden = true; }, remove() { this.hidden = false; },
+      toggle(name, hidden) { this.hidden = hidden; }
+    } };
+    return nodes[id];
+  } };
+  const context = {
+    currentUser: { uid: "vendor", role: "Vendor" }, document,
+    Option: function(text, value) { this.text = text; this.value = value; },
+    localStorage: { getItem: () => null },
+    firebaseFirestore: { collection: name => ({
+      doc: () => ({ get: async () => ({ exists: true, data: () =>
+        name === "vendorPayoutBalances" ? { availableKobo: 750000 } : { coins: 7.5 } }) }),
+      where: () => ({ limit: () => ({ get: async () => ({ empty: true }) }) })
+    }) },
+    firebaseFunctions: { httpsCallable: () => async () => ({ data: { payoutsEnabled: false } }) },
+    formatNaira: value => `NGN ${value}`, console: { error() {} }
+  };
+  vm.runInNewContext(extract("let escrowBankAccount", "function renderVerifiedDealerBadgeSettings"), context);
+  await context.loadVendorEscrowPayoutSettings();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(nodes.vendorAvailableCash.textContent, "NGN 7500");
+  assert.equal(nodes.vendorSpendableCoins.textContent, "7.5");
+  assert.equal(nodes.vendorEscrowPayoutLaunchFields.classList.hidden, true);
+  assert.match(nodes.vendorEscrowPayoutStatus.textContent, /awaiting launch/i);
 });
 
 test("order controls match the participant and status and call the protected functions", async () => {
@@ -380,15 +417,21 @@ test("payout UI retains a request ID after a timeout and reuses it on retry", as
   const calls = [];
   let shouldFail = true;
   const document = { getElementById(id) {
-    if (!nodes[id]) nodes[id] = { value: "", textContent: "", disabled: false, classList: {
+    if (!nodes[id]) nodes[id] = { value: "", textContent: "", disabled: false,
+      replaceChildren() {}, add() {}, classList: {
       add() {}, remove() {}, toggle() {}
     } };
     return nodes[id];
   } };
-  const quote = { grossKobo: 200000, baseFeeKobo: 50000, commissionKobo: 3000,
-    providerFeeKobo: 1075, netKobo: 145900, retainedBalanceKobo: 25, debitedKobo: 199975 };
+  const quote = { grossKobo: 254075, baseFeeKobo: 50000, commissionKobo: 3000,
+    providerFeeKobo: 1075, netKobo: 200000, retainedBalanceKobo: 0, debitedKobo: 254075 };
   const context = {
     currentUser: { uid: "vendor", role: "Vendor" }, document,
+    Option: function(text, value) { this.text = text; this.value = value; },
+    firebaseFirestore: { collection: () => ({
+      doc: () => ({ get: async () => ({ exists: false }) }),
+      where: () => ({ limit: () => ({ get: async () => ({ empty: true }) }) })
+    }) },
     localStorage: {
       getItem: key => storage.get(key) || null,
       setItem: (key, value) => storage.set(key, value),
@@ -396,8 +439,9 @@ test("payout UI retains a request ID after a timeout and reuses it on retry", as
     },
     firebaseFunctions: { httpsCallable: name => async data => {
       if (name === "getVendorBankAccount") return { data: {
-        configured: true, accountName: "Vendor", bankCode: "044", lastFour: "7890", version: "version1"
+        configured: true, payoutsEnabled: true, accountName: "Vendor", bankCode: "044", lastFour: "7890", version: "version1"
       } };
+      if (name === "getVendorPayoutBanks") return { data: { banks: [{ code: "044", name: "Test Bank" }] } };
       if (name === "getVendorPayoutQuote") return { data: quote };
       if (name === "requestVendorWithdrawal") {
         calls.push(data);
@@ -415,7 +459,7 @@ test("payout UI retains a request ID after a timeout and reuses it on retry", as
   await context.loadVendorEscrowPayoutSettings();
   nodes.escrowWithdrawalAmount.value = "2000";
   await context.quoteEscrowWithdrawal({ preventDefault() {} });
-  assert.match(nodes.escrowWithdrawalQuote.textContent, /1459/);
+  assert.match(nodes.escrowWithdrawalQuote.textContent, /2540.75/);
   await context.submitEscrowWithdrawal();
   assert.ok(storage.has("escrowWithdrawalRequest:vendor"));
   shouldFail = false;

@@ -177,6 +177,7 @@ function heldOrder() {
 test("only the vendor can ship and only the buyer can release after shipment", async () => {
   const { documents, functions } = setup();
   documents.set("escrowOrders/order1", heldOrder());
+  documents.set("quizWallets/vendor", { coins: 7.5 });
   await assert.rejects(functions.markOrderShipped(request("other")),
     error => error.code === "permission-denied");
   await assert.rejects(functions.confirmDeliveryAndRelease(request("buyer")),
@@ -190,6 +191,7 @@ test("only the vendor can ship and only the buyer can release after shipment", a
   ]);
   assert.equal(results.filter(result => !result.alreadyUpdated).length, 1);
   assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, 750000);
+  assert.equal(documents.get("quizWallets/vendor").coins, 7.5);
   assert.equal(documents.get("escrowPlatformAccounting/revenue").retainedKobo, 137500);
   assert.equal(documents.get("escrowOrders/order1").status, "RELEASED");
   assert.equal(documents.get("escrowReleases/order1").productKobo, 750000);
@@ -246,37 +248,29 @@ test("unverified users cannot update orders", async () => {
   assert.equal(documents.get("escrowOrders/order1").status, "HELD_IN_ESCROW");
 });
 
-test("withdrawal quote calculates fees and retains whole-naira rounding", async () => {
+test("withdrawal quote adds fees to the amount sent to the bank", async () => {
   const { findVendorPayoutQuote } = setup();
   const providerFee = async amount => amount <= 5000 ? 1075 : amount <= 50000 ? 2688 : 5375;
   const quote = await findVendorPayoutQuote(200000, providerFee);
   assert.equal(quote.baseFeeKobo, 50000);
   assert.equal(quote.commissionKobo, 3000);
   assert.equal(quote.providerFeeKobo, 1075);
-  assert.equal(quote.netKobo, 145900);
-  assert.equal(quote.retainedBalanceKobo, 25);
-  assert.equal(quote.debitedKobo + quote.retainedBalanceKobo, quote.grossKobo);
+  assert.equal(quote.netKobo, 200000);
+  assert.equal(quote.debitedKobo, 254075);
+  assert.equal(quote.grossKobo, quote.debitedKobo);
   await assert.rejects(findVendorPayoutQuote(199999, providerFee),
     error => error.code === "invalid-argument");
-});
-
-test("withdrawal quote handles a provider fee tier boundary without over-debiting", async () => {
-  const { findVendorPayoutQuote } = setup();
-  const providerFee = async amount => amount <= 5000 ? 1075 : 2688;
-  const quote = await findVendorPayoutQuote(560406, providerFee);
-  assert.equal(quote.netKobo, 500000);
-  assert.equal(quote.providerFeeKobo, 1075);
-  assert.equal(quote.retainedBalanceKobo, 925);
-  assert.equal(quote.debitedKobo + quote.retainedBalanceKobo, 560406);
+  await assert.rejects(findVendorPayoutQuote(200001, providerFee),
+    error => error.code === "invalid-argument");
 });
 
 test("withdrawal commission changes at each configured threshold", async () => {
   const { findVendorPayoutQuote } = setup();
   const providerFee = async () => 0;
   for (const [amountKobo, expected] of [
-    [999999, 15000], [1000000, 25000],
-    [4999999, 125000], [5000000, 175000],
-    [19999999, 700000], [20000000, 1000000]
+    [999900, 14999], [1000000, 25000],
+    [4999900, 124998], [5000000, 175000],
+    [19999900, 699997], [20000000, 1000000]
   ]) {
     const quote = await findVendorPayoutQuote(amountKobo, providerFee);
     assert.equal(quote.commissionKobo, expected);
@@ -297,11 +291,11 @@ test("the callable checks ownership and uses a Flutterwave quote for the net amo
     };
   });
   documents.set("users/vendor", { role: "Vendor" });
-  documents.set("vendorPayoutBalances/vendor", { availableKobo: 1000000 });
+  documents.set("vendorPayoutBalances/vendor", { availableKobo: 1077688 });
   const quote = await functions.getVendorPayoutQuote(request("vendor", { amount: 10000 }));
   assert.equal(quote.providerFeeKobo, 2688);
   assert.ok(amounts.includes(quote.netKobo / 100));
-  assert.equal(quote.debitedKobo + quote.retainedBalanceKobo, 1000000);
+  assert.equal(quote.debitedKobo, 1077688);
   await assert.rejects(functions.getVendorPayoutQuote(request("other", { amount: 2000 })),
     error => error.code === "permission-denied");
   await assert.rejects(functions.getVendorPayoutQuote(request("vendor", { amount: 10001 })),
@@ -326,6 +320,11 @@ function payoutProvider() {
           status: "success", data: { account_number: account.account_number, account_name: "Test Vendor" }
         }) };
       }
+      if (url.endsWith("/banks/NG")) {
+        return { ok: true, json: async () => ({
+          status: "success", data: [{ code: "044", name: "Test Bank" }]
+        }) };
+      }
       if (url.endsWith("/transfers")) {
         transferCount++;
         if (failTransfer) throw new Error("timeout");
@@ -348,7 +347,7 @@ function payoutProvider() {
 async function preparePayout(provider) {
   const { documents, functions } = setup(provider.fetch);
   documents.set("users/vendor", { role: "Vendor" });
-  documents.set("vendorPayoutBalances/vendor", { availableKobo: 200000 });
+  documents.set("vendorPayoutBalances/vendor", { availableKobo: 254075 });
   const bank = await functions.saveVendorBankAccount(request("vendor", {
     bankCode: "044", accountNumber: "1234567890"
   }));
@@ -369,7 +368,7 @@ test("verified bank details are masked and only vendors can register them", asyn
   })), error => error.code === "permission-denied");
 });
 
-test("payout functions reject the production project", async () => {
+test("production payouts stay gated until explicitly enabled", async () => {
   const provider = payoutProvider();
   const { documents, functions, context } = setup(provider.fetch);
   documents.set("users/vendor", { role: "Vendor" });
@@ -379,13 +378,60 @@ test("payout functions reject the production project", async () => {
   for (const [name, data] of [
     ["getVendorPayoutQuote", { amount: 2000 }],
     ["saveVendorBankAccount", { bankCode: "044", accountNumber: "1234567890" }],
-    ["getVendorBankAccount", {}],
-    ["requestVendorWithdrawal", {}],
+    ["requestVendorWithdrawal", { amount: 2000, operationId: "unique_withdrawal_123456789" }],
     ["checkVendorWithdrawal", {}]
   ]) {
     await assert.rejects(functions[name](request("vendor", data)),
       error => error.code === "failed-precondition");
   }
+  assert.equal((await functions.getVendorBankAccount(request("vendor"))).payoutsEnabled, false);
+  assert.equal(provider.transferCount, 0);
+});
+
+test("enabled production payouts use the live key and debit cash only", async () => {
+  const provider = payoutProvider();
+  const calls = [];
+  const { documents, functions, context, bindings } = setup(async (url, options) => {
+    calls.push(options?.headers?.Authorization);
+    return provider.fetch(url, options);
+  });
+  context.process.env.GCLOUD_PROJECT = "golden-eagle-marketplace";
+  context.process.env.ESCROW_LIVE_PAYOUTS_ENABLED = "true";
+  context.FLUTTERWAVE_SECRET_KEY.value = () => "FLWSECK-live-example";
+  documents.set("users/vendor", { role: "Vendor" });
+  documents.set("vendorPayoutBalances/vendor", { availableKobo: 254075 });
+  documents.set("quizWallets/vendor", { coins: 9999 });
+  const banks = await functions.getVendorPayoutBanks(request("vendor"));
+  assert.equal(banks.banks[0].code, "044");
+  const bank = await functions.saveVendorBankAccount(request("vendor", {
+    bankCode: "044", accountNumber: "1234567890"
+  }));
+  const quote = await functions.getVendorPayoutQuote(request("vendor", { amount: 2000 }));
+  const payout = await functions.requestVendorWithdrawal(request("vendor", {
+    amount: 2000, bankVersion: bank.version, quote, operationId: "unique_withdrawal_123456789"
+  }));
+  assert.equal(payout.status, "PENDING");
+  assert.equal(provider.transferCount, 1);
+  assert.ok(calls.every(header => header === "Bearer FLWSECK-live-example"));
+  assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, 0);
+  assert.equal(documents.get("quizWallets/vendor").coins, 9999);
+  for (const name of ["getVendorPayoutBanks", "saveVendorBankAccount", "getVendorBankAccount",
+    "getVendorPayoutQuote", "requestVendorWithdrawal", "checkVendorWithdrawal",
+    "adminCheckVendorWithdrawal", "reconcileEscrowWithdrawal"]) {
+    assert.ok(bindings.get(functions[name]).secrets.includes(context.FLUTTERWAVE_SECRET_KEY));
+  }
+  context.process.env.ESCROW_LIVE_PAYOUTS_ENABLED = "false";
+  assert.equal((await functions.checkVendorWithdrawal(request("vendor", { withdrawalId: payout.withdrawalId }))).status, "PENDING");
+});
+
+test("chat coins cannot cover a payout when cash plus fees is insufficient", async () => {
+  const provider = payoutProvider();
+  const { documents, functions } = setup(provider.fetch);
+  documents.set("users/vendor", { role: "Vendor" });
+  documents.set("quizWallets/vendor", { coins: 100000 });
+  documents.set("vendorPayoutBalances/vendor", { availableKobo: 200000 });
+  await assert.rejects(functions.getVendorPayoutQuote(request("vendor", { amount: 2000 })),
+    error => error.code === "failed-precondition");
   assert.equal(provider.transferCount, 0);
 });
 
@@ -398,7 +444,7 @@ test("payout reserves once and credits fees only after verified transfer success
     functions.requestVendorWithdrawal(request("vendor", data))
   ]);
   assert.equal(provider.transferCount, 1);
-  assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, quote.retainedBalanceKobo);
+  assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, 0);
   const withdrawalId = results[0].withdrawalId;
   await assert.rejects(functions.checkVendorWithdrawal(request("other", { withdrawalId })),
     error => error.code === "not-found");
@@ -425,7 +471,7 @@ test("stale bank or changed quote cannot reserve or initiate a payout", async ()
   await assert.rejects(functions.requestVendorWithdrawal(request("vendor", data)),
     error => error.code === "failed-precondition");
   assert.equal(provider.transferCount, 0);
-  assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, 200000);
+  assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, 254075);
 });
 
 test("an ambiguous transfer remains reserved and cannot be sent again", async () => {
@@ -438,22 +484,55 @@ test("an ambiguous transfer remains reserved and cannot be sent again", async ()
   const retry = await functions.requestVendorWithdrawal(request("vendor", data));
   assert.equal(retry.status, "INITIATING");
   assert.equal(provider.transferCount, 1);
-  assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, quote.retainedBalanceKobo);
+  assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, 0);
   await assert.rejects(functions.checkVendorWithdrawal(request("vendor", { withdrawalId: retry.withdrawalId })),
     error => error.code === "failed-precondition");
 });
 
-test("a failed provider transfer remains reserved for support review", async () => {
+test("a verified failed transfer restores cash once without changing chat coins", async () => {
   const provider = payoutProvider();
   const { documents, functions, bank, quote } = await preparePayout(provider);
   const result = await functions.requestVendorWithdrawal(request("vendor", {
     amount: 2000, bankVersion: bank.version, quote, operationId: "unique_withdrawal_123456789"
   }));
+  documents.set("quizWallets/vendor", { coins: 7.5 });
   provider.setStatus("FAILED");
-  await assert.rejects(functions.checkVendorWithdrawal(request("vendor", { withdrawalId: result.withdrawalId })),
-    error => error.code === "failed-precondition");
-  assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, quote.retainedBalanceKobo);
+  const checks = await Promise.all([
+    functions.checkVendorWithdrawal(request("vendor", { withdrawalId: result.withdrawalId })),
+    functions.checkVendorWithdrawal(request("vendor", { withdrawalId: result.withdrawalId }))
+  ]);
+  assert.equal(checks[0].status, "FAILED");
+  assert.equal(checks[1].status, "FAILED");
+  assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, quote.debitedKobo);
+  assert.equal(documents.get("quizWallets/vendor").coins, 7.5);
   assert.equal(documents.has("escrowPlatformAccounting/withdrawalRevenue"), false);
+});
+
+test("a failed transfer with mismatched provider details does not restore cash", async () => {
+  const provider = payoutProvider();
+  let mismatch = false;
+  const { documents, functions } = setup(async (url, options) => {
+    const response = await provider.fetch(url, options);
+    if (!mismatch || !url.endsWith("/transfers/123")) return response;
+    const data = await response.json();
+    data.data.reference = "wrong-reference";
+    return { ok: true, json: async () => data };
+  });
+  documents.set("users/vendor", { role: "Vendor" });
+  documents.set("vendorPayoutBalances/vendor", { availableKobo: 254075 });
+  const bank = await functions.saveVendorBankAccount(request("vendor", {
+    bankCode: "044", accountNumber: "1234567890"
+  }));
+  const quote = await functions.getVendorPayoutQuote(request("vendor", { amount: 2000 }));
+  const payout = await functions.requestVendorWithdrawal(request("vendor", {
+    amount: 2000, bankVersion: bank.version, quote, operationId: "unique_withdrawal_123456789"
+  }));
+  provider.setStatus("FAILED");
+  mismatch = true;
+  await assert.rejects(functions.checkVendorWithdrawal(request("vendor", { withdrawalId: payout.withdrawalId })),
+    error => error.code === "failed-precondition");
+  assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, 0);
+  assert.equal(documents.get(`escrowWithdrawals/${payout.withdrawalId}`).status, "PENDING");
 });
 
 test("concurrent payout requests cannot reserve the same balance twice", async () => {
@@ -466,7 +545,7 @@ test("concurrent payout requests cannot reserve the same balance twice", async (
   ]);
   assert.equal(results.filter(result => result.status === "fulfilled").length, 1);
   assert.equal(provider.transferCount, 1);
-  assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, quote.retainedBalanceKobo);
+  assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, 0);
 });
 
 test("sandbox checkout uses the server listing price and creates an order exactly once after verification", async () => {
@@ -1163,7 +1242,7 @@ test("an early transfer webhook reconciles the reservation without double-settli
   functions = setupResult.functions;
   const documents = setupResult.documents;
   documents.set("users/vendor", { role: "Vendor" });
-  documents.set("vendorPayoutBalances/vendor", { availableKobo: 200000 });
+  documents.set("vendorPayoutBalances/vendor", { availableKobo: 254075 });
   const bank = await functions.saveVendorBankAccount(request("vendor", {
     bankCode: "044", accountNumber: "1234567890"
   }));
@@ -1174,6 +1253,46 @@ test("an early transfer webhook reconciles the reservation without double-settli
   assert.equal(result.status, "PAID");
   assert.equal(documents.get(`escrowWithdrawals/${result.withdrawalId}`).providerTransferId, "123");
   assert.equal(documents.get("escrowPlatformAccounting/withdrawalRevenue").retainedKobo, 53000);
+});
+
+test("an early failed transfer webhook restores the reserved cash exactly once", async () => {
+  let functions;
+  let transfer;
+  const provider = payoutProvider();
+  const fetchMock = async (url, options = {}) => {
+    if (url.endsWith("/transfers")) {
+      const input = JSON.parse(options.body);
+      transfer = { id: 123, reference: input.reference, amount: input.amount,
+        currency: "NGN", fee: 0, status: "FAILED" };
+      const response = { status(code) { this.code = code; return this; }, send() {} };
+      await functions.flutterwaveEscrowTestWebhook({
+        method: "POST", get: () => "test-webhook-hash",
+        body: { event: "transfer.completed", data: { id: 123, reference: input.reference } }
+      }, response);
+      assert.equal(response.code, 200);
+      return { ok: true, json: async () => ({ status: "success", data: transfer }) };
+    }
+    if (url.endsWith("/transfers/123")) {
+      return { ok: true, json: async () => ({ status: "success", data: transfer }) };
+    }
+    return provider.fetch(url, options);
+  };
+  const setupResult = setup(fetchMock);
+  functions = setupResult.functions;
+  const documents = setupResult.documents;
+  documents.set("users/vendor", { role: "Vendor" });
+  documents.set("vendorPayoutBalances/vendor", { availableKobo: 254075 });
+  const bank = await functions.saveVendorBankAccount(request("vendor", {
+    bankCode: "044", accountNumber: "1234567890"
+  }));
+  const quote = await functions.getVendorPayoutQuote(request("vendor", { amount: 2000 }));
+  const result = await functions.requestVendorWithdrawal(request("vendor", {
+    amount: 2000, bankVersion: bank.version, quote, operationId: "unique_withdrawal_123456789"
+  }));
+  assert.equal(result.status, "FAILED");
+  assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, 254075);
+  await functions.checkVendorWithdrawal(request("vendor", { withdrawalId: result.withdrawalId }));
+  assert.equal(documents.get("vendorPayoutBalances/vendor").availableKobo, 254075);
 });
 
 test("admin refund remains pending until Flutterwave confirms final disbursement", async () => {

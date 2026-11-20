@@ -39,7 +39,7 @@
   </section>
   <button id="signOut" class="secondary" type="button" hidden>Sign out</button>
   <section id="dashboard" hidden>
-    <p class="muted">Live cash-outs remain disabled. Test payouts are submitted by vendors and can only be checked or reconciled here. Manual refunds must be initiated separately in Flutterwave.</p>
+    <p class="muted">Live cash-outs require the launch flag. Vendors submit payouts; administrators can check or reconcile them here. Never retry a failed or uncertain transfer in Flutterwave after cash has been restored. Manual refunds must be initiated separately in Flutterwave.</p>
     <button id="refresh" type="button">Refresh dashboard</button>
     <p id="actionStatus" role="status" aria-live="polite"></p>
     <section class="card">
@@ -174,16 +174,16 @@
     } else {
       const eligible = Number.isSafeInteger(item.grossKobo) && item.grossKobo >= 200000;
       line(card, 'Vendor', item.vendorUid);
-      line(card, 'Requested amount', money(item.grossKobo / 100));
+      line(card, 'Total cash debited', money(item.grossKobo / 100));
       line(card, 'Transfer amount', money(item.netKobo / 100));
       line(card, 'Bank account ending', item.bankLastFour);
       line(card, 'Provider transfer ID', item.providerTransferId);
       line(card, 'Minimum check', eligible ? 'Meets ₦2,000 minimum' : 'Below minimum or invalid; manual review required');
-      button(card, 'Check test payout', async () => {
+      button(card, 'Check payout', async () => {
         const result = await call('adminCheckVendorWithdrawal', { withdrawalId: item.id });
         return `Payout status: ${result.status}.`;
       }, !eligible);
-      button(card, 'Reconcile test payout', async () => {
+      button(card, 'Reconcile payout', async () => {
         const transferId = window.prompt('Enter the existing Flutterwave transfer ID. Do not send another transfer.', item.providerTransferId || '');
         if (transferId === null) return null;
         if (!/^\d{1,32}$/.test(transferId.trim())) throw new Error('Enter a valid numeric transfer ID.');
