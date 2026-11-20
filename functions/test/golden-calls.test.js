@@ -110,7 +110,7 @@ class FakePeer {
   }
 }
 
-function client(db, uid, mediaOverride) {
+function client(db, uid, mediaOverride, extra = {}) {
   const elements = new Map();
   const messages = [];
   const streams = [];
@@ -121,11 +121,13 @@ function client(db, uid, mediaOverride) {
       elements.set(id, {
         classList: { toggle: (name, value) => value ? classes.add(name) : classes.delete(name),
           contains: name => classes.has(name) },
-        play: async () => {}, textContent: '', srcObject: null
+        play: async () => {}, setAttribute(name, value) { this[name] = value; },
+        replaceChildren() { this.children = []; }, appendChild(child) { this.children.push(child); },
+        textContent: '', srcObject: null
       });
     }
     return elements.get(id);
-  } };
+  }, createElement: () => ({}) };
   const timers = { setTimeout: () => 1, clearTimeout() {}, setInterval: () => 2, clearInterval() {} };
   const controller = createGoldenCalls({
     db, document, getUser: () => ({ uid }),
@@ -138,10 +140,11 @@ function client(db, uid, mediaOverride) {
       const stream = fakeStream(constraints.video);
       streams.push(stream);
       return stream;
-    } },
+    }, ...extra.mediaDevices },
+    AudioContext: extra.AudioContext,
     RTCPeerConnection: FakePeer, isSecureContext: true, timers
   });
-  return { controller, elements, messages, streams, requested };
+  return { controller, document, elements, messages, streams, requested };
 }
 
 test('voice and video calls exchange descriptions and candidates, control tracks and clean up', async () => {
@@ -242,4 +245,132 @@ test('declining a ringing call closes the caller connection without requesting m
   assert.ok(caller.streams[0].getTracks().every(track => track.stopped));
   assert.ok(caller.messages.some(message => /declined/i.test(message.message)));
   callee.controller.stop();
+});
+
+test('speaker selection uses the browser picker and reports unsupported devices', async () => {
+  const db = fakeDatabase();
+  const chosen = client(db, 'caller', null, { mediaDevices: {
+    selectAudioOutput: async () => ({ deviceId: 'speaker' })
+  } });
+  await chosen.controller.start('voice');
+  const audio = chosen.document.getElementById('goldenCallRemoteAudio');
+  audio.setSinkId = async id => { audio.sinkId = id; };
+  await chosen.controller.chooseSpeaker();
+  assert.equal(audio.sinkId, 'speaker');
+  assert.match(chosen.messages.at(-1).message, /output selected/i);
+  await chosen.controller.hangup();
+
+  const unsupported = client(fakeDatabase(), 'caller');
+  await unsupported.controller.start('voice');
+  await unsupported.controller.chooseSpeaker();
+  assert.match(unsupported.messages.at(-1).message, /device's audio output settings/i);
+  await unsupported.controller.hangup();
+});
+
+test('audio boost amplifies the remote stream and releases its audio context on hangup', async () => {
+  FakePeer.instances = [];
+  const output = fakeStream(false);
+  let context;
+  class FakeAudioContext {
+    constructor() { context = this; }
+    createMediaStreamSource(stream) {
+      this.sourceStream = stream;
+      return { connect() {}, disconnect() {} };
+    }
+    createGain() { this.gain = { gain: { value: 1 }, connect() {} }; return this.gain; }
+    createMediaStreamDestination() { return { stream: output }; }
+    async resume() {}
+    async close() { this.closed = true; }
+  }
+  const caller = client(fakeDatabase(), 'caller', null, { AudioContext: FakeAudioContext });
+  await caller.controller.start('voice');
+  const remote = fakeStream(false);
+  FakePeer.instances[0].ontrack({ streams: [remote] });
+  await caller.controller.toggleBoost();
+  assert.equal(context.sourceStream, remote);
+  assert.equal(context.gain.gain.value, 1.5);
+  assert.equal(caller.elements.get('goldenCallRemoteAudio').srcObject, output);
+  assert.equal(caller.elements.get('goldenCallBoost')['aria-pressed'], 'true');
+  await caller.controller.toggleBoost();
+  assert.equal(context.gain.gain.value, 1);
+  assert.equal(caller.elements.get('goldenCallBoost')['aria-pressed'], 'false');
+  await caller.controller.hangup();
+  assert.equal(context.closed, true);
+  assert.ok(output.getTracks().every(track => track.stopped));
+  assert.ok(remote.getTracks().every(track => track.stopped));
+});
+
+test('audio boost failure restores normal playback and reports the error', async () => {
+  FakePeer.instances = [];
+  const output = fakeStream(false);
+  let context;
+  class FailingAudioContext {
+    constructor() { context = this; }
+    createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
+    createGain() { return { gain: { value: 1 }, connect() {} }; }
+    createMediaStreamDestination() { return { stream: output }; }
+    async resume() { throw new Error('Audio unavailable'); }
+    async close() { this.closed = true; }
+  }
+  const person = client(fakeDatabase(), 'caller', null, { AudioContext: FailingAudioContext });
+  await person.controller.start('voice');
+  const remote = fakeStream(false);
+  FakePeer.instances[0].ontrack({ streams: [remote] });
+  await person.controller.toggleBoost();
+  assert.equal(person.elements.get('goldenCallRemoteAudio').srcObject, remote);
+  assert.equal(context.closed, true);
+  assert.ok(output.getTracks().every(track => track.stopped));
+  assert.ok(person.messages.some(message => /boost could not be enabled/i.test(message.message)));
+  await person.controller.hangup();
+});
+
+test('speaker selection lists available outputs when the browser has no device picker', async () => {
+  const person = client(fakeDatabase(), 'caller', null, { mediaDevices: {
+    enumerateDevices: async () => [
+      { kind: 'audioinput', deviceId: 'mic', label: 'Microphone' },
+      { kind: 'audiooutput', deviceId: 'speaker', label: 'External speaker' }
+    ]
+  } });
+  await person.controller.start('voice');
+  const audio = person.document.getElementById('goldenCallRemoteAudio');
+  audio.setSinkId = async id => { audio.sinkId = id; };
+  await person.controller.chooseSpeaker();
+  const select = person.elements.get('goldenCallOutputSelect');
+  assert.deepEqual(select.children.map(option => option.value), ['', 'speaker']);
+  assert.equal(person.elements.get('goldenCallOutputPicker').classList.contains('hidden'), false);
+  await person.controller.setSpeaker('speaker');
+  assert.equal(audio.sinkId, 'speaker');
+  await person.controller.hangup();
+});
+
+test('history subscriptions show only the selected chat and viewer and stop on unsubscribe', async () => {
+  const db = fakeDatabase();
+  const person = client(db, 'caller');
+  const observed = [];
+  const errors = [];
+  const stop = person.controller.watchHistory('chat', 'caller', docs => observed.push(docs.map(doc => doc.data())), error => errors.push(error));
+  await db.collection('calls').doc().set({ chatId: 'chat', callerUid: 'caller', calleeUid: 'callee' });
+  await db.collection('calls').doc().set({ chatId: 'chat', callerUid: 'callee', calleeUid: 'caller' });
+  await db.collection('calls').doc().set({ chatId: 'other', callerUid: 'caller', calleeUid: 'callee' });
+  await db.collection('calls').doc().set({ chatId: 'chat', callerUid: 'other', calleeUid: 'callee' });
+  await settle();
+  assert.equal(observed.at(-1).length, 2);
+  assert.equal(errors.length, 0);
+  stop();
+  const count = observed.length;
+  await db.collection('calls').doc().set({ chatId: 'chat', callerUid: 'caller', calleeUid: 'callee' });
+  await settle();
+  assert.equal(observed.length, count);
+});
+
+test('history distinguishes direction, declined, answered and expired unanswered calls', () => {
+  const person = client(fakeDatabase(), 'caller');
+  const now = 100000;
+  const call = { callerUid: 'caller', calleeUid: 'callee', type: 'video',
+    status: 'ringing', createdAt: { toMillis: () => 50000 } };
+  assert.equal(person.controller.describeCall(call, 'caller', now), 'Outgoing video call · Ringing');
+  assert.equal(person.controller.describeCall(call, 'callee', now + 10000), 'Incoming video call · Missed');
+  assert.equal(person.controller.describeCall({ ...call, status: 'ended' }, 'caller', now), 'Outgoing video call · No answer');
+  assert.equal(person.controller.describeCall({ ...call, status: 'declined' }, 'callee', now), 'Incoming video call · Declined');
+  assert.equal(person.controller.describeCall({ ...call, status: 'ended', answer: { type: 'answer' } }, 'callee', now), 'Incoming video call · Answered');
 });

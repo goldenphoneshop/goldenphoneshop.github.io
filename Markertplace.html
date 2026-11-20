@@ -1607,18 +1607,24 @@
             </div>
         </section>
     </div>
-    <div id="goldenCallModal" class="fixed inset-0 z-[100] flex hidden items-center justify-center bg-black/90 p-4" role="dialog" aria-modal="true" aria-labelledby="goldenCallTitle">
-        <section class="w-full max-w-lg rounded-2xl border border-gold/40 bg-darkCard p-5 text-center shadow-2xl">
+    <div id="goldenCallModal" class="fixed inset-0 z-[100] flex hidden h-[100dvh] w-screen bg-black" role="dialog" aria-modal="true" aria-labelledby="goldenCallTitle">
+        <section class="flex h-full w-full min-h-0 flex-col overflow-y-auto bg-darkCard p-4 text-center sm:p-6">
             <h2 id="goldenCallTitle" class="text-lg font-bold text-white">Call</h2>
             <p id="goldenCallStatus" class="mt-1 text-sm text-gray-300" role="status" aria-live="polite"></p>
             <p id="goldenCallTimer" class="mt-1 text-sm font-bold text-gold">00:00</p>
-            <div id="goldenCallVideoArea" class="mt-4 grid hidden grid-cols-2 gap-2">
-                <video id="goldenCallRemoteVideo" autoplay playsinline muted class="aspect-video w-full rounded-lg bg-black object-contain" aria-label="Remote video"></video>
-                <video id="goldenCallLocalVideo" autoplay playsinline muted class="aspect-video w-full rounded-lg bg-black object-contain" aria-label="Your video"></video>
+            <div id="goldenCallVideoArea" class="relative my-4 hidden min-h-0 flex-1 overflow-hidden rounded-xl bg-black">
+                <video id="goldenCallRemoteVideo" autoplay playsinline muted class="h-full w-full object-contain" aria-label="Remote video"></video>
+                <video id="goldenCallLocalVideo" autoplay playsinline muted class="absolute right-2 top-2 w-28 max-w-[30%] rounded-lg border border-gold/40 bg-black object-contain sm:w-44" aria-label="Your video"></video>
             </div>
+            <div id="goldenCallVoiceArea" class="flex flex-1 items-center justify-center" aria-hidden="true"><i class="fa-solid fa-phone rounded-full border border-gold/40 bg-gold/10 p-10 text-5xl text-gold"></i></div>
             <audio id="goldenCallRemoteAudio" autoplay></audio>
-            <div class="mt-4 flex flex-wrap justify-center gap-2">
+            <label id="goldenCallOutputPicker" class="hidden mx-auto mt-2 text-xs text-gray-300">Audio output
+                <select id="goldenCallOutputSelect" onchange="goldenCalls.setSpeaker(this.value)" class="ml-2 max-w-[70vw] rounded-lg border border-darkBorder bg-darkBg px-3 py-2 text-white"></select>
+            </label>
+            <div class="mt-auto flex flex-wrap justify-center gap-2 pb-3 pt-4">
                 <button id="goldenCallEnableAudio" type="button" onclick="goldenCalls.enableAudio()" class="hidden rounded-lg border border-gold px-3 py-2 text-xs text-gold">Enable audio</button>
+                <button id="goldenCallSpeaker" type="button" onclick="goldenCalls.chooseSpeaker()" class="rounded-lg border border-darkBorder px-3 py-2 text-xs text-white"><i class="fa-solid fa-volume-high mr-1" aria-hidden="true"></i>Speaker / output</button>
+                <button id="goldenCallBoost" type="button" onclick="goldenCalls.toggleBoost()" aria-pressed="false" class="rounded-lg border border-darkBorder px-3 py-2 text-xs text-white">Boost audio</button>
                 <button id="goldenCallMute" type="button" onclick="goldenCalls.mute()" class="rounded-lg border border-darkBorder px-3 py-2 text-xs text-white">Mute mic</button>
                 <button id="goldenCallCamera" type="button" onclick="goldenCalls.toggleCamera()" class="rounded-lg border border-darkBorder px-3 py-2 text-xs text-white">Turn camera off</button>
                 <button type="button" onclick="goldenCalls.hangup()" class="rounded-lg bg-red-700 px-4 py-2 text-xs font-bold text-white">Hang up</button>
@@ -1826,12 +1832,18 @@
             notify: (message, type) => showToast(message, type),
             mediaDevices: navigator.mediaDevices,
             RTCPeerConnection: window.RTCPeerConnection,
+            AudioContext: window.AudioContext || window.webkitAudioContext,
             isSecureContext: window.isSecureContext
         });
         let activeGoldenChatLatestMessageId = null;
         let goldenChatListUnsubscribe = null;
         let goldenChatUnreadUnsubscribe = null;
         let goldenChatMessagesUnsubscribe = null;
+        let goldenChatCallHistoryUnsubscribe = null;
+        let goldenChatMessageSnapshot = null;
+        let goldenChatCallHistory = [];
+        let goldenChatCallHistoryError = false;
+        let goldenChatCallHistoryTimer = null;
         let goldenChatProductUnsubscribe = null;
         let goldenChatMediaUrls = new Map();
         let goldenChatListenerUid = null;
@@ -5609,9 +5621,16 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         function stopGoldenChatSubscriptions() {
             if (goldenChatListUnsubscribe) goldenChatListUnsubscribe();
             if (goldenChatMessagesUnsubscribe) goldenChatMessagesUnsubscribe();
+            if (goldenChatCallHistoryUnsubscribe) goldenChatCallHistoryUnsubscribe();
             if (goldenChatProductUnsubscribe) goldenChatProductUnsubscribe();
+            if (goldenChatCallHistoryTimer) clearTimeout(goldenChatCallHistoryTimer);
             goldenChatListUnsubscribe = null;
             goldenChatMessagesUnsubscribe = null;
+            goldenChatCallHistoryUnsubscribe = null;
+            goldenChatMessageSnapshot = null;
+            goldenChatCallHistory = [];
+            goldenChatCallHistoryError = false;
+            goldenChatCallHistoryTimer = null;
             goldenChatProductUnsubscribe = null;
             goldenChatListenerUid = null;
             activeGoldenChatId = null;
@@ -5708,7 +5727,14 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 clearUnsentGoldenChatDraft();
             }
             if (goldenChatMessagesUnsubscribe) goldenChatMessagesUnsubscribe();
+            if (goldenChatCallHistoryUnsubscribe) goldenChatCallHistoryUnsubscribe();
+            if (goldenChatCallHistoryTimer) clearTimeout(goldenChatCallHistoryTimer);
             if (goldenChatProductUnsubscribe) goldenChatProductUnsubscribe();
+            goldenChatCallHistoryUnsubscribe = null;
+            goldenChatMessageSnapshot = null;
+            goldenChatCallHistory = [];
+            goldenChatCallHistoryError = false;
+            goldenChatCallHistoryTimer = null;
             releaseGoldenChatMediaUrls();
             activeGoldenChatId = chatId;
             activeGoldenChatData = chatData;
@@ -5725,12 +5751,25 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             if (chatData.productId) subscribeToGoldenChatProduct(chatData.productId);
             const messages = document.getElementById('chatMessages');
             messages.textContent = 'Loading secure conversation…';
+            const chatUid = currentUser.uid;
+            goldenChatCallHistoryUnsubscribe = goldenCalls.watchHistory(chatId, chatUid, docs => {
+                if (activeGoldenChatId !== chatId || currentUser?.uid !== chatUid) return;
+                goldenChatCallHistory = docs;
+                scheduleGoldenChatCallHistoryExpiry(chatId);
+                if (goldenChatMessageSnapshot) renderGoldenChatMessages(goldenChatMessageSnapshot, chatId);
+            }, error => {
+                if (activeGoldenChatId !== chatId || currentUser?.uid !== chatUid) return;
+                console.error('Unable to load Golden Chat call history.', error);
+                goldenChatCallHistoryError = true;
+                if (goldenChatMessageSnapshot) renderGoldenChatMessages(goldenChatMessageSnapshot, chatId);
+            });
             goldenChatMessagesUnsubscribe = firebaseFirestore.collection('goldenChats').doc(chatId)
                 .collection('messages')
                 .orderBy('createdAt', 'desc')
                 .limit(100)
                 .onSnapshot(snapshot => {
                     if (activeGoldenChatId !== chatId) return;
+                    goldenChatMessageSnapshot = snapshot;
                     renderGoldenChatMessages(snapshot, chatId);
                 }, error => {
                     console.error('Unable to load Golden Chat messages.', error);
@@ -5752,6 +5791,23 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 .get()
                 .then(renderGoldenChatList)
                 .catch(error => console.error('Unable to refresh the conversation list.', error));
+        }
+
+        function scheduleGoldenChatCallHistoryExpiry(chatId) {
+            if (goldenChatCallHistoryTimer) clearTimeout(goldenChatCallHistoryTimer);
+            const now = Date.now();
+            const expiries = goldenChatCallHistory.map(doc => doc.data())
+                .filter(call => call.status === 'ringing')
+                .map(call => call.createdAt?.toMillis?.())
+                .filter(time => Number.isFinite(time) && time + 60000 > now);
+            goldenChatCallHistoryTimer = expiries.length
+                ? setTimeout(() => {
+                    goldenChatCallHistoryTimer = null;
+                    if (activeGoldenChatId !== chatId) return;
+                    if (goldenChatMessageSnapshot) renderGoldenChatMessages(goldenChatMessageSnapshot, chatId);
+                    scheduleGoldenChatCallHistoryExpiry(chatId);
+                }, Math.min(...expiries) + 60000 - now)
+                : null;
         }
 
         function renderGoldenChatProduct(product) {
@@ -5791,7 +5847,13 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         async function renderGoldenChatMessages(snapshot, chatId) {
             const container = document.getElementById('chatMessages');
             container.replaceChildren();
-            if (snapshot.empty) {
+            if (goldenChatCallHistoryError) {
+                const error = document.createElement('p');
+                error.className = 'my-2 text-center text-xs text-red-300';
+                error.textContent = 'Call history could not load. Check your connection and Firestore indexes.';
+                container.appendChild(error);
+            }
+            if (snapshot.empty && !goldenChatCallHistory.length) {
                 activeGoldenChatLatestMessageId = null;
                 const empty = document.createElement('p');
                 empty.className = 'my-6 text-center text-xs text-gray-500';
@@ -5799,9 +5861,30 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 container.appendChild(empty);
                 return;
             }
-            for (const messageDoc of [...snapshot.docs].reverse()) {
+            const entries = [
+                ...snapshot.docs.map(doc => ({ kind: 'message', doc })),
+                ...goldenChatCallHistory.map(doc => ({ kind: 'call', doc }))
+            ];
+            entries.sort((left, right) => {
+                const leftTime = left.doc.data().createdAt?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
+                const rightTime = right.doc.data().createdAt?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
+                return leftTime - rightTime || left.doc.id.localeCompare(right.doc.id);
+            });
+            for (const entry of entries) {
                 if (activeGoldenChatId !== chatId) return;
-                const message = messageDoc.data();
+                const message = entry.doc.data();
+                if (entry.kind === 'call') {
+                    const row = document.createElement('div');
+                    row.className = 'my-2 text-center';
+                    const label = document.createElement('p');
+                    label.className = 'inline-block rounded-xl border border-darkBorder bg-darkCard px-3 py-2 text-xs text-gray-300';
+                    const time = message.createdAt?.toMillis?.();
+                    label.textContent = goldenCalls.describeCall(message, currentUser.uid) +
+                        (Number.isFinite(time) ? ` · ${new Date(time).toLocaleString()}` : '');
+                    row.appendChild(label);
+                    container.appendChild(row);
+                    continue;
+                }
                 const row = document.createElement('div');
                 row.className = `flex ${message.senderUid === currentUser?.uid ? 'justify-end' : 'justify-start'}`;
                 const bubble = document.createElement('div');
@@ -5834,8 +5917,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 container.appendChild(row);
             }
             container.scrollTop = container.scrollHeight;
-            activeGoldenChatLatestMessageId = snapshot.docs[0].id;
-            acknowledgeGoldenChatRead(chatId, activeGoldenChatLatestMessageId);
+            activeGoldenChatLatestMessageId = snapshot.docs[0]?.id || null;
+            if (activeGoldenChatLatestMessageId) acknowledgeGoldenChatRead(chatId, activeGoldenChatLatestMessageId);
         }
 
         function acknowledgeGoldenChatRead(chatId, messageId) {
