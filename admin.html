@@ -276,8 +276,8 @@
       const token = await user.getIdTokenResult(true);
       if (revision !== authRevision) return;
       const verified = token.claims.email_verified === true || token.claims.firebase?.sign_in_provider === 'phone';
-      if (!verified || token.claims.admin !== true) {
-        message('authStatus', 'Access denied. A verified account and administrator claim are required.');
+      if (!verified || user.uid !== 'LROHsLUXfEPnC6bDmSvy3vcRnNE3') {
+        message('authStatus', 'Access denied. This dashboard is restricted to the owner account.');
         return;
       }
       message('authStatus', 'Administrator authenticated.');

@@ -148,6 +148,7 @@ function setup(fetchMock) {
   context.walletCalls = [];
   context.ensurePurchaseIsVerified = async (...args) => { context.walletCalls.push(args); };
   vm.runInNewContext(
+    extract("const OWNER_ADMIN_UID", "function requireVerifiedUser") +
     extract("function requireVerifiedUser", "function requireQuizAdmin") +
     extract("exports.flutterwaveWalletWebhook", "function escrowAmountKobo") +
     extract("function escrowAmountKobo", "exports.getOrCreateGoldenChat"),
@@ -158,7 +159,8 @@ function setup(fetchMock) {
 
 function request(uid, data = {}, admin = false) {
   return {
-    auth: { uid, token: { email_verified: true, firebase: {}, admin } },
+    auth: { uid: admin ? "LROHsLUXfEPnC6bDmSvy3vcRnNE3" : uid,
+      token: { email_verified: true, firebase: {}, admin } },
     data: { orderId: "order1", ...(data.productId ? { fulfillment: { method: "pickup", stationId: "oshodi" } } : {}), ...data }
   };
 }
@@ -1403,7 +1405,8 @@ test("manual live refunds lock disputed orders and require matching provider ver
     providerStatus = "completed-bank-transfer";
     const result = await functions.verifyManualEscrowRefund(request("admin", { refundId: "501" }, true));
     assert.equal(result.status, "REFUNDED");
-    assert.equal(documents.get("escrowRefunds/order1").verifiedBy, "admin");
+    assert.equal(documents.get("escrowRefunds/order1").verifiedBy,
+      "LROHsLUXfEPnC6bDmSvy3vcRnNE3");
     assert.equal(documents.get("escrowPlatformAccounting/revenue")?.retainedKobo || 0,
       dispatched ? 331250 : 0);
     await functions.verifyManualEscrowRefund(request("admin", { refundId: "501" }, true));

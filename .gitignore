@@ -1,3 +1,10 @@
 /serviceAccountKey.json
 /serviceAccountKey..json
 /set-admin.js
+/.env
+/.env.*
+/functions/.env
+/functions/.env.*
+/functions/*.local
+*serviceAccount*.json
+*credentials*.json

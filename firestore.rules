@@ -12,6 +12,11 @@ service cloud.firestore {
           || request.auth.token.email_verified == true);
     }
 
+    function ownerAdmin() {
+      return verifiedAccount()
+        && request.auth.uid == 'LROHsLUXfEPnC6bDmSvy3vcRnNE3';
+    }
+
     function isVendor() {
       return verifiedAccount()
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Vendor';
@@ -419,7 +424,7 @@ service cloud.firestore {
       allow read: if verifiedAccount()
         && (request.auth.uid == resource.data.buyerUid
           || request.auth.uid == resource.data.vendorUid
-          || request.auth.token.admin == true);
+          || ownerAdmin());
       allow write: if false;
     }
 
@@ -463,7 +468,7 @@ service cloud.firestore {
     match /escrowWithdrawals/{withdrawalId} {
       allow read: if verifiedAccount()
         && (request.auth.uid == resource.data.vendorUid
-          || request.auth.token.admin == true);
+          || ownerAdmin());
       allow write: if false;
     }
 

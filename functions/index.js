@@ -72,6 +72,11 @@ const REFERRED_USER_REFERRAL_BONUS = 5;
 const REFERRAL_ATTRIBUTION_WINDOW_MS = 24 * 60 * 60 * 1000;
 const VERIFIED_DEALER_BADGE_COST = 24;
 const REACTION_UNDO_WINDOW_MS = 10 * 1000;
+const OWNER_ADMIN_UID = "LROHsLUXfEPnC6bDmSvy3vcRnNE3";
+
+function isOwnerAdmin(auth) {
+  return auth?.uid === OWNER_ADMIN_UID;
+}
 
 function requireVerifiedUser(request) {
   if (!request.auth) {
@@ -127,7 +132,7 @@ exports.askGoldenAi = onCall(
 
 function requireQuizAdmin(request) {
   const auth = requireVerifiedUser(request);
-  if (auth.token.admin !== true) {
+  if (!isOwnerAdmin(auth)) {
     throw new HttpsError("permission-denied", "Quiz administrator access is required.");
   }
   return auth;
@@ -378,6 +383,26 @@ function normalizedWallet(data = {}) {
       ? data.coins
       : 0
   };
+}
+
+function quizLikeRewardAmount(finalQuestion, perfect, rewardEligible, likeRewardEligible) {
+  return finalQuestion && perfect && rewardEligible && likeRewardEligible
+    ? QUIZ_LIKE_REWARD
+    : 0;
+}
+
+function requireProductReactionTarget(productSnapshot, uid) {
+  if (!productSnapshot.exists) {
+    throw new HttpsError("not-found", "This product listing could not be found.");
+  }
+  const product = productSnapshot.data();
+  if (typeof product.ownerUid !== "string" || !product.ownerUid) {
+    throw new HttpsError("failed-precondition", "This product listing has no valid owner.");
+  }
+  if (product.ownerUid === uid) {
+    throw new HttpsError("permission-denied", "You cannot react to your own product listing.");
+  }
+  return product;
 }
 
 exports.claimDailyCheckIn = onCall(async request => {
@@ -1098,7 +1123,7 @@ function escrowAmountKobo(amount, allowZero = false) {
 
 function requireEscrowAdmin(request) {
   const auth = requireVerifiedUser(request);
-  if (auth.token.admin !== true) {
+  if (!isOwnerAdmin(auth)) {
     throw new HttpsError("permission-denied", "Administrator access is required.");
   }
   return auth;
@@ -1258,7 +1283,7 @@ exports.createStoreVoucher = onCall(async request => {
     throw new HttpsError("invalid-argument", "Enter a valid discount with at most two decimal places.");
   }
   const profile = await db.collection("users").doc(auth.uid).get();
-  const isAdmin = auth.token.admin === true;
+  const isAdmin = isOwnerAdmin(auth);
   if (!isAdmin && (!profile.exists || profile.data().role !== "Vendor")) {
     throw new HttpsError("permission-denied", "Only vendors and administrators can create vouchers.");
   }
@@ -2258,7 +2283,7 @@ exports.reconcileEscrowWithdrawal = onCall(
   { secrets: [FLW_SECRET_KEY, FLUTTERWAVE_SECRET_KEY] },
   async request => {
     const auth = requireVerifiedUser(request);
-    if (auth.token.admin !== true) {
+    if (!isOwnerAdmin(auth)) {
       throw new HttpsError("permission-denied", "Administrator access is required.");
     }
     const secret = vendorPayoutKey(false);
@@ -2314,7 +2339,7 @@ async function updateEscrowOrder(request, action) {
   if (typeof orderId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(orderId)) {
     throw new HttpsError("invalid-argument", "Choose a valid escrow order.");
   }
-  if (action === "resolve" && auth.token.admin !== true) {
+  if (action === "resolve" && !isOwnerAdmin(auth)) {
     throw new HttpsError("permission-denied", "Administrator access is required.");
   }
   const reason = typeof request.data?.reason === "string" ? request.data.reason.trim() : "";
@@ -2411,7 +2436,7 @@ async function updateEscrowOrder(request, action) {
 
 async function initiateEscrowRefund(request) {
   const auth = requireVerifiedUser(request);
-  if (auth.token.admin !== true) {
+  if (!isOwnerAdmin(auth)) {
     throw new HttpsError("permission-denied", "Administrator access is required.");
   }
   const secret = escrowSandboxKey();
@@ -2660,7 +2685,7 @@ exports.checkEscrowRefund = onCall(
   { secrets: [FLW_SECRET_KEY] },
   async request => {
     const auth = requireVerifiedUser(request);
-    if (auth.token.admin !== true) {
+    if (!isOwnerAdmin(auth)) {
       throw new HttpsError("permission-denied", "Administrator access is required.");
     }
     const secret = escrowSandboxKey();
@@ -2672,7 +2697,7 @@ exports.reconcileEscrowRefund = onCall(
   { secrets: [FLW_SECRET_KEY] },
   async request => {
     const auth = requireVerifiedUser(request);
-    if (auth.token.admin !== true) {
+    if (!isOwnerAdmin(auth)) {
       throw new HttpsError("permission-denied", "Administrator access is required.");
     }
     const secret = escrowSandboxKey();
@@ -4014,7 +4039,12 @@ exports.submitTimedQuiz = onCall(async request => {
     const likeReward = typeof attempt.likeRewardEligible === "boolean"
       ? attempt.likeRewardEligible
       : rewardEligible && perfect;
-    const awardedLikes = finalQuestion && likeReward ? QUIZ_LIKE_REWARD : 0;
+    const awardedLikes = quizLikeRewardAmount(
+      finalQuestion,
+      perfect,
+      rewardEligible,
+      likeReward
+    );
     let wallet = null;
     if (awardedLikes > 0) {
       const walletSnapshot = await transaction.get(walletRef);
@@ -4236,16 +4266,19 @@ exports.applyProductReaction = onCall(async request => {
 
   const reactionRef = db.collection("productDiscussions").doc(productId)
     .collection("reactions").doc(auth.uid);
+  const productRef = db.collection("products").doc(productId);
   const walletRef = accountWalletRef(auth.uid);
   const statsRef = db.collection("productDiscussionStats").doc(productId);
   let removed = false;
   let result = null;
   await db.runTransaction(async transaction => {
-    const [reactionSnapshot, walletSnapshot, statsSnapshot] = await Promise.all([
+    const [productSnapshot, reactionSnapshot, walletSnapshot, statsSnapshot] = await Promise.all([
+      transaction.get(productRef),
       transaction.get(reactionRef),
       transaction.get(walletRef),
       transaction.get(statsRef)
     ]);
+    requireProductReactionTarget(productSnapshot, auth.uid);
     const wallet = normalizedWallet(walletSnapshot.data());
     const existing = reactionSnapshot.exists ? reactionSnapshot.data() : null;
     const now = Date.now();
