@@ -12,6 +12,9 @@ function node() {
   return {
     children: [],
     appendChild(child) { this.children.push(child); },
+    append(...children) { this.children.push(...children); },
+    setAttribute() {},
+    addEventListener(name, callback) { this[name] = callback; },
     replaceChildren() { this.children = []; },
     textContent: '',
     scrollTop: 0,
@@ -73,4 +76,18 @@ test('a chat with only calls renders them and reports call history errors separa
   assert.match(container.children[0].textContent, /Call history could not load/);
   assert.match(container.children[1].children[0].textContent, /Missed/);
   assert.equal(acknowledgements.length, 0);
+});
+
+test('message replies show the saved quote and provide a reply button', async () => {
+  const { context, container } = renderContext([]);
+  const chosen = [];
+  context.setGoldenChatReply = (id, message, chatId) => chosen.push([id, message.text, chatId]);
+  const data = { senderUid: 'user', senderName: 'Member', text: 'My response',
+    replyTo: { senderName: 'Ada', preview: '<img src=x>' } };
+  await context.renderGoldenChatMessages({ docs: [doc('message', data)], empty: false }, 'chat');
+  const bubble = container.children[0].children[0];
+  assert.equal(bubble.children[0].children[0].textContent, 'Reply to Ada');
+  assert.equal(bubble.children[0].children[1].textContent, '<img src=x>');
+  bubble.children.at(-1).click();
+  assert.deepEqual(chosen, [['message', 'My response', 'chat']]);
 });

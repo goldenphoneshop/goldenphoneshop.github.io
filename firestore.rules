@@ -621,6 +621,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /notificationProductQueue/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /notificationDigestJobs/{jobId} {
+      allow read, write: if false;
+    }
+
+    match /notificationSettings/{settingId} {
+      allow read, write: if false;
+    }
+
     match /productDiscussions/{productId}/reactions/{userId} {
       allow get: if verifiedAccount() && request.auth.uid == userId;
       allow list: if false;

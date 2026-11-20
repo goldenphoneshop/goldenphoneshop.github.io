@@ -186,6 +186,41 @@
             height: 100%;
             min-height: 0;
         }
+        #chatPage.chat-contacts-open #chatLayoutGrid,
+        #chatPage.golden-chat-fullscreen.chat-contacts-open #chatLayoutGrid {
+            grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
+            grid-template-rows: minmax(0, 1fr);
+            height: 75dvh;
+            min-height: 0;
+        }
+        #chatPage.golden-chat-fullscreen.chat-contacts-open #chatLayoutGrid {
+            height: 100%;
+        }
+        #chatPage.chat-contacts-open #chatSidebar,
+        #chatPage.golden-chat-fullscreen.chat-contacts-open #chatSidebar {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            min-width: 0;
+            overflow: hidden;
+        }
+        #chatPage.chat-contacts-open #chatWalletPanel,
+        #chatPage.chat-contacts-open #chatConversationSection {
+            display: none;
+        }
+        #chatPage.chat-contacts-open #chatThreadPane {
+            height: 100%;
+            min-height: 0;
+        }
+        #chatPage.chat-contacts-open #chatThreadPane > header {
+            flex-wrap: wrap;
+        }
+        @media (min-width: 768px) {
+            #chatPage.chat-contacts-open #chatLayoutGrid,
+            #chatPage.golden-chat-fullscreen.chat-contacts-open #chatLayoutGrid {
+                grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+            }
+        }
         /* Custom scrollbar */
         ::-webkit-scrollbar {
             width: 8px;
@@ -490,6 +525,7 @@
                             </div>
                         </section>
                     </div>
+                    <div id="chatConversationSection">
                     <div class="flex flex-none items-center justify-between gap-2 px-3 pb-2 pt-3">
                         <div class="flex items-center gap-2">
                             <h2 class="text-[10px] font-bold uppercase tracking-wider text-gray-500">Conversations</h2>
@@ -502,6 +538,23 @@
                     <div id="chatConversationList" class="max-h-[55vh] space-y-1 overflow-y-auto px-2 pb-3" aria-live="polite">
                         <p class="p-3 text-[10px] text-gray-500">Your conversations will appear here.</p>
                     </div>
+                    </div>
+                    <section id="chatContactsModal" class="hidden min-h-0 flex-1 flex-col overflow-hidden" aria-labelledby="chatContactsHeading">
+                        <header class="flex items-center justify-between gap-2 border-b border-darkBorder p-3">
+                            <h2 id="chatContactsHeading" class="text-sm font-extrabold text-white">Find people</h2>
+                            <button type="button" onclick="closeChatContactsModal()" class="h-9 w-9 flex-shrink-0 rounded-lg border border-darkBorder text-gray-300 hover:text-gold" aria-label="Close contacts"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                        </header>
+                        <div class="space-y-2 border-b border-darkBorder p-3">
+                            <label for="chatContactsSearch" class="sr-only">Search followers and following</label>
+                            <input id="chatContactsSearch" type="search" oninput="renderChatContacts()" placeholder="Search people…" class="w-full min-w-0 rounded-xl border border-darkBorder bg-darkBg px-2 py-2 text-sm text-white placeholder:text-gray-500 focus:border-gold focus:outline-none">
+                            <div class="flex flex-wrap gap-2" role="tablist" aria-label="Choose a contact list">
+                                <button id="chatFollowingTab" type="button" role="tab" aria-selected="true" onclick="setChatContactsTab('following')" class="rounded-lg border border-gold/50 bg-gold/10 px-2 py-2 text-xs font-bold text-gold">Following</button>
+                                <button id="chatFollowersTab" type="button" role="tab" aria-selected="false" onclick="setChatContactsTab('followers')" class="rounded-lg border border-darkBorder px-2 py-2 text-xs font-bold text-gray-300 hover:text-gold">Followers</button>
+                            </div>
+                        </div>
+                        <p id="chatContactsStatus" class="px-3 pt-2 text-xs text-gray-400" role="status" aria-live="polite">Loading your contacts…</p>
+                        <div id="chatContactsList" class="min-h-0 flex-1 space-y-2 overflow-y-auto p-2" role="tabpanel" aria-labelledby="chatFollowingTab"></div>
+                    </section>
                 </aside>
 
                 <div id="chatThreadPane" class="flex min-h-[65vh] min-w-0 flex-col">
@@ -549,6 +602,10 @@
                         </div>
                     </div>
                     <form id="chatComposer" class="hidden border-t border-darkBorder bg-darkCard p-3 sm:p-4" onsubmit="sendGoldenChatMessage(event)">
+                        <div id="chatReplyPreview" class="mb-2 hidden items-center justify-between gap-2 rounded-lg border-l-2 border-gold bg-darkBg p-2" role="status">
+                            <div class="min-w-0"><p id="chatReplyAuthor" class="truncate text-[10px] font-bold text-gold"></p><p id="chatReplyText" class="truncate text-xs text-gray-300"></p></div>
+                            <button type="button" onclick="cancelGoldenChatReply()" class="flex-shrink-0 p-2 text-gray-400 hover:text-white" aria-label="Cancel reply"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                        </div>
                         <label for="chatMessageInput" class="sr-only">Write a message</label>
                         <textarea id="chatMessageInput" rows="2" maxlength="2000" oninput="updateChatSendButtonCost()" placeholder="Message your chat partner · 1 coin per text message" class="w-full resize-y rounded-xl border border-darkBorder bg-darkBg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-gold focus:outline-none"></textarea>
                         <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
@@ -570,30 +627,6 @@
             </div>
         </section>
     </main>
-
-    <div id="chatContactsModal" class="fixed inset-0 z-[90] hidden items-center justify-center bg-black/80 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="chatContactsHeading" onclick="if (event.target === this) closeChatContactsModal()">
-        <section class="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-gold/40 bg-darkCard shadow-2xl">
-            <header class="flex items-center justify-between gap-3 border-b border-darkBorder p-4 sm:p-5">
-                <div>
-                    <h2 id="chatContactsHeading" class="text-lg font-extrabold text-white">Start a conversation</h2>
-                    <p class="mt-1 text-xs text-gray-400">Choose someone you follow or a follower.</p>
-                </div>
-                <button type="button" onclick="closeChatContactsModal()" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-300 hover:text-gold" aria-label="Close contacts">
-                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                </button>
-            </header>
-            <div class="space-y-3 border-b border-darkBorder p-4">
-                <label for="chatContactsSearch" class="sr-only">Search followers and following</label>
-                <input id="chatContactsSearch" type="search" oninput="renderChatContacts()" placeholder="Search people…" class="w-full rounded-xl border border-darkBorder bg-darkBg px-3 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-gold focus:outline-none">
-                <div class="flex gap-2" role="tablist" aria-label="Choose a contact list">
-                    <button id="chatFollowingTab" type="button" role="tab" aria-selected="true" onclick="setChatContactsTab('following')" class="rounded-lg border border-gold/50 bg-gold/10 px-4 py-2 text-xs font-bold text-gold">Following</button>
-                    <button id="chatFollowersTab" type="button" role="tab" aria-selected="false" onclick="setChatContactsTab('followers')" class="rounded-lg border border-darkBorder px-4 py-2 text-xs font-bold text-gray-300 hover:text-gold">Followers</button>
-                </div>
-            </div>
-            <p id="chatContactsStatus" class="px-4 pt-3 text-xs text-gray-400" role="status" aria-live="polite">Loading your contacts…</p>
-            <div id="chatContactsList" class="min-h-0 flex-1 space-y-2 overflow-y-auto p-4" role="tabpanel" aria-labelledby="chatFollowingTab"></div>
-        </section>
-    </div>
 
     <div id="chatCoinStoreModal" class="fixed inset-0 z-[70] hidden items-center justify-center overflow-y-auto bg-black/80 p-4" role="dialog" aria-modal="true" aria-labelledby="chatCoinStoreHeading" onclick="if (event.target === this) closeChatCoinStore()">
         <section class="my-8 w-full max-w-lg rounded-2xl border border-gold/40 bg-darkCard p-5 shadow-2xl sm:p-6">
@@ -758,7 +791,7 @@
             <header class="flex items-start justify-between gap-3">
                 <div>
                     <h2 id="inAppNotificationsHeading" class="text-xl font-extrabold text-white"><i class="fa-solid fa-bell mr-2 text-gold"></i>Notifications</h2>
-                    <p class="mt-1 text-xs text-gray-400">Stock alerts from Vendors you follow appear here.</p>
+                    <p class="mt-1 text-xs text-gray-400">Recent account, chat, order, wallet and marketplace updates appear here.</p>
                 </div>
                 <button type="button" onclick="closeNotificationsModal()" class="rounded-lg p-2 text-gray-400 hover:text-white" aria-label="Close notifications"><i class="fa-solid fa-xmark"></i></button>
             </header>
@@ -1729,6 +1762,9 @@
         let referralInfoRequestRevision = 0;
         let notificationsUnsubscribe = null;
         let inAppNotifications = [];
+        let notificationLoadState = 'idle';
+        let notificationLimit = 50;
+        let notificationSubscriptionRevision = 0;
         const stockAlertingProductIds = new Set();
         let verifiedDealerBadgePurchasing = false;
         let verifiedDealerAutoRenewUpdating = false;
@@ -1823,6 +1859,8 @@
         let cartItems = [];
         let activeGoldenChatId = null;
         let activeGoldenChatData = null;
+        let goldenChatReplyTarget = null;
+        let goldenChatOpenRevision = 0;
         const goldenCalls = createGoldenCalls({
             db: firebaseFirestore,
             document,
@@ -1851,6 +1889,7 @@
         const goldenChatReadRequests = new Map();
         let goldenChatContacts = { followers: [], following: [] };
         let activeChatContactsTab = 'following';
+        let goldenChatContactsRevision = 0;
         let goldenChatPreviousBodyOverflow = null;
         let chatSendRetry = null;
         let pendingChatFiles = [];
@@ -5372,23 +5411,26 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 return;
             }
             const modal = document.getElementById('chatContactsModal');
+            document.getElementById('chatPage').classList.add('chat-contacts-open');
             modal.classList.remove('hidden');
             modal.classList.add('flex');
             document.getElementById('chatContactsSearch').value = '';
             activeChatContactsTab = 'following';
             setChatContactsTab(activeChatContactsTab);
             document.getElementById('chatContactsSearch').focus();
-            loadGoldenChatContacts(currentUser.uid);
+            loadGoldenChatContacts(currentUser.uid, ++goldenChatContactsRevision);
         }
 
         function closeChatContactsModal() {
             const modal = document.getElementById('chatContactsModal');
             if (!modal) return;
+            goldenChatContactsRevision++;
             modal.classList.add('hidden');
             modal.classList.remove('flex');
+            document.getElementById('chatPage').classList.remove('chat-contacts-open');
         }
 
-        async function loadGoldenChatContacts(uid) {
+        async function loadGoldenChatContacts(uid, revision) {
             const status = document.getElementById('chatContactsStatus');
             const list = document.getElementById('chatContactsList');
             status.textContent = 'Loading your contacts…';
@@ -5399,7 +5441,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     userRef.collection('following').get(),
                     userRef.collection('followers').get()
                 ]);
-                if (currentUser?.uid !== uid ||
+                if (revision !== goldenChatContactsRevision || currentUser?.uid !== uid ||
                     document.getElementById('chatContactsModal').classList.contains('hidden')) return;
                 goldenChatContacts.following = followingSnapshot.docs
                     .filter(contact => contact.id !== uid)
@@ -5423,7 +5465,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     });
                 renderChatContacts();
             } catch (error) {
-                if (currentUser?.uid !== uid) return;
+                if (revision !== goldenChatContactsRevision || currentUser?.uid !== uid) return;
                 console.error('Unable to load Golden Chat followers and following.', error);
                 status.textContent = 'Your contacts could not load. Check your connection and Firestore rules, then close and reopen this window to retry.';
                 list.replaceChildren();
@@ -5437,11 +5479,11 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             followingTab.setAttribute('aria-selected', String(activeChatContactsTab === 'following'));
             followersTab.setAttribute('aria-selected', String(activeChatContactsTab === 'followers'));
             followingTab.className = activeChatContactsTab === 'following'
-                ? 'rounded-lg border border-gold/50 bg-gold/10 px-4 py-2 text-xs font-bold text-gold'
-                : 'rounded-lg border border-darkBorder px-4 py-2 text-xs font-bold text-gray-300 hover:text-gold';
+                ? 'rounded-lg border border-gold/50 bg-gold/10 px-2 py-2 text-xs font-bold text-gold'
+                : 'rounded-lg border border-darkBorder px-2 py-2 text-xs font-bold text-gray-300 hover:text-gold';
             followersTab.className = activeChatContactsTab === 'followers'
-                ? 'rounded-lg border border-gold/50 bg-gold/10 px-4 py-2 text-xs font-bold text-gold'
-                : 'rounded-lg border border-darkBorder px-4 py-2 text-xs font-bold text-gray-300 hover:text-gold';
+                ? 'rounded-lg border border-gold/50 bg-gold/10 px-2 py-2 text-xs font-bold text-gold'
+                : 'rounded-lg border border-darkBorder px-2 py-2 text-xs font-bold text-gray-300 hover:text-gold';
             renderChatContacts();
         }
 
@@ -5469,9 +5511,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
             contacts.forEach(contact => {
                 const card = document.createElement('article');
-                card.className = 'flex items-center gap-3 rounded-xl border border-darkBorder bg-darkBg p-3';
+                card.className = 'flex flex-wrap items-center gap-2 rounded-xl border border-darkBorder bg-darkBg p-2';
                 const avatar = document.createElement('span');
-                avatar.className = 'flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full gold-gradient-bg text-sm font-extrabold text-black';
+                avatar.className = 'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full gold-gradient-bg text-sm font-extrabold text-black';
                 avatar.textContent = (contact.name.trim() || 'M').charAt(0).toUpperCase();
                 const identity = document.createElement('div');
                 identity.className = 'min-w-0 flex-1';
@@ -5484,10 +5526,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 identity.append(name, role);
                 const message = document.createElement('button');
                 message.type = 'button';
-                message.className = 'flex-shrink-0 rounded-lg gold-gradient-bg px-3 py-2 text-[11px] font-bold text-black hover:opacity-90';
+                message.className = 'w-full flex-shrink-0 rounded-lg gold-gradient-bg px-2 py-2 text-[11px] font-bold text-black hover:opacity-90 sm:w-auto';
                 message.textContent = 'Message';
                 message.addEventListener('click', () => {
-                    closeChatContactsModal();
                     startGoldenChat(contact.uid);
                 });
                 card.append(avatar, identity, message);
@@ -5527,16 +5568,29 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         }
 
         async function startGoldenChat(otherUid, productId = '') {
+            if (!currentUser) {
+                showToast('Sign in before starting a conversation.', 'info');
+                return;
+            }
             if (!otherUid || otherUid === currentUser?.uid) return;
+            if (chatSending) {
+                showToast('Wait for the current message to finish sending before switching conversations.', 'info');
+                return;
+            }
+            const uid = currentUser.uid;
+            const revision = ++goldenChatOpenRevision;
             try {
                 const result = await firebaseFunctions.httpsCallable('getOrCreateGoldenChat')({
                     otherUid,
                     productId: productId || ''
                 });
                 const snapshot = await firebaseFirestore.collection('goldenChats').doc(result.data.chatId).get();
+                if (revision !== goldenChatOpenRevision || currentUser?.uid !== uid ||
+                    document.getElementById('chatPage').classList.contains('hidden')) return;
                 if (!snapshot.exists) throw new Error('The conversation could not be loaded after it was created.');
                 selectGoldenChat(snapshot.id, snapshot.data());
             } catch (error) {
+                if (revision !== goldenChatOpenRevision || currentUser?.uid !== uid) return;
                 console.error('Unable to open the member conversation.', error);
                 showToast(error.message || 'This conversation could not be opened. Check your connection, profile, and coin balance.', 'error');
             }
@@ -5619,6 +5673,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         }
 
         function stopGoldenChatSubscriptions() {
+            goldenChatOpenRevision++;
+            resetGoldenChatReply();
             if (goldenChatListUnsubscribe) goldenChatListUnsubscribe();
             if (goldenChatMessagesUnsubscribe) goldenChatMessagesUnsubscribe();
             if (goldenChatCallHistoryUnsubscribe) goldenChatCallHistoryUnsubscribe();
@@ -5646,6 +5702,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         }
 
         function clearUnsentGoldenChatDraft() {
+            resetGoldenChatReply();
             pendingChatFiles.forEach(file => URL.revokeObjectURL(file.url));
             pendingChatFiles = [];
             pendingChatVoiceBlob = null;
@@ -5710,6 +5767,10 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         }
 
         function selectGoldenChat(chatId, chatData) {
+            if (chatSending && activeGoldenChatId !== chatId) {
+                showToast('Wait for the current message to finish sending before switching conversations.', 'info');
+                return;
+            }
             if (chatVoiceRecorder?.state === 'recording' && activeGoldenChatId !== chatId) {
                 showToast('Stop recording the voice note before switching conversations.', 'info');
                 return;
@@ -5721,11 +5782,13 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const hasDraft = activeGoldenChatId !== chatId &&
                 (document.getElementById('chatMessageInput').value.trim() ||
                     pendingChatFiles.length ||
-                    pendingChatVoiceBlob);
+                    pendingChatVoiceBlob ||
+                    goldenChatReplyTarget);
             if (hasDraft) {
                 if (!window.confirm('Discard the unsent message or media and switch conversations?')) return;
                 clearUnsentGoldenChatDraft();
             }
+            goldenChatOpenRevision++;
             if (goldenChatMessagesUnsubscribe) goldenChatMessagesUnsubscribe();
             if (goldenChatCallHistoryUnsubscribe) goldenChatCallHistoryUnsubscribe();
             if (goldenChatCallHistoryTimer) clearTimeout(goldenChatCallHistoryTimer);
@@ -5775,7 +5838,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     console.error('Unable to load Golden Chat messages.', error);
                     messages.textContent = 'Messages could not load. Check your connection and Firestore rules.';
                 });
-            if (window.matchMedia('(max-width: 767px)').matches) {
+            if (window.matchMedia('(max-width: 767px)').matches &&
+                !document.getElementById('chatPage').classList.contains('chat-contacts-open')) {
                 requestAnimationFrame(() => document.getElementById('chatThreadPane').scrollIntoView({
                     behavior: 'smooth',
                     block: 'start'
@@ -5844,6 +5908,71 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 });
         }
 
+        function resetGoldenChatReply() {
+            goldenChatReplyTarget = null;
+            const preview = document.getElementById('chatReplyPreview');
+            preview.classList.add('hidden');
+            preview.classList.remove('flex');
+        }
+
+        function cancelGoldenChatReply() {
+            if (chatSending || chatSendRetry) {
+                showToast('Finish or retry the pending message before changing its reply.', 'info');
+                return;
+            }
+            resetGoldenChatReply();
+        }
+
+        function setGoldenChatReply(messageId, message, chatId) {
+            if (activeGoldenChatId !== chatId || chatSending || chatSendRetry) {
+                if (chatSending || chatSendRetry) showToast('Finish or retry the pending message before changing its reply.', 'info');
+                return;
+            }
+            const fallback = message.type === 'image' ? 'Photo' : message.type === 'video'
+                ? 'Video clip' : message.type === 'voice' ? 'Voice note' : 'Message';
+            const preview = typeof message.text === 'string' && message.text.trim()
+                ? message.text.trim().slice(0, 200) : fallback;
+            goldenChatReplyTarget = { messageId, chatId };
+            document.getElementById('chatReplyAuthor').textContent =
+                `Replying to ${message.senderName || 'Marketplace member'}`;
+            document.getElementById('chatReplyText').textContent = preview;
+            document.getElementById('chatReplyPreview').classList.remove('hidden');
+            document.getElementById('chatReplyPreview').classList.add('flex');
+            document.getElementById('chatMessageInput').focus();
+        }
+
+        function enableGoldenChatSwipeReply(bubble, messageId, message, chatId) {
+            let gesture = null;
+            bubble.style.touchAction = 'pan-y';
+            bubble.addEventListener('pointerdown', event => {
+                if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0) ||
+                    event.target.closest('button, a, audio, video, input, textarea')) return;
+                gesture = { id: event.pointerId, x: event.clientX, y: event.clientY };
+                bubble.setPointerCapture(event.pointerId);
+            });
+            bubble.addEventListener('pointermove', event => {
+                if (!gesture || event.pointerId !== gesture.id) return;
+                const dx = event.clientX - gesture.x;
+                const dy = event.clientY - gesture.y;
+                if (dx > 0 && dx > Math.abs(dy) * 1.5) {
+                    bubble.style.transform = `translateX(${Math.min(dx, 72)}px)`;
+                }
+            });
+            const finish = (event, cancelled) => {
+                if (!gesture || event.pointerId !== gesture.id) return;
+                const dx = event.clientX - gesture.x;
+                const dy = event.clientY - gesture.y;
+                gesture = null;
+                bubble.style.transform = '';
+                if (!cancelled && dx >= 60 && dx > Math.abs(dy) * 1.5) {
+                    setGoldenChatReply(messageId, message, chatId);
+                }
+            };
+            bubble.addEventListener('pointerup', event => finish(event, false));
+            bubble.addEventListener('pointercancel', event => finish(event, true));
+            bubble.addEventListener('lostpointercapture', event => finish(event, true));
+        }
+
         async function renderGoldenChatMessages(snapshot, chatId) {
             const container = document.getElementById('chatMessages');
             container.replaceChildren();
@@ -5889,6 +6018,18 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 row.className = `flex ${message.senderUid === currentUser?.uid ? 'justify-end' : 'justify-start'}`;
                 const bubble = document.createElement('div');
                 bubble.className = `max-w-[85%] space-y-2 rounded-2xl border p-3 text-xs ${message.senderUid === currentUser?.uid ? 'border-gold/30 bg-gold/10 text-white' : 'border-darkBorder bg-darkCard text-gray-200'}`;
+                if (message.replyTo && typeof message.replyTo === 'object') {
+                    const quote = document.createElement('div');
+                    quote.className = 'rounded border-l-2 border-gold bg-darkBg/60 p-2';
+                    const author = document.createElement('p');
+                    author.className = 'text-[10px] font-bold text-gold';
+                    author.textContent = `Reply to ${message.replyTo.senderName || 'Marketplace member'}`;
+                    const preview = document.createElement('p');
+                    preview.className = 'whitespace-pre-wrap break-words text-gray-400';
+                    preview.textContent = message.replyTo.preview || 'Message';
+                    quote.append(author, preview);
+                    bubble.appendChild(quote);
+                }
                 if (message.text) {
                     const text = document.createElement('p');
                     text.className = 'whitespace-pre-wrap break-words';
@@ -5913,6 +6054,14 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 receipt.className = 'block text-[9px] text-gray-500';
                 receipt.textContent = `Sent by ${message.senderName || 'Marketplace member'} · ${message.coinCost || 0} coin${message.coinCost === 1 ? '' : 's'}`;
                 bubble.appendChild(receipt);
+                const reply = document.createElement('button');
+                reply.type = 'button';
+                reply.className = 'text-[10px] font-semibold text-gold hover:underline';
+                reply.textContent = 'Reply';
+                reply.setAttribute('aria-label', `Reply to message from ${message.senderName || 'Marketplace member'}`);
+                reply.addEventListener('click', () => setGoldenChatReply(entry.doc.id, message, chatId));
+                bubble.appendChild(reply);
+                if (message.type === 'text') enableGoldenChatSwipeReply(bubble, entry.doc.id, message, chatId);
                 row.appendChild(bubble);
                 container.appendChild(row);
             }
@@ -5989,6 +6138,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 : imageFile ? (imageFile.type.startsWith('video/') ? 'video' : 'image')
                     : 'text';
             chatSending = true;
+            input.disabled = true;
             const submit = document.querySelector('#chatComposer button[type="submit"]');
             const originalLabel = submit.textContent;
             submit.disabled = true;
@@ -6001,6 +6151,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     const messageId = firebaseFirestore.collection('goldenChats').doc(chatId)
                         .collection('messages').doc().id;
                     payload = { chatId, messageId, type, text };
+                    if (goldenChatReplyTarget?.chatId === chatId) {
+                        payload.replyToMessageId = goldenChatReplyTarget.messageId;
+                    }
                     if (mediaFile) {
                         payload.mediaPath = `golden-chat-media/${chatId}/${currentUser.uid}/${messageId}`;
                     }
@@ -6034,9 +6187,11 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     messageId: payload.messageId,
                     type: payload.type,
                     text: payload.text,
-                    mediaPath: payload.mediaPath || ''
+                    mediaPath: payload.mediaPath || '',
+                    ...(payload.replyToMessageId ? { replyToMessageId: payload.replyToMessageId } : {})
                 });
                 chatSendRetry = null;
+                resetGoldenChatReply();
                 input.value = '';
                 pendingChatFiles.forEach(file => URL.revokeObjectURL(file.url));
                 pendingChatFiles = [];
@@ -6092,6 +6247,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 submit.textContent = chatSendRetry ? 'Retry send' : originalLabel;
             } finally {
                 chatSending = false;
+                input.disabled = false;
                 submit.disabled = false;
                 updateChatSendButtonCost();
                 if (!chatSendRetry && !document.getElementById('chatMessageInput').value.trim() &&
@@ -6470,6 +6626,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 showToast('Sign in to view your notifications.', 'info');
                 return;
             }
+            toggleSideMenu(false);
             renderInAppNotifications();
             const modal = document.getElementById('inAppNotificationsModal');
             modal.classList.remove('hidden');
@@ -6485,9 +6642,11 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         function updateNotificationUnreadCount() {
             const badge = document.getElementById('notificationMenuUnreadCount');
             const unreadCount = inAppNotifications.filter(notification => !notification.readAt).length;
-            badge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
-            badge.classList.toggle('hidden', unreadCount === 0);
-            badge.setAttribute('aria-label', `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`);
+            const unavailable = notificationLoadState === 'error';
+            badge.textContent = unavailable ? '!' : String(unreadCount);
+            badge.classList.toggle('hidden', !unavailable && unreadCount === 0);
+            badge.setAttribute('aria-label', unavailable ? 'Notifications unavailable' :
+                `${unreadCount} unread notifications among the loaded items`);
         }
 
         function renderInAppNotifications() {
@@ -6496,8 +6655,16 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 container.innerHTML = '<p class="rounded-xl border border-darkBorder bg-darkBg p-4 text-sm text-gray-400">Sign in to view notifications.</p>';
                 return;
             }
+            if (notificationLoadState === 'loading') {
+                container.innerHTML = '<p class="rounded-xl border border-darkBorder bg-darkBg p-4 text-sm text-gray-400">Loading notifications…</p>';
+                return;
+            }
+            if (notificationLoadState === 'error') {
+                container.innerHTML = '<div class="rounded-xl border border-red-500/30 bg-darkBg p-4 text-sm text-gray-300">Notifications could not load. Check your connection and try again. <button type="button" onclick="subscribeToNotifications()" class="font-bold text-gold underline">Retry</button></div>';
+                return;
+            }
             if (inAppNotifications.length === 0) {
-                container.innerHTML = '<p class="rounded-xl border border-darkBorder bg-darkBg p-4 text-sm text-gray-400">No notifications yet. Stock alerts from Vendors you follow will appear here.</p>';
+                container.innerHTML = '<p class="rounded-xl border border-darkBorder bg-darkBg p-4 text-sm text-gray-400">No notifications yet. New account and marketplace updates will appear here.</p>';
                 return;
             }
 
@@ -6508,9 +6675,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 const isUnread = !notification.readAt;
                 return `
                     <button type="button"
-                        onclick="openStockAlertNotification(this.dataset.notificationId, this.dataset.productId)"
+                        onclick="openInAppNotification(this.dataset.notificationId)"
                         data-notification-id="${escapeHtml(notification.id)}"
-                        data-product-id="${escapeHtml(notification.productId || '')}"
                         class="w-full rounded-xl border ${isUnread ? 'border-gold/50 bg-gold/5' : 'border-darkBorder bg-darkBg'} p-4 text-left transition hover:border-gold/60">
                         <span class="flex items-start justify-between gap-3">
                             <span class="min-w-0">
@@ -6522,13 +6688,23 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         </span>
                     </button>
                 `;
-            }).join('');
+            }).join('') + (inAppNotifications.length === notificationLimit
+                ? '<button type="button" onclick="loadOlderNotifications()" class="w-full rounded-xl border border-darkBorder p-3 text-xs font-bold text-gold">Load older notifications</button>'
+                : '');
         }
 
-        function subscribeToNotifications() {
+        function loadOlderNotifications() {
+            notificationLimit += 50;
+            subscribeToNotifications(false);
+        }
+
+        function subscribeToNotifications(resetLimit = true) {
+            const revision = ++notificationSubscriptionRevision;
             if (notificationsUnsubscribe) notificationsUnsubscribe();
             notificationsUnsubscribe = null;
+            if (resetLimit) notificationLimit = 50;
             inAppNotifications = [];
+            notificationLoadState = currentUser ? 'loading' : 'idle';
             updateNotificationUnreadCount();
             renderInAppNotifications();
             if (!currentUser) return;
@@ -6537,29 +6713,33 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             notificationsUnsubscribe = firebaseFirestore.collection('users').doc(uid)
                 .collection('notifications')
                 .orderBy('createdAt', 'desc')
-                .limit(50)
+                .limit(notificationLimit)
                 .onSnapshot(snapshot => {
-                    if (currentUser?.uid !== uid) return;
+                    if (currentUser?.uid !== uid || revision !== notificationSubscriptionRevision) return;
                     inAppNotifications = snapshot.docs.map(document => ({
                         id: document.id,
                         ...document.data()
                     }));
+                    notificationLoadState = 'ready';
                     updateNotificationUnreadCount();
                     renderInAppNotifications();
                 }, error => {
-                    if (currentUser?.uid !== uid) return;
+                    if (currentUser?.uid !== uid || revision !== notificationSubscriptionRevision) return;
                     console.error('Unable to load marketplace notifications.', error);
-                    showToast('Notifications could not load. Check your connection and Firestore rules.', 'error');
+                    notificationLoadState = 'error';
+                    updateNotificationUnreadCount();
+                    renderInAppNotifications();
                 });
         }
 
-        async function openStockAlertNotification(notificationId, productId) {
+        async function openInAppNotification(notificationId) {
             if (!currentUser || !/^[A-Za-z0-9_-]{1,160}$/.test(notificationId || '')) return;
             const notification = inAppNotifications.find(item => item.id === notificationId);
             if (!notification) return;
+            const uid = currentUser.uid;
             if (!notification.readAt) {
                 try {
-                    await firebaseFirestore.collection('users').doc(currentUser.uid)
+                    await firebaseFirestore.collection('users').doc(uid)
                         .collection('notifications').doc(notificationId)
                         .update({ readAt: firebase.firestore.FieldValue.serverTimestamp() });
                 } catch (error) {
@@ -6568,11 +6748,66 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 }
             }
 
+            if (currentUser?.uid !== uid) return;
             closeNotificationsModal();
-            if (typeof productId === 'string' && products.some(product => product.id === productId)) {
-                openDetailModal(productId);
-            } else {
-                showToast('This listing is no longer available.', 'info');
+            if (notification.type === 'stock_alert' || notification.type === 'new_product') {
+                const productId = notification.productId;
+                if (typeof productId !== 'string' || !productId || productId.includes('/')) {
+                    showToast('This listing is no longer available.', 'info');
+                    return;
+                }
+                try {
+                    const snapshot = await firebaseFirestore.collection('products').doc(productId).get();
+                    if (currentUser?.uid !== uid) return;
+                    if (!snapshot.exists) {
+                        showToast('This listing is no longer available.', 'info');
+                        return;
+                    }
+                    const index = products.findIndex(product => product.id === productId);
+                    const product = { ...snapshot.data(), id: snapshot.id };
+                    if (index < 0) products.unshift(product);
+                    else products[index] = product;
+                    showMarketplacePage();
+                    openDetailModal(productId);
+                } catch (error) {
+                    console.error('Unable to open the notification listing.', error);
+                    showToast('This listing could not be opened. Check your connection.', 'error');
+                }
+            } else if (notification.type === 'chat' || notification.type === 'missed_call') {
+                const chatId = notification.chatId;
+                if (typeof chatId !== 'string' || !/^chat_[a-f0-9]{40}$/.test(chatId)) {
+                    showToast('This conversation is unavailable.', 'info');
+                    return;
+                }
+                try {
+                    const snapshot = await firebaseFirestore.collection('goldenChats').doc(chatId).get();
+                    if (currentUser?.uid !== uid) return;
+                    if (!snapshot.exists || !snapshot.data().participantIds?.includes(uid)) {
+                        showToast('This conversation is unavailable.', 'info');
+                        return;
+                    }
+                    openChatPage();
+                    if (!document.getElementById('chatPage').classList.contains('hidden')) {
+                        selectGoldenChat(snapshot.id, snapshot.data());
+                    }
+                } catch (error) {
+                    console.error('Unable to open the notification conversation.', error);
+                    showToast('This conversation could not be opened. Check your connection.', 'error');
+                }
+            } else if (notification.type === 'order') {
+                openAccountPage('escrow');
+            } else if (notification.type === 'follow') {
+                openAccountPage('followers');
+            } else if (notification.type === 'account') {
+                openAccountPage('profile');
+            } else if (notification.type === 'wallet' || notification.type === 'payout') {
+                openChatPage();
+                if (!document.getElementById('chatPage').classList.contains('hidden') &&
+                    document.getElementById('chatWalletDetails').classList.contains('hidden')) {
+                    toggleChatWalletDetails();
+                }
+            } else if (notification.type === 'product_digest') {
+                showMarketplacePage();
             }
         }
 
@@ -8040,7 +8275,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                             : 'border-darkBorder bg-darkBg text-gray-200 hover:border-gold/50 hover:text-gold'
                     }">
                     <i class="fa-solid ${following ? 'fa-user-check' : 'fa-user-plus'}"></i>
-                    <span>${following ? 'Following' : 'Follow ${memberRole.toLowerCase()}'}</span>
+                    <span>${following ? 'Following' : `Follow ${memberRole.toLowerCase()}`}</span>
                 </button>
             `;
         }

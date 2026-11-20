@@ -1,6 +1,6 @@
 const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
-const { AggregateField, FieldPath, FieldValue, getFirestore } = require("firebase-admin/firestore");
+const { AggregateField, FieldPath, FieldValue, Timestamp, getFirestore } = require("firebase-admin/firestore");
 const { getStorage } = require("firebase-admin/storage");
 const crypto = require("node:crypto");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
@@ -15,10 +15,29 @@ const { logger } = require("firebase-functions");
 const { calculateEscrowFee } = require("./escrow-fee");
 const escrowFulfillment = require("./escrow-fulfillment");
 const { answerGoldenAi } = require("./golden-ai");
+const { createNotifications } = require("./notifications");
 
 initializeApp();
 
 const db = getFirestore();
+const notifications = createNotifications({ db, FieldPath, Timestamp });
+const notificationTrigger = document => ({ document, retry: true });
+exports.notifyNewFollower = onDocumentCreated(notificationTrigger("users/{userId}/followers/{followerId}"), notifications.follower);
+exports.notifyGoldenChatMessage = onDocumentCreated(notificationTrigger("goldenChats/{chatId}/messages/{messageId}"), notifications.message);
+exports.notifyMissedCall = onDocumentWritten(notificationTrigger("calls/{callId}"), notifications.call);
+exports.notifyEscrowOrder = onDocumentWritten(notificationTrigger("escrowOrders/{orderId}"), notifications.order);
+exports.notifyVendorWithdrawal = onDocumentWritten(notificationTrigger("escrowWithdrawals/{withdrawalId}"), notifications.withdrawal);
+exports.notifyWalletPurchase = onDocumentWritten(notificationTrigger("walletPurchases/{purchaseId}"), notifications.walletPurchase);
+exports.notifyWalletUpdate = onDocumentWritten(notificationTrigger("quizWallets/{userId}"), notifications.wallet);
+exports.notifyAccountUpdate = onDocumentWritten(notificationTrigger("users/{userId}"), notifications.profile);
+exports.notifyNewVendorProduct = onDocumentCreated(
+  { document: "products/{productId}", retry: true, memory: "1GiB", timeoutSeconds: 540 },
+  notifications.product
+);
+exports.expireUnansweredCalls = onSchedule(
+  { schedule: "* * * * *", timeZone: "Etc/UTC", timeoutSeconds: 540, retryCount: 3 },
+  notifications.expireCalls
+);
 const FLUTTERWAVE_SECRET_KEY = defineSecret("FLUTTERWAVE_SECRET_KEY");
 const FLUTTERWAVE_WEBHOOK_HASH = defineSecret("FLUTTERWAVE_WEBHOOK_HASH");
 const FLW_SECRET_KEY = defineSecret("FLW_SECRET_KEY");
@@ -3480,8 +3499,11 @@ exports.sendGoldenChatMessage = onCall(async request => {
   const type = request.data?.type;
   const text = typeof request.data?.text === "string" ? request.data.text.trim() : "";
   const mediaPath = request.data?.mediaPath;
+  const replyToMessageId = request.data?.replyToMessageId;
   if (typeof chatId !== "string" || !/^chat_[a-f0-9]{40}$/.test(chatId) ||
       typeof messageId !== "string" || !/^[A-Za-z0-9_-]{20}$/.test(messageId) ||
+      (replyToMessageId !== undefined && (typeof replyToMessageId !== "string" ||
+        !/^[A-Za-z0-9_-]{20}$/.test(replyToMessageId) || replyToMessageId === messageId)) ||
       !["text", "image", "video", "voice"].includes(type) ||
       (type === "text" && (!text || text.length > 2000)) ||
       (type !== "text" && (typeof mediaPath !== "string" ||
@@ -3547,6 +3569,23 @@ exports.sendGoldenChatMessage = onCall(async request => {
     if (!recipientUid) {
       throw new HttpsError("failed-precondition", "This conversation does not have a valid recipient.");
     }
+    let replyTo = null;
+    if (replyToMessageId) {
+      const parentSnapshot = await transaction.get(chatRef.collection("messages").doc(replyToMessageId));
+      if (!parentSnapshot.exists) {
+        throw new HttpsError("not-found", "The message you are replying to is no longer available.");
+      }
+      const parent = parentSnapshot.data();
+      const parentText = typeof parent.text === "string" ? parent.text.trim() : "";
+      const mediaLabel = parent.type === "image" ? "Photo"
+        : parent.type === "video" ? "Video clip"
+          : parent.type === "voice" ? "Voice note" : "Message";
+      replyTo = {
+        messageId: replyToMessageId,
+        senderName: typeof parent.senderName === "string" ? parent.senderName.slice(0, 120) : "Marketplace member",
+        preview: (parentText || mediaLabel).slice(0, 200)
+      };
+    }
     const [senderProfileSnapshot, recipientProfileSnapshot] = await Promise.all([
       transaction.get(db.collection("users").doc(auth.uid)),
       transaction.get(db.collection("users").doc(recipientUid))
@@ -3601,6 +3640,7 @@ exports.sendGoldenChatMessage = onCall(async request => {
       coinCost: cost,
       createdAt: FieldValue.serverTimestamp()
     };
+    if (replyTo) message.replyTo = replyTo;
     if (type === "text") {
       transaction.set(walletRef, {
         ...wallet,

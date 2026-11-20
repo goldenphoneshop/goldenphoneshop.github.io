@@ -59,6 +59,7 @@ function setup() {
     "./escrow-fee": require("../escrow-fee"),
     "./escrow-fulfillment": require("../escrow-fulfillment"),
     "./golden-ai": require("../golden-ai"),
+    "./notifications": require("../notifications"),
     "firebase-admin/app": { initializeApp() {} },
     "firebase-admin/auth": {
       getAuth: () => ({
