@@ -336,7 +336,7 @@
                 </button>
             </div>
             <div class="mt-auto rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-3 text-[11px] leading-relaxed text-yellow-100">
-                Golden Chat messages and media use verified accounts, private conversations, and server-checked coin charges. Voice and video calls remain unavailable until a calling provider is configured.
+                Golden Chat messages and media use verified accounts, private conversations, and server-checked coin charges. Voice and video calls are free and require both participants to have the site open.
             </div>
         </nav>
     </div>
@@ -523,8 +523,8 @@
                             <button id="chatFullscreenToggle" type="button" onclick="toggleGoldenChatFullscreen()" title="Expand Golden Chat" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-300 hover:text-gold" aria-label="Expand Golden Chat to full screen">
                                 <i id="chatFullscreenIcon" class="fa-solid fa-expand" aria-hidden="true"></i>
                             </button>
-                            <button type="button" onclick="showChatBackendNotice('Voice calls')" title="Voice calling provider is not configured" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-500" aria-label="Voice calls not configured"><i class="fa-solid fa-phone"></i></button>
-                            <button type="button" onclick="showChatBackendNotice('Video calls')" title="Video calling provider is not configured" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-500" aria-label="Video calls not configured"><i class="fa-solid fa-video"></i></button>
+                            <button type="button" onclick="goldenCalls.start('voice')" title="Start a free voice call" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-300 hover:text-gold" aria-label="Start voice call"><i class="fa-solid fa-phone"></i></button>
+                            <button type="button" onclick="goldenCalls.start('video')" title="Start a free video call" class="h-9 w-9 rounded-lg border border-darkBorder text-gray-300 hover:text-gold" aria-label="Start video call"><i class="fa-solid fa-video"></i></button>
                         </div>
                     </header>
                     <div id="chatProductStatus" class="hidden border-b border-darkBorder bg-gold/5 px-4 py-2 text-[10px] text-gray-300" aria-live="polite"></div>
@@ -617,7 +617,7 @@
                     <span>Video clip · <strong class="text-gold">4 coins</strong></span>
                     <span>Voice note · <strong class="text-gold">3 coins</strong></span>
                 </div>
-                <p class="mt-2 text-[10px] leading-relaxed text-gray-500">Only the sender pays. For Buyer-to-Vendor text messages and voice notes only, half the charge is credited to the Vendor as spendable Chat coins; photos and videos are not shared. This is not cash or withdrawable earnings. Calls are unavailable and do not use coins. Chat coins are separate from quiz likes and product Like/Hate reactions.</p>
+                <p class="mt-2 text-[10px] leading-relaxed text-gray-500">Only the sender pays. For Buyer-to-Vendor text messages and voice notes only, half the charge is credited to the Vendor as spendable Chat coins; photos and videos are not shared. This is not cash or withdrawable earnings. Calls are free and do not use coins. Chat coins are separate from quiz likes and product Like/Hate reactions.</p>
             </div>
             <div class="mt-4 space-y-2">
                 <button type="button" onclick="startWalletPurchase('chatCoins12')" class="flex w-full items-center justify-between gap-3 rounded-xl border border-gold/30 bg-darkBg p-3 text-left hover:border-gold">
@@ -634,7 +634,7 @@
                 Explore Golden Coin utilities
             </button>
             <button type="button" onclick="openCoinPurchaseRestore()" class="mt-2 w-full text-[10px] font-semibold text-gray-400 hover:text-gold">Already paid but wallet credits are missing? Verify your purchase</button>
-            <p class="mt-3 text-[10px] leading-relaxed text-gray-500">*Calls are not active until a calling provider is configured. You will not be charged for calls while they are unavailable. Payments are credited only after Flutterwave verifies them.</p>
+            <p class="mt-3 text-[10px] leading-relaxed text-gray-500">Calls require both participants to have the site open and may not connect on restrictive networks. Payments are credited only after Flutterwave verifies them.</p>
         </section>
     </div>
 
@@ -679,7 +679,7 @@
                     <li>Open Golden Chat from a Vendor's listing or profile to ask about a product.</li>
                     <li>The sender pays 1 coin for text, 2 for a photo, 4 for a video clip, or 3 for a voice note. Only Buyer-to-Vendor text messages and voice notes share half their charge with the Vendor; photos and videos are not shared. The recipient is not charged.</li>
                 </ol>
-                <p class="mt-2"><strong class="text-gold">Available:</strong> coin purchases, paid Golden Chat messages/media, 24-hour listing boosts, monthly Verified Dealer Badges, stock-alert broadcasts, referral rewards, daily check-in coins, voucher codes, and escrow checkout. Voice/video calls are not available. Vendor cash-out availability is controlled at launch.</p>
+                <p class="mt-2"><strong class="text-gold">Available:</strong> coin purchases, paid Golden Chat messages/media, free voice/video calls, 24-hour listing boosts, monthly Verified Dealer Badges, stock-alert broadcasts, referral rewards, daily check-in coins, voucher codes, and escrow checkout. Vendor cash-out availability is controlled at launch.</p>
             </div>
             <div class="mt-5 grid gap-5 md:grid-cols-2">
                 <section aria-labelledby="vendorCoinUtilitiesHeading">
@@ -1595,10 +1595,40 @@
     </button>
 
     <!-- NOTIFICATION TOAST CONTAINER -->
-    <div id="toastContainer" class="fixed top-20 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+    <div id="toastContainer" class="fixed top-20 right-5 z-[110] flex flex-col gap-2 pointer-events-none"></div>
+
+    <div id="goldenIncomingCallModal" class="fixed inset-0 z-[100] flex hidden items-center justify-center bg-black/80 p-4" role="dialog" aria-modal="true" aria-labelledby="goldenIncomingCallHeading">
+        <section class="w-full max-w-sm rounded-2xl border border-gold/40 bg-darkCard p-5 text-center shadow-2xl">
+            <h2 id="goldenIncomingCallHeading" class="text-lg font-bold text-white">Incoming call</h2>
+            <p id="goldenIncomingCallText" class="mt-2 text-sm text-gray-300" role="status"></p>
+            <div class="mt-4 flex justify-center gap-3">
+                <button type="button" onclick="goldenCalls.decline()" class="rounded-lg bg-red-700 px-4 py-2 text-sm font-bold text-white">Decline</button>
+                <button type="button" onclick="goldenCalls.answer()" class="rounded-lg gold-gradient-bg px-4 py-2 text-sm font-bold text-black">Answer</button>
+            </div>
+        </section>
+    </div>
+    <div id="goldenCallModal" class="fixed inset-0 z-[100] flex hidden items-center justify-center bg-black/90 p-4" role="dialog" aria-modal="true" aria-labelledby="goldenCallTitle">
+        <section class="w-full max-w-lg rounded-2xl border border-gold/40 bg-darkCard p-5 text-center shadow-2xl">
+            <h2 id="goldenCallTitle" class="text-lg font-bold text-white">Call</h2>
+            <p id="goldenCallStatus" class="mt-1 text-sm text-gray-300" role="status" aria-live="polite"></p>
+            <p id="goldenCallTimer" class="mt-1 text-sm font-bold text-gold">00:00</p>
+            <div id="goldenCallVideoArea" class="mt-4 grid hidden grid-cols-2 gap-2">
+                <video id="goldenCallRemoteVideo" autoplay playsinline muted class="aspect-video w-full rounded-lg bg-black object-contain" aria-label="Remote video"></video>
+                <video id="goldenCallLocalVideo" autoplay playsinline muted class="aspect-video w-full rounded-lg bg-black object-contain" aria-label="Your video"></video>
+            </div>
+            <audio id="goldenCallRemoteAudio" autoplay></audio>
+            <div class="mt-4 flex flex-wrap justify-center gap-2">
+                <button id="goldenCallEnableAudio" type="button" onclick="goldenCalls.enableAudio()" class="hidden rounded-lg border border-gold px-3 py-2 text-xs text-gold">Enable audio</button>
+                <button id="goldenCallMute" type="button" onclick="goldenCalls.mute()" class="rounded-lg border border-darkBorder px-3 py-2 text-xs text-white">Mute mic</button>
+                <button id="goldenCallCamera" type="button" onclick="goldenCalls.toggleCamera()" class="rounded-lg border border-darkBorder px-3 py-2 text-xs text-white">Turn camera off</button>
+                <button type="button" onclick="goldenCalls.hangup()" class="rounded-lg bg-red-700 px-4 py-2 text-xs font-bold text-white">Hang up</button>
+            </div>
+        </section>
+    </div>
 
     <script src="functions/escrow-fee.js"></script>
     <script src="functions/escrow-fulfillment.js"></script>
+    <script src="golden-calls.js"></script>
     <!-- APPLICATION LOGIC SCRIPT -->
     <script>
         const firebaseConfig = {
@@ -1787,6 +1817,17 @@
         let cartItems = [];
         let activeGoldenChatId = null;
         let activeGoldenChatData = null;
+        const goldenCalls = createGoldenCalls({
+            db: firebaseFirestore,
+            document,
+            getUser: () => currentUser,
+            getChat: () => ({ id: activeGoldenChatId, data: activeGoldenChatData }),
+            serverTimestamp: () => firebase.firestore.FieldValue.serverTimestamp(),
+            notify: (message, type) => showToast(message, type),
+            mediaDevices: navigator.mediaDevices,
+            RTCPeerConnection: window.RTCPeerConnection,
+            isSecureContext: window.isSecureContext
+        });
         let activeGoldenChatLatestMessageId = null;
         let goldenChatListUnsubscribe = null;
         let goldenChatUnreadUnsubscribe = null;
@@ -1862,6 +1903,7 @@
             document.getElementById('profileAgeRangeInput').addEventListener('change', updateProfileCompletionStatus);
             document.addEventListener('visibilitychange', handlePresenceVisibilityChange);
             window.addEventListener('pagehide', () => {
+                goldenCalls.stop();
                 markPresenceInactive();
                 clearAllCommunityCommentVoices();
                 if (verifiedDealerBadgesUnsubscribe) verifiedDealerBadgesUnsubscribe();
@@ -1871,7 +1913,10 @@
                     verifiedDealerBadgeExpiryTimer = null;
                 }
             });
-            window.addEventListener('pageshow', subscribeToVerifiedDealerBadges);
+            window.addEventListener('pageshow', () => {
+                subscribeToVerifiedDealerBadges();
+                if (currentUser) goldenCalls.subscribe(currentUser.uid);
+            });
             subscribeSharedProducts();
             subscribeCommunityPosts();
         };
@@ -1911,6 +1956,7 @@ function initializeFirebaseAuth() {
     firebaseAuth.onAuthStateChanged(async (user) => {
         const revision = ++authStateRevision;
         if (!user) {
+            goldenCalls.stop();
             stopVerifiedDealerSettingsSubscription();
             clearAllCommunityCommentVoices();
             communityCommentDrafts.clear();
@@ -1945,6 +1991,7 @@ function initializeFirebaseAuth() {
             return;
         }
         if (user.email && !user.emailVerified) {
+            goldenCalls.stop();
             stopVerifiedDealerSettingsSubscription();
             clearAllCommunityCommentVoices();
             communityCommentDrafts.clear();
@@ -1971,6 +2018,7 @@ function initializeFirebaseAuth() {
 
         const localProfile = loadAccountProfile(user.uid);
         if (currentUser?.uid && currentUser.uid !== user.uid) {
+            goldenCalls.stop();
             stopVerifiedDealerSettingsSubscription();
             clearAllCommunityCommentVoices();
             communityCommentDrafts.clear();
@@ -1988,6 +2036,7 @@ function initializeFirebaseAuth() {
             isAdmin: false
         };
         subscribeToGoldenChatUnread();
+        goldenCalls.subscribe(user.uid);
         renderCommunityPosts();
         refreshCommunityPostLikeSubscriptions();
         renderAuthNav();
@@ -6448,10 +6497,6 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const modal = document.getElementById('chatCoinStoreModal');
             modal.classList.add('hidden');
             modal.classList.remove('flex');
-        }
-
-        function showChatBackendNotice(feature) {
-            showToast(`${feature} will be available after a calling provider is configured. No coins are charged.`, 'info');
         }
 
         function openAuthModal(tab = 'signin') {

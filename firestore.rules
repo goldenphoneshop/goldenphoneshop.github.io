@@ -500,6 +500,83 @@ service cloud.firestore {
       }
     }
 
+    function callParticipant(data) {
+      return verifiedAccount()
+        && (request.auth.uid == data.callerUid || request.auth.uid == data.calleeUid);
+    }
+
+    function validCallDescription(value, descriptionType) {
+      return value is map
+        && value.keys().hasOnly(['type', 'sdp'])
+        && value.keys().hasAll(['type', 'sdp'])
+        && value.type == descriptionType
+        && value.sdp is string && value.sdp.size() > 0 && value.sdp.size() <= 65536;
+    }
+
+    function validCallCandidate(data) {
+      return data.keys().hasOnly(['candidate', 'sdpMid', 'sdpMLineIndex'])
+        && data.keys().hasAll(['candidate', 'sdpMid', 'sdpMLineIndex'])
+        && data.candidate is string && data.candidate.size() > 0 && data.candidate.size() <= 4096
+        && (data.sdpMid == null || (data.sdpMid is string && data.sdpMid.size() <= 256))
+        && (data.sdpMLineIndex == null || (data.sdpMLineIndex is int && data.sdpMLineIndex >= 0));
+    }
+
+    match /calls/{callId} {
+      allow get, list: if callParticipant(resource.data);
+      allow create: if verifiedAccount()
+        && request.resource.data.keys().hasOnly([
+          'chatId', 'callerUid', 'calleeUid', 'type', 'status', 'offer', 'createdAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'chatId', 'callerUid', 'calleeUid', 'type', 'status', 'offer', 'createdAt'
+        ])
+        && request.resource.data.chatId is string
+        && request.resource.data.callerUid == request.auth.uid
+        && request.resource.data.calleeUid is string
+        && request.resource.data.calleeUid != request.auth.uid
+        && isGoldenChatParticipant(request.resource.data.chatId)
+        && get(/databases/$(database)/documents/goldenChats/$(request.resource.data.chatId)).data.participantIds.size() == 2
+        && request.resource.data.calleeUid in get(/databases/$(database)/documents/goldenChats/$(request.resource.data.chatId)).data.participantIds
+        && request.resource.data.type in ['voice', 'video']
+        && request.resource.data.status == 'ringing'
+        && validCallDescription(request.resource.data.offer, 'offer')
+        && request.resource.data.createdAt == request.time;
+      allow update: if callParticipant(resource.data)
+        && (
+          (request.auth.uid == resource.data.calleeUid
+            && resource.data.status == 'ringing'
+            && request.resource.data.status == 'accepted'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'answer'])
+            && validCallDescription(request.resource.data.answer, 'answer'))
+          || (request.auth.uid == resource.data.calleeUid
+            && resource.data.status == 'ringing'
+            && request.resource.data.status == 'declined'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+          || (resource.data.status in ['ringing', 'accepted']
+            && request.resource.data.status == 'ended'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+        );
+      allow delete: if false;
+
+      match /callerCandidates/{candidateId} {
+        allow read: if callParticipant(get(/databases/$(database)/documents/calls/$(callId)).data);
+        allow create: if callParticipant(get(/databases/$(database)/documents/calls/$(callId)).data)
+          && request.auth.uid == get(/databases/$(database)/documents/calls/$(callId)).data.callerUid
+          && get(/databases/$(database)/documents/calls/$(callId)).data.status in ['ringing', 'accepted']
+          && validCallCandidate(request.resource.data);
+        allow update, delete: if false;
+      }
+
+      match /calleeCandidates/{candidateId} {
+        allow read: if callParticipant(get(/databases/$(database)/documents/calls/$(callId)).data);
+        allow create: if callParticipant(get(/databases/$(database)/documents/calls/$(callId)).data)
+          && request.auth.uid == get(/databases/$(database)/documents/calls/$(callId)).data.calleeUid
+          && get(/databases/$(database)/documents/calls/$(callId)).data.status == 'accepted'
+          && validCallCandidate(request.resource.data);
+        allow update, delete: if false;
+      }
+    }
+
     match /goldenChatMediaReservations/{chatId}/messages/{messageId} {
       allow read, write: if false;
     }
