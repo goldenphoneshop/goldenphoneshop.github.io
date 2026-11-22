@@ -266,9 +266,9 @@
                             <span id="headerVerifiedEmploymentBadge" class="flex w-fit items-center gap-1 rounded-full border border-blue-300/60 bg-blue-500/15 px-2 py-1 text-[9px] font-extrabold text-blue-200 shadow-lg">
                                 <i class="fa-solid fa-shield-halved"></i> TEAM EMPLOYMENT VERIFIED
                             </span>
-                            <button id="headerThemeToggle" type="button" onclick="setDarkMode(document.body.classList.contains('light-mode'))" aria-label="Toggle light or dark mode" title="Toggle light or dark mode" class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gold/50 bg-gold/10 text-gold shadow-lg transition hover:bg-gold/20">
-                                <i class="fa-solid fa-sun text-[11px]"></i>
-                            </button>
+                            <span id="headerVerificationSeal" aria-label="Verified marketplace account" title="Verified marketplace account" class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-blue-300/60 bg-blue-500/15 text-blue-200 shadow-lg">
+                                <i class="fa-solid fa-certificate text-[11px]"></i>
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -2275,15 +2275,6 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         function setDarkMode(enabled, persist = true) {
             const isDarkMode = Boolean(enabled);
             document.body.classList.toggle('light-mode', !isDarkMode);
-            const headerToggle = document.getElementById('headerThemeToggle');
-            if (headerToggle) {
-                headerToggle.innerHTML = isDarkMode
-                    ? '<i class="fa-solid fa-sun text-[11px]"></i>'
-                    : '<i class="fa-solid fa-moon text-[11px]"></i>';
-                headerToggle.setAttribute('aria-label', isDarkMode
-                    ? 'Switch to light mode'
-                    : 'Switch to dark mode');
-            }
             if (persist) localStorage.setItem('goldenEagle_darkMode', String(isDarkMode));
         }
 
