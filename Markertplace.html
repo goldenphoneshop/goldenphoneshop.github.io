@@ -263,7 +263,7 @@
                         <span class="text-base sm:text-2xl font-extrabold tracking-wider gold-gradient-text block leading-none whitespace-nowrap">GOLDEN EAGLE</span>
                         <span class="hidden sm:block text-[10px] tracking-widest text-gray-400 uppercase font-semibold">GSM & Electronics Hub</span>
                         <div class="mt-1 flex items-center gap-2">
-                            <span id="headerVerifiedEmploymentBadge" class="flex w-fit items-center gap-1 rounded-full border border-blue-300/60 bg-blue-500/15 px-2 py-1 text-[9px] font-extrabold text-blue-200 shadow-lg">
+                            <span id="headerVerifiedEmploymentBadge" class="hidden w-fit items-center gap-1 rounded-full border border-blue-300/60 bg-blue-500/15 px-2 py-1 text-[9px] font-extrabold text-blue-200 shadow-lg">
                                 <span id="headerVerificationSeal" aria-label="Verified marketplace account" title="Verified marketplace account" class="inline-flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-full bg-blue-500 text-white">
                                     <i class="fa-solid fa-check text-[8px]"></i>
                                 </span>
@@ -2018,6 +2018,7 @@ function initializeFirebaseAuth() {
             renderCommunityPosts();
             refreshCommunityPostLikeSubscriptions();
             renderAuthNav();
+            updateHeaderVerifiedBadge();
             subscribeToQuizAccount();
             chatSendRetry = null;
             clearUnsentGoldenChatDraft();
@@ -2040,6 +2041,7 @@ function initializeFirebaseAuth() {
             renderCommunityPosts();
             refreshCommunityPostLikeSubscriptions();
             renderAuthNav();
+            updateHeaderVerifiedBadge();
             subscribeToQuizAccount();
             stopPresenceHeartbeat();
             if (!allowUnverifiedEmailSession) {
@@ -2078,6 +2080,7 @@ function initializeFirebaseAuth() {
         renderCommunityPosts();
         refreshCommunityPostLikeSubscriptions();
         renderAuthNav();
+        updateHeaderVerifiedBadge();
         updateAccountPageHeader();
         subscribeToQuizAccount();
         if (typeof renderProducts === 'function') {
@@ -2116,6 +2119,7 @@ function initializeFirebaseAuth() {
             saveAccountProfile(user.uid, remoteProfile);
             renderAuthNav();
             updateAccountPageHeader();
+            updateHeaderVerifiedBadge();
             updateMemberFollowButtons();
             if (activeAccountSection === 'profile' &&
                 !document.getElementById('accountPage').classList.contains('hidden') &&
@@ -2889,6 +2893,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         }
 
         function updateVerifiedDealerBadgeElements() {
+            updateHeaderVerifiedBadge();
             document.querySelectorAll('[data-verified-dealer-badge]').forEach(element => {
                 const profileExpiryMs = Number(element.dataset.verifiedDealerUntil) || 0;
                 element.classList.toggle(
@@ -2896,6 +2901,19 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     !isVerifiedDealer(element.dataset.verifiedDealerBadge) && profileExpiryMs <= Date.now()
                 );
             });
+        }
+
+        function updateHeaderVerifiedBadge() {
+            const badge = document.getElementById('headerVerifiedEmploymentBadge');
+            if (!badge) return;
+            const eligible = currentUser?.role === 'Vendor' &&
+                isVerifiedDealer(currentUser.uid);
+            badge.classList.toggle('hidden', !eligible);
+            badge.classList.toggle('flex', eligible);
+            const permanent = eligible &&
+                permanentVerifiedDealerBadges.has(currentUser.uid) &&
+                currentUser.email?.toLowerCase() === 'employmentteamr303@gmail.com';
+            badge.innerHTML = `<span id="headerVerificationSeal" aria-label="Verified Vendor" title="Verified Vendor" class="inline-flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-full bg-blue-500 text-white"><i class="fa-solid fa-check text-[8px]"></i></span><i class="fa-solid fa-shield-halved"></i> ${permanent ? 'TEAM EMPLOYMENT VERIFIED' : 'VERIFIED VENDOR'}`;
         }
 
         function scheduleVerifiedDealerBadgeExpiry() {
