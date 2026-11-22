@@ -73,9 +73,89 @@ const REFERRAL_ATTRIBUTION_WINDOW_MS = 24 * 60 * 60 * 1000;
 const VERIFIED_DEALER_BADGE_COST = 24;
 const REACTION_UNDO_WINDOW_MS = 10 * 1000;
 const OWNER_ADMIN_UID = "LROHsLUXfEPnC6bDmSvy3vcRnNE3";
+const PERMANENT_VERIFIED_DEALER_UID = "71ZtsYMKKtMsOSdHhBHAbjHzcqc2";
+const PERMANENT_VERIFIED_DEALER_EMAIL = "employmentteamr303@gmail.com";
+const FIRST_SANCTION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 function isOwnerAdmin(auth) {
   return auth?.uid === OWNER_ADMIN_UID;
+}
+
+function containsPhoneNumber(value) {
+  if (typeof value !== "string") return false;
+  const normalized = value
+    .normalize("NFKC")
+    .replace(/[０-９]/g, digit => String.fromCharCode(digit.charCodeAt(0) - 0xfee0))
+    .replace(/(?:zero|oh|o)/gi, match => match.toLowerCase().startsWith("o") ? "0" : "0")
+    .toLowerCase()
+    .replace(/[^0-9+]/g, "");
+  return /(?:\+?234[0-9]{10}|0[789][01][0-9]{8}|[0-9]{10,15})/.test(normalized);
+}
+
+function assertNoPhoneNumbers(data, fields) {
+  const field = fields.find(name => containsPhoneNumber(data[name]));
+  if (field) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Phone numbers and off-platform contact details cannot appear in product listings."
+    );
+  }
+}
+
+async function recordPostingViolation(auth, source, productId = null) {
+  const sanctionRef = db.collection("accountSanctions").doc(auth.uid);
+  const nowMs = Date.now();
+  const violationRef = db.collection("moderationViolations").doc();
+  const result = await db.runTransaction(async transaction => {
+    const sanctionSnapshot = await transaction.get(sanctionRef);
+    const current = sanctionSnapshot.data() || {};
+    const warningCount = Number.isSafeInteger(current.warningCount) ? current.warningCount + 1 : 1;
+    const existingUntilMs = timestampMillis(current.restrictedUntil);
+    const restrictedUntil = new Date(Math.max(existingUntilMs, nowMs) + FIRST_SANCTION_DURATION_MS);
+    transaction.set(sanctionRef, {
+      warningCount,
+      restrictedUntil,
+      ownerReviewRequired: warningCount >= 3,
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    transaction.create(violationRef, {
+      uid: auth.uid,
+      source,
+      productId,
+      warningNumber: warningCount,
+      createdAt: FieldValue.serverTimestamp()
+    });
+    transaction.create(db.collection("adminSecurityAudit").doc(), {
+      action: "phone-number-posting-violation",
+      actorUid: auth.uid,
+      targetUid: auth.uid,
+      warningNumber: warningCount,
+      source,
+      productId,
+      createdAt: FieldValue.serverTimestamp()
+    });
+    return { warningCount, restrictedUntilMs: restrictedUntil.getTime() };
+  });
+  return result;
+}
+
+async function assertCanPublish(auth) {
+  const snapshot = await db.collection("accountSanctions").doc(auth.uid).get();
+  if (!snapshot.exists) return;
+  const sanction = snapshot.data();
+  const restrictedUntilMs = timestampMillis(sanction.restrictedUntil);
+  if (sanction.ownerReviewRequired === true) {
+    throw new HttpsError(
+      "permission-denied",
+      "Your account is awaiting owner review after repeated contact-sharing violations."
+    );
+  }
+  if (restrictedUntilMs > Date.now()) {
+    throw new HttpsError(
+      "permission-denied",
+      `Product posting is restricted until ${new Date(restrictedUntilMs).toISOString()}.`
+    );
+  }
 }
 
 function requireVerifiedUser(request) {
@@ -1913,6 +1993,95 @@ async function fetchVendorTransferFee(secret, netNaira) {
   return Math.ceil(fee * 100 - 0.00000001);
 }
 
+function sanitizeProviderDiagnostic(value, fallback = "Flutterwave transfer request was rejected.") {
+  const text = typeof value === "string" ? value : fallback;
+  return text
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]")
+    .replace(/FLWSECK(?:_TEST)?-[A-Za-z0-9._-]+/gi, "[REDACTED_KEY]")
+    .replace(/[\r\n\t]+/g, " ")
+    .trim()
+    .slice(0, 500) || fallback;
+}
+
+async function readProviderTransferResponse(response) {
+  if (typeof response.text === "function") {
+    const text = await response.text();
+    let body = null;
+    if (text) {
+      try {
+        body = JSON.parse(text);
+      } catch (error) {
+        body = null;
+      }
+    }
+    return { body, rawTextLength: text.length };
+  }
+  return { body: await response.json(), rawTextLength: 0 };
+}
+
+function providerTransferDiagnostic(status, body, fallback) {
+  const providerStatus = typeof body?.status === "string"
+    ? sanitizeProviderDiagnostic(body.status, "unknown")
+    : "unknown";
+  const candidate = body?.message || body?.error?.message || body?.data?.message || fallback;
+  return {
+    providerHttpStatus: Number.isSafeInteger(status) ? status : 0,
+    providerStatus,
+    providerErrorMessage: sanitizeProviderDiagnostic(candidate, fallback)
+  };
+}
+
+async function saveProviderTransferDiagnostic(ref, diagnostic) {
+  await db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists || snapshot.data().status !== "INITIATING") return;
+    transaction.update(ref, {
+      providerHttpStatus: diagnostic.providerHttpStatus,
+      providerErrorStatus: diagnostic.providerStatus,
+      providerErrorMessage: diagnostic.providerErrorMessage,
+      providerErrorAt: FieldValue.serverTimestamp()
+    });
+  });
+}
+
+async function failRejectedProviderTransfer(ref, vendorUid, diagnostic) {
+  const balanceRef = db.collection("vendorPayoutBalances").doc(vendorUid);
+  await db.runTransaction(async transaction => {
+    const [snapshot, balanceSnapshot] = await Promise.all([
+      transaction.get(ref),
+      transaction.get(balanceRef)
+    ]);
+    if (!snapshot.exists || snapshot.data().status !== "INITIATING" ||
+        snapshot.data().providerTransferId) {
+      return false;
+    }
+    const payout = snapshot.data();
+    const debit = payout.debitedKobo;
+    const restored = escrowStoredBalance(balanceSnapshot, "availableKobo") + debit;
+    const parts = ["netKobo", "baseFeeKobo", "commissionKobo", "providerFeeKobo"]
+      .map(field => payout[field]);
+    if (!balanceSnapshot.exists || !Number.isSafeInteger(debit) || debit <= 0 ||
+        parts.some(value => !Number.isSafeInteger(value) || value < 0) ||
+        parts.reduce((sum, value) => sum + value, 0) !== debit ||
+        !Number.isSafeInteger(restored)) {
+      throw new HttpsError("failed-precondition", "The payout ledger needs reconciliation.");
+    }
+    transaction.set(balanceRef, {
+      availableKobo: restored,
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    transaction.update(ref, {
+      status: "FAILED",
+      providerHttpStatus: diagnostic.providerHttpStatus,
+      providerErrorStatus: diagnostic.providerStatus,
+      providerErrorMessage: diagnostic.providerErrorMessage,
+      providerErrorAt: FieldValue.serverTimestamp(),
+      refundedAt: FieldValue.serverTimestamp()
+    });
+    return true;
+  });
+}
+
 exports.getVendorPayoutQuote = onCall(
   { secrets: [FLW_SECRET_KEY, FLUTTERWAVE_SECRET_KEY], timeoutSeconds: 120 },
   async request => {
@@ -2106,8 +2275,26 @@ exports.requestVendorWithdrawal = onCall(
         }),
         signal: AbortSignal.timeout(15000)
       });
-      if (!response.ok) throw new Error(`Transfer request returned HTTP ${response.status}.`);
-      result = await response.json();
+      const parsed = await readProviderTransferResponse(response);
+      result = parsed.body;
+      if (!response.ok) {
+        const diagnostic = providerTransferDiagnostic(
+          response.status,
+          result,
+          "Flutterwave did not return a transfer response body."
+        );
+        await saveProviderTransferDiagnostic(withdrawalRef, diagnostic);
+        logger.error("Flutterwave transfer request rejected.", {
+          withdrawalId,
+          providerHttpStatus: diagnostic.providerHttpStatus,
+          providerStatus: diagnostic.providerStatus,
+          providerMessage: diagnostic.providerErrorMessage
+        });
+        if (response.status >= 400 && response.status < 500) {
+          await failRejectedProviderTransfer(withdrawalRef, auth.uid, diagnostic);
+        }
+        throw new Error(`Transfer request returned HTTP ${response.status}.`);
+      }
     } catch (error) {
       logger.error("Escrow payout requires reconciliation.", { withdrawalId, error: error.message });
       throw new HttpsError("unavailable", "Payout status is uncertain. Contact support; do not retry.");
@@ -2122,7 +2309,18 @@ exports.requestVendorWithdrawal = onCall(
           !Number.isFinite(transferFee) ||
           Math.ceil(transferFee * 100 - 0.00000001) !== quote.providerFeeKobo)) ||
         !["NEW", "PENDING", "SUCCESSFUL", "FAILED"].includes(transfer.status)) {
-      logger.error("Escrow payout response needs reconciliation.", { withdrawalId });
+      const diagnostic = providerTransferDiagnostic(
+        200,
+        result,
+        "Flutterwave returned an invalid or incomplete transfer response."
+      );
+      await saveProviderTransferDiagnostic(withdrawalRef, diagnostic);
+      logger.error("Flutterwave transfer response needs reconciliation.", {
+        withdrawalId,
+        providerHttpStatus: diagnostic.providerHttpStatus,
+        providerStatus: diagnostic.providerStatus,
+        providerMessage: diagnostic.providerErrorMessage
+      });
       throw new HttpsError("unavailable", "Payout status is uncertain. Contact support; do not retry.");
     }
     await db.runTransaction(async transaction => {
@@ -2858,6 +3056,106 @@ exports.getOrCreateGoldenChat = onCall(async request => {
   return { chatId, created, product, other: participants[otherUid] };
 });
 
+exports.publishMarketplaceProduct = onCall(async request => {
+  const auth = requireVerifiedUser(request);
+  const profileRef = db.collection("users").doc(auth.uid);
+  const data = request.data?.product;
+  const suppliedFields = [
+    "id", "title", "category", "price", "stock", "imageUrl", "imageUrls", "videoUrl",
+    "shortDesc", "fullDesc", "vendorName", "vendorLocation", "vendorContact", "rating", "createdAt"
+  ];
+  if (!data || typeof data !== "object" ||
+      Object.keys(data).some(key => !suppliedFields.includes(key))) {
+    throw new HttpsError("invalid-argument", "Submit a valid product listing.");
+  }
+  const productId = data.id;
+  if (typeof productId !== "string" || !/^prod-[A-Za-z0-9_-]{1,160}$/.test(productId)) {
+    throw new HttpsError("invalid-argument", "The product ID is invalid.");
+  }
+  const phoneFields = [
+    "title", "shortDesc", "fullDesc", "vendorName", "vendorLocation", "vendorContact"
+  ];
+  try {
+    assertNoPhoneNumbers(data, phoneFields);
+  } catch (error) {
+    if (!(error instanceof HttpsError)) throw error;
+    const violation = await recordPostingViolation(auth, "product-listing", productId);
+    throw new HttpsError(
+      "permission-denied",
+      `Contact details are prohibited. Warning ${violation.warningCount}: posting is restricted for one week.`
+    );
+  }
+  await assertCanPublish(auth);
+  const profileSnapshot = await profileRef.get();
+  if (!profileSnapshot.exists || profileSnapshot.data().role !== "Vendor") {
+    throw new HttpsError("permission-denied", "Only approved Vendors can publish products.");
+  }
+  if (typeof data.title !== "string" || !data.title.trim() || data.title.length > 160 ||
+      typeof data.category !== "string" || !data.category.trim() || data.category.length > 120 ||
+      typeof data.price !== "number" || !Number.isFinite(data.price) || data.price <= 0 ||
+      !Number.isSafeInteger(data.stock) || data.stock < 0 ||
+      typeof data.shortDesc !== "string" || data.shortDesc.length > 500 ||
+      typeof data.fullDesc !== "string" || data.fullDesc.length > 3000 ||
+      typeof data.vendorName !== "string" || data.vendorName.length > 120 ||
+      typeof data.vendorLocation !== "string" || data.vendorLocation.length > 200 ||
+      typeof data.vendorContact !== "string" || data.vendorContact.length > 80 ||
+      typeof data.rating !== "number" || !Number.isFinite(data.rating) ||
+      typeof data.createdAt !== "string" ||
+      typeof data.imageUrl !== "string" ||
+      !Array.isArray(data.imageUrls) ||
+      data.imageUrls.length > 20 ||
+      data.imageUrls.some(url => typeof url !== "string" || url.length > 2048) ||
+      typeof data.videoUrl !== "string" || data.videoUrl.length > 2048 ||
+      (!data.imageUrl && data.imageUrls.length === 0 && !data.videoUrl)) {
+    throw new HttpsError("invalid-argument", "Complete every required product field.");
+  }
+  const productRef = db.collection("products").doc(productId);
+  await productRef.create({
+    ...data,
+    vendorName: profileSnapshot.data().name || data.vendorName,
+    vendorContact: "In-app chat only",
+    ownerUid: auth.uid
+  });
+  return { productId, published: true };
+});
+
+exports.deleteOwnedMarketplaceContent = onCall(async request => {
+  const auth = requireVerifiedUser(request);
+  const { kind, itemId } = request.data || {};
+  if (!["product", "communityPost"].includes(kind) ||
+      typeof itemId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(itemId)) {
+    throw new HttpsError("invalid-argument", "Choose valid content to delete.");
+  }
+  const parentRef = kind === "product"
+    ? db.collection("products").doc(itemId)
+    : db.collection("communityPosts").doc(itemId);
+  const snapshot = await parentRef.get();
+  if (!snapshot.exists || snapshot.data().ownerUid !== auth.uid) {
+    throw new HttpsError("permission-denied", "You can only delete your own content.");
+  }
+  await parentRef.delete();
+  if (kind === "product") {
+    await Promise.all([
+      db.recursiveDelete(db.collection("productDiscussions").doc(itemId)),
+      db.collection("productDiscussionStats").doc(itemId).delete()
+    ]);
+    const bucket = getStorage().bucket();
+    const [files] = await bucket.getFiles({ prefix: `products/${auth.uid}/${itemId}/` });
+    await Promise.all(files.map(file => file.delete({ ignoreNotFound: true })));
+  } else {
+    await db.recursiveDelete(parentRef);
+    await db.collection("communityPostStats").doc(itemId).delete();
+  }
+  await db.collection("adminSecurityAudit").doc().create({
+    action: `delete-${kind}`,
+    actorUid: auth.uid,
+    targetUid: auth.uid,
+    itemId,
+    createdAt: FieldValue.serverTimestamp()
+  });
+  return { deleted: true, kind, itemId };
+});
+
 exports.boostProductListing = onCall(async request => {
   const auth = requireVerifiedUser(request);
   const { productId, operationId } = request.data || {};
@@ -3134,6 +3432,56 @@ exports.listVendorApplications = onCall(async request => {
   };
 });
 
+exports.listRestrictedAccounts = onCall(async request => {
+  requireEscrowAdmin(request);
+  const snapshot = await db.collection("accountSanctions")
+    .where("ownerReviewRequired", "==", true)
+    .limit(50)
+    .get();
+  return {
+    items: snapshot.docs.map(document => ({
+      uid: document.id,
+      warningCount: document.data().warningCount || 0,
+      restrictedUntilMs: timestampMillis(document.data().restrictedUntil),
+      permanent: document.data().permanent === true
+    }))
+  };
+});
+
+exports.adminConfirmPermanentRestriction = onCall(async request => {
+  const auth = requireEscrowAdmin(request);
+  const uid = request.data?.uid;
+  if (typeof uid !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(uid) ||
+      uid === OWNER_ADMIN_UID || uid === PERMANENT_VERIFIED_DEALER_UID) {
+    throw new HttpsError("invalid-argument", "Choose a valid restricted account.");
+  }
+  const sanctionRef = db.collection("accountSanctions").doc(uid);
+  await db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(sanctionRef);
+    if (!snapshot.exists || snapshot.data().ownerReviewRequired !== true ||
+        snapshot.data().warningCount < 3) {
+      throw new HttpsError(
+        "failed-precondition",
+        "The account must have three recorded warnings before permanent restriction."
+      );
+    }
+    transaction.set(sanctionRef, {
+      permanent: true,
+      permanentAt: FieldValue.serverTimestamp(),
+      reviewedBy: auth.uid
+    }, { merge: true });
+    transaction.create(db.collection("adminSecurityAudit").doc(), {
+      action: "permanent-account-restriction-approved",
+      actorUid: auth.uid,
+      targetUid: uid,
+      warningCount: snapshot.data().warningCount,
+      createdAt: FieldValue.serverTimestamp()
+    });
+  });
+  await getAuth().updateUser(uid, { disabled: true });
+  return { uid, restricted: true };
+});
+
 exports.adminSetVendorApproval = onCall(async request => {
   const auth = requireEscrowAdmin(request);
   const { uid, approved } = request.data || {};
@@ -3150,6 +3498,12 @@ exports.adminSetVendorApproval = onCall(async request => {
     ]);
     if (!profileSnapshot.exists || !applicationSnapshot.exists) {
       throw new HttpsError("not-found", "This vendor application could not be found.");
+    }
+    if (uid === PERMANENT_VERIFIED_DEALER_UID && approved !== true) {
+      throw new HttpsError(
+        "failed-precondition",
+        "The permanent verified account cannot be removed from the Vendor role."
+      );
     }
     transaction.set(profileRef, {
       role: approved ? "Vendor" : "Buyer",
@@ -3186,12 +3540,35 @@ exports.adminSetVerifiedDealerBadge = onCall(async request => {
   const profileRef = db.collection("users").doc(uid);
   const publicBadgeRef = db.collection("verifiedDealers").doc(uid);
   let verifiedUntilMs = null;
+  if (uid === PERMANENT_VERIFIED_DEALER_UID) {
+    const userRecord = await getAuth().getUser(uid);
+    if (!enabled || userRecord.email?.toLowerCase() !== PERMANENT_VERIFIED_DEALER_EMAIL) {
+      throw new HttpsError(
+        "permission-denied",
+        "This permanent verification marker is bound to the exact approved account and cannot be revoked."
+      );
+    }
+  }
   await db.runTransaction(async transaction => {
     const profileSnapshot = await transaction.get(profileRef);
     if (!profileSnapshot.exists || profileSnapshot.data().role !== "Vendor") {
       throw new HttpsError("failed-precondition", "Approve this account as a Vendor first.");
     }
-    if (enabled) {
+    if (uid === PERMANENT_VERIFIED_DEALER_UID) {
+      verifiedUntilMs = null;
+      transaction.set(profileRef, {
+        permanentVerifiedDealer: true,
+        verifiedDealerAutoRenew: false,
+        verifiedDealerRenewalDueAt: FieldValue.delete(),
+        verifiedDealerAutoRenewPaused: false
+      }, { merge: true });
+      transaction.set(publicBadgeRef, {
+        permanent: true,
+        approvedBy: auth.uid,
+        boundEmail: PERMANENT_VERIFIED_DEALER_EMAIL,
+        updatedAt: FieldValue.serverTimestamp()
+      });
+    } else if (enabled) {
       const verifiedUntil = addOneUtcCalendarMonth(new Date());
       verifiedUntilMs = verifiedUntil.getTime();
       transaction.set(profileRef, {

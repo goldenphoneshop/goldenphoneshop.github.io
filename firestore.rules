@@ -46,7 +46,8 @@ service cloud.firestore {
           'verifiedDealerUntil',
           'verifiedDealerAutoRenew',
           'verifiedDealerAutoRenewPaused',
-          'verifiedDealerRenewalDueAt'
+          'verifiedDealerRenewalDueAt',
+          'permanentVerifiedDealer'
         ])
         && data.uid == request.auth.uid
         && data.name is string
@@ -81,7 +82,9 @@ service cloud.firestore {
         && (!data.keys().hasAny(['verifiedDealerAutoRenewPaused'])
           || data.verifiedDealerAutoRenewPaused is bool)
         && (!data.keys().hasAny(['verifiedDealerRenewalDueAt'])
-          || data.verifiedDealerRenewalDueAt is timestamp);
+          || data.verifiedDealerRenewalDueAt is timestamp)
+        && (!data.keys().hasAny(['permanentVerifiedDealer'])
+          || data.permanentVerifiedDealer is bool);
     }
 
     function validProduct(data) {
@@ -150,7 +153,8 @@ service cloud.firestore {
           'verifiedDealerUntil',
           'verifiedDealerAutoRenew',
           'verifiedDealerAutoRenewPaused',
-          'verifiedDealerRenewalDueAt'
+          'verifiedDealerRenewalDueAt',
+          'permanentVerifiedDealer'
         ])
         && validUserProfile(request.resource.data)
         && request.resource.data.createdAt == request.time;
@@ -282,30 +286,7 @@ service cloud.firestore {
 
     match /products/{productId} {
       allow read: if true;
-      allow create: if isVendor()
-        && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.id == productId
-        && !request.resource.data.keys().hasAny(['boostedUntil'])
-        && validProduct(request.resource.data);
-      allow update: if isVendor()
-        && resource.data.ownerUid == request.auth.uid
-        && request.resource.data.ownerUid == resource.data.ownerUid
-        && request.resource.data.id == resource.data.id
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'title',
-          'category',
-          'price',
-          'stock',
-          'imageUrl',
-          'imageUrls',
-          'shortDesc',
-          'fullDesc',
-          'vendorName',
-          'vendorLocation',
-          'vendorContact'
-        ])
-        && validProduct(request.resource.data);
-      allow delete: if isVendor() && resource.data.ownerUid == request.auth.uid;
+      allow create, update, delete: if false;
     }
 
     match /verifiedDealers/{vendorUid} {
@@ -363,7 +344,7 @@ service cloud.firestore {
             && request.resource.data.videoUrl
               == get(/databases/$(database)/documents/communityPosts/$(request.resource.data.repostOf)).data.videoUrl));
       allow update: if false;
-      allow delete: if verifiedAccount() && resource.data.ownerUid == request.auth.uid;
+      allow delete: if false;
     }
 
     match /communityPosts/{postId}/comments/{commentId} {
@@ -501,6 +482,15 @@ service cloud.firestore {
     }
 
     match /adminSecurityAudit/{id} {
+      allow read, write: if false;
+    }
+
+    match /accountSanctions/{uid} {
+      allow get: if verifiedAccount() && request.auth.uid == uid;
+      allow list, write: if false;
+    }
+
+    match /moderationViolations/{id} {
       allow read, write: if false;
     }
 

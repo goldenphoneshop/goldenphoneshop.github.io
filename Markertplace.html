@@ -1238,9 +1238,8 @@
                         <label class="block text-xs font-semibold text-gray-300 mb-1">Vendor Location / Shop Address</label>
                         <input type="text" id="postLocation" maxlength="200" placeholder="Suite 42, Computer Village, Lagos" class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100 gold-border-glow">
                     </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-300 mb-1">Vendor Contact Phone / WhatsApp</label>
-                        <input type="text" id="postContact" maxlength="80" placeholder="+234 800 123 4567" class="w-full bg-darkBg border border-darkBorder rounded-xl px-3 py-2 text-sm text-gray-100 gold-border-glow">
+                    <div class="flex items-center rounded-xl border border-darkBorder bg-darkBg px-3 text-xs text-gray-300">
+                        Buyers contact Vendors through protected in-app chat. Phone numbers and WhatsApp details are prohibited.
                     </div>
                 </div>
 
@@ -1837,6 +1836,7 @@
         const communityMediaObjectUrls = new Set();
         const communityDownloadPermissionCache = new Map();
         const verifiedDealerBadgeExpiries = new Map();
+        const permanentVerifiedDealerBadges = new Set();
         let verifiedDealerBadgesUnsubscribe = null;
         let verifiedDealerBadgeExpiryTimer = null;
         let communityPostSubmitting = false;
@@ -2223,7 +2223,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     const productRef = firebaseFirestore.collection('products').doc(product.id);
                     const existing = await productRef.get();
                     if (existing.exists) continue;
-                    await productRef.set({ ...product, ownerUid: user.uid });
+                    await firebaseFunctions.httpsCallable('publishMarketplaceProduct')({
+                        product: {
+                            ...product,
+                            vendorContact: 'In-app chat only'
+                        }
+                    });
                     migratedCount += 1;
                 }
                 if (migratedCount) {
@@ -2875,6 +2880,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         }
 
         function isVerifiedDealer(uid) {
+            if (permanentVerifiedDealerBadges.has(uid)) return true;
             const profileExpiry = uid === currentUser?.uid
                 ? verifiedDealerUntilMs(currentUser.verifiedDealerUntil)
                 : 0;
@@ -2924,7 +2930,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             verifiedDealerBadgesUnsubscribe = firebaseFirestore.collection('verifiedDealers')
                 .onSnapshot(snapshot => {
                     verifiedDealerBadgeExpiries.clear();
+                    permanentVerifiedDealerBadges.clear();
                     snapshot.forEach(doc => {
+                        if (doc.data().permanent === true) {
+                            permanentVerifiedDealerBadges.add(doc.id);
+                            return;
+                        }
                         verifiedDealerBadgeExpiries.set(
                             doc.id,
                             verifiedDealerUntilMs(doc.data().verifiedUntil)
@@ -3024,6 +3035,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const downloadButton = downloadable
                 ? `<button type="button" onclick="downloadCommunityPostMedia(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] text-gray-300 hover:border-gold/50 hover:text-gold"><i class="fa-solid fa-download mr-1"></i>Download</button>`
                 : '';
+            const deleteButton = currentUser?.uid === post.ownerUid
+                ? `<button type="button" onclick="deleteOwnedMarketplaceContent('communityPost', this.dataset.postId, this)" data-post-id="${escapeHtml(post.id)}" class="rounded-lg border border-red-500/40 px-3 py-1.5 text-[10px] font-bold text-red-300 hover:bg-red-500/10"><i class="fa-solid fa-trash mr-1"></i>Delete</button>`
+                : '';
             const commentsOpen = openCommunityCommentPostIds.has(post.id);
             const voiceState = communityCommentVoiceStates.get(post.id);
             const isRecording = voiceState?.recorder?.state === 'recording';
@@ -3041,6 +3055,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         <button type="button" onclick="reshareCommunityPost(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="rounded-lg border border-gold/30 px-3 py-1.5 text-[10px] font-bold text-gold hover:bg-gold/10"><i class="fa-solid fa-retweet mr-1"></i>Reshare</button>
                         <button type="button" onclick="toggleCommunityComments(this, this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" aria-expanded="${commentsOpen}" class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] font-bold text-gray-200 hover:border-gold/50 hover:text-gold"><i class="fa-regular fa-comment mr-1"></i>Comments</button>
                         ${downloadButton}
+                        ${deleteButton}
                     </div>
                     <section data-community-comment-panel data-post-id="${escapeHtml(post.id)}" class="${commentsOpen ? 'mt-3 border-t border-darkBorder pt-3' : 'hidden'}" aria-label="Comments">
                         <div data-community-comment-list data-post-id="${escapeHtml(post.id)}" class="max-h-60 space-y-2 overflow-y-auto" aria-live="polite">
@@ -4302,10 +4317,13 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const profileExpiry = verifiedDealerUntilMs(currentUser.verifiedDealerUntil);
             const publicExpiry = verifiedDealerBadgeExpiries.get(currentUser.uid) || 0;
             const activeUntil = Math.max(profileExpiry, publicExpiry);
-            const isActive = activeUntil > Date.now();
+            const permanent = permanentVerifiedDealerBadges.has(currentUser.uid);
+            const isActive = permanent || activeUntil > Date.now();
             const status = document.getElementById('verifiedDealerBadgeStatus');
-            status.textContent = isActive
-                ? `Your owner-approved badge is active until ${new Date(activeUntil).toLocaleString()}.`
+            status.textContent = permanent
+                ? 'Your permanent verification badge is active for this exact account.'
+                : isActive
+                    ? `Your owner-approved badge is active until ${new Date(activeUntil).toLocaleString()}.`
                 : 'Your badge is not active. Contact marketplace support to request manual identity and business review.';
         }
 
@@ -4778,9 +4796,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     verifiedDealerUntilMs(profile.verifiedDealerUntil),
                     verifiedDealerBadgeExpiries.get(profileUid) || 0
                 );
-                const badgeIsActive = badgeExpiryMs > Date.now();
+                const badgeIsPermanent = permanentVerifiedDealerBadges.has(profileUid);
+                const badgeIsActive = badgeIsPermanent || badgeExpiryMs > Date.now();
                 badgeStatus.textContent = badgeIsActive
-                    ? `Verified Dealer Badge active until ${new Date(badgeExpiryMs).toLocaleString()}.`
+                    ? badgeIsPermanent
+                        ? 'Permanent verified account badge is active.'
+                        : `Verified Dealer Badge active until ${new Date(badgeExpiryMs).toLocaleString()}.`
                     : 'No active Dealer Badge. Contact support to request owner review.';
                 const badgeSettingsButton = document.createElement('button');
                 badgeSettingsButton.type = 'button';
@@ -4880,13 +4901,19 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     const thumbnail = media?.type === 'video'
                         ? `<video src="${escapeHtml(media.url)}" muted playsinline preload="metadata" class="h-28 w-full rounded-lg bg-black object-cover"></video>`
                         : `<img src="${escapeHtml(media?.url || '')}" alt="${escapeHtml(product.title)}" loading="lazy" class="h-28 w-full rounded-lg bg-black object-cover" onerror="this.onerror=null;this.src='https://placehold.co/500x350/131b2e/ffd700?text=GOLDEN+EAGLE+GSM'">`;
-                    return `<button type="button" onclick="openProfileProductListing(this.dataset.productId)" data-product-id="${escapeHtml(product.id)}" class="rounded-xl border border-darkBorder bg-darkCard p-3 text-left hover:border-gold/50">
-                        ${thumbnail}
-                        <span class="mt-2 block truncate text-sm font-bold text-white">${escapeHtml(product.title)}</span>
-                        <span class="mt-1 block text-xs text-gold">₦${Number(product.price).toLocaleString()}</span>
-                        <span class="mt-1 block text-[10px] text-gray-400">Stock: ${Number(product.stock) || 0}</span>
-                        <span class="mt-1 block text-[10px] text-gray-300"><i class="fa-solid fa-thumbs-up mr-1 text-gold"></i><span data-profile-product-likes="${escapeHtml(product.id)}">—</span> Likes</span>
-                    </button>`;
+                    const ownDelete = currentUser?.uid === product.ownerUid
+                        ? `<button type="button" onclick="deleteOwnedMarketplaceContent('product', this.dataset.productId, this)" data-product-id="${escapeHtml(product.id)}" class="mt-2 w-full rounded-lg border border-red-500/40 px-3 py-1.5 text-[10px] font-bold text-red-300 hover:bg-red-500/10"><i class="fa-solid fa-trash mr-1"></i>Delete listing and all likes</button>`
+                        : '';
+                    return `<div class="rounded-xl border border-darkBorder bg-darkCard p-3">
+                        <button type="button" onclick="openProfileProductListing(this.dataset.productId)" data-product-id="${escapeHtml(product.id)}" class="w-full text-left hover:border-gold/50">
+                            ${thumbnail}
+                            <span class="mt-2 block truncate text-sm font-bold text-white">${escapeHtml(product.title)}</span>
+                            <span class="mt-1 block text-xs text-gold">₦${Number(product.price).toLocaleString()}</span>
+                            <span class="mt-1 block text-[10px] text-gray-400">Stock: ${Number(product.stock) || 0}</span>
+                            <span class="mt-1 block text-[10px] text-gray-300"><i class="fa-solid fa-thumbs-up mr-1 text-gold"></i><span data-profile-product-likes="${escapeHtml(product.id)}">—</span> Likes</span>
+                        </button>
+                        ${ownDelete}
+                    </div>`;
                 }).join('');
                 profileProducts.forEach(product => subscribeToProfileProductStats(product.id));
             } catch (error) {
@@ -4935,6 +4962,32 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 }
             }
             if (product) openDetailModal(product.id);
+        }
+
+        async function deleteOwnedMarketplaceContent(kind, itemId, button) {
+            if (!currentUser) {
+                showToast('Sign in to delete your content.', 'info');
+                return;
+            }
+            const label = kind === 'product' ? 'product listing, reactions and comments' : 'post, likes and comments';
+            if (!window.confirm(`Delete this ${label}? This cannot be undone and all associated likes will be cleared.`)) return;
+            if (button) button.disabled = true;
+            try {
+                await firebaseFunctions.httpsCallable('deleteOwnedMarketplaceContent')({ kind, itemId });
+                products = products.filter(product => product.id !== itemId);
+                communityPosts = communityPosts.filter(post => post.id !== itemId);
+                renderProducts();
+                renderCommunityPosts();
+                if (viewedProfileUid) {
+                    await renderVendorProductsForProfile(viewedProfileUid);
+                }
+                showToast('Content and all associated likes were deleted.', 'success');
+            } catch (error) {
+                console.error('Unable to delete owned marketplace content.', error);
+                showToast(error.message || 'The content could not be deleted.', 'error');
+            } finally {
+                if (button) button.disabled = false;
+            }
         }
 
         function appendProfileDetail(container, label, value) {
@@ -7613,15 +7666,14 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 fullDesc: document.getElementById('postFullDesc').value.trim() || document.getElementById('postShortDesc').value.trim(),
                 vendorName: currentUser.name || 'Verified Vendor',
                 vendorLocation: document.getElementById('postLocation').value.trim() || 'Central Electronics Hub',
-                vendorContact: document.getElementById('postContact').value.trim() || '+234 Market Desk',
+                vendorContact: 'In-app chat only',
                 rating: 5.0,
                 createdAt: new Date().toISOString()
             };
 
             try {
-                await firebaseFirestore.collection('products').doc(newProd.id).set({
-                    ...newProd,
-                    ownerUid: currentUser.uid
+                await firebaseFunctions.httpsCallable('publishMarketplaceProduct')({
+                    product: newProd
                 });
             } catch (error) {
                 console.error('Unable to publish the shared product listing.', error);

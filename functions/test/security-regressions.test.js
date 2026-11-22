@@ -38,6 +38,18 @@ test("administrator access is bound to the owner UID, not another account's clai
   assert.equal(isOwnerAdmin({ uid: "other-user", token: { admin: true } }), false);
 });
 
+test("product text detects formatted and obfuscated phone numbers", () => {
+  const context = { HttpsError: Error };
+  vm.runInNewContext(
+    extract("function containsPhoneNumber", "async function recordPostingViolation"),
+    context
+  );
+  assert.equal(context.containsPhoneNumber("+234 803 123 4567"), true);
+  assert.equal(context.containsPhoneNumber("WhatsApp: 0803-123-4567"), true);
+  assert.equal(context.containsPhoneNumber("o8o3 123 4567"), true);
+  assert.equal(context.containsPhoneNumber("Original screen assembly"), false);
+});
+
 test("quiz Likes are awarded only for a perfect eligible reward quiz", () => {
   const { quizLikeRewardAmount } = setupHelpers();
   assert.equal(quizLikeRewardAmount(true, true, true, true), 10);
@@ -81,4 +93,7 @@ test("new accounts cannot self-assign Vendor and badges require owner administra
   assert.match(source, /exports\.adminSetVendorApproval = onCall/);
   assert.match(source, /exports\.adminSetVerifiedDealerBadge = onCall/);
   assert.match(source, /Dealer verification badges are granted only after owner review/);
+  assert.match(source, /PERMANENT_VERIFIED_DEALER_UID = "71ZtsYMKKtMsOSdHhBHAbjHzcqc2"/);
+  assert.match(source, /exports\.deleteOwnedMarketplaceContent = onCall/);
+  assert.match(firestoreRules, /allow create, update, delete: if false/);
 });

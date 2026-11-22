@@ -491,6 +491,50 @@ test("an ambiguous transfer remains reserved and cannot be sent again", async ()
     error => error.code === "failed-precondition");
 });
 
+test("a rejected payout stores and logs only sanitized Flutterwave diagnostics", async () => {
+  const errors = [];
+  const provider = payoutProvider();
+  const prepared = setup(async (url, options) => {
+    if (url.endsWith("/transfers")) {
+      return {
+        ok: false,
+        status: 403,
+        text: async () => JSON.stringify({
+          status: "error",
+          message: "Transfer disallowed Bearer secret-token"
+        })
+      };
+    }
+    return provider.fetch(url, options);
+  });
+  prepared.context.logger.error = (message, fields) => errors.push({ message, fields });
+  prepared.documents.set("users/vendor", { role: "Vendor" });
+  prepared.documents.set("vendorPayoutBalances/vendor", { availableKobo: 254075 });
+  const savedBank = await prepared.functions.saveVendorBankAccount(request("vendor", {
+    bankCode: "044", accountNumber: "1234567890"
+  }));
+  const payoutQuote = await prepared.functions.getVendorPayoutQuote(request("vendor", { amount: 2000 }));
+  await assert.rejects(prepared.functions.requestVendorWithdrawal(request("vendor", {
+    amount: 2000,
+    bankVersion: savedBank.version,
+    quote: payoutQuote,
+    operationId: "unique_withdrawal_123456789"
+  })), error => error.code === "unavailable");
+  const withdrawal = [...prepared.documents.entries()]
+    .find(([path]) => path.startsWith("escrowWithdrawals/"))[1];
+  assert.equal(withdrawal.providerHttpStatus, 403);
+  assert.equal(withdrawal.providerErrorStatus, "error");
+  assert.equal(withdrawal.providerErrorMessage, "Transfer disallowed Bearer [REDACTED]");
+  assert.equal(
+    errors.some(entry => entry.message === "Flutterwave transfer request rejected." &&
+      entry.fields.providerHttpStatus === 403 &&
+      !JSON.stringify(entry).includes("secret-token")),
+    true
+  );
+  assert.equal(withdrawal.status, "FAILED");
+  assert.equal(prepared.documents.get("vendorPayoutBalances/vendor").availableKobo, 254075);
+});
+
 test("a verified failed transfer restores cash once without changing chat coins", async () => {
   const provider = payoutProvider();
   const { documents, functions, bank, quote } = await preparePayout(provider);

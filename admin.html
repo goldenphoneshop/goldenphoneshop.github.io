@@ -52,6 +52,12 @@
       <button id="revokeDealerBadge" type="button" class="secondary">Revoke dealer badge</button>
     </section>
     <section class="card">
+      <h2>Accounts awaiting moderation review</h2>
+      <p class="muted">Accounts appear here after three phone-number posting warnings. Confirming permanent restriction disables Firebase Authentication but does not secretly move or deduct user balances.</p>
+      <p id="restrictionsStatus" role="status">Loading…</p>
+      <div id="restrictedAccounts"></div>
+    </section>
+    <section class="card">
       <h2>Platform metrics</h2>
       <p class="muted">Recorded totals include held, shipped, disputed and awaiting-refund orders; they are not a verified bank or segregated escrow balance. Metrics are current snapshots, not historical totals.</p>
       <p id="metricsStatus" role="status">Loading…</p>
@@ -281,8 +287,34 @@
       showError('vendorsStatus', error);
     }
   }
+  async function loadRestrictedAccounts() {
+    message('restrictionsStatus', 'Loading…');
+    try {
+      const data = await call('listRestrictedAccounts', {});
+      const container = el('restrictedAccounts');
+      container.replaceChildren();
+      data.items.forEach(item => {
+        const card = document.createElement('article');
+        card.className = 'entry';
+        line(card, 'UID', item.uid);
+        line(card, 'Warnings', item.warningCount);
+        line(card, 'Restriction status', item.permanent ? 'Permanent' : 'Awaiting owner review');
+        if (!item.permanent) {
+          button(card, 'Confirm permanent restriction', async () => {
+            if (!window.confirm(`Disable ${item.uid} after ${item.warningCount} warnings? Balances will not be moved or debited.`)) return null;
+            await call('adminConfirmPermanentRestriction', { uid: item.uid });
+            return `Account ${item.uid} disabled.`;
+          });
+        }
+        container.appendChild(card);
+      });
+      message('restrictionsStatus', data.items.length ? '' : 'No accounts currently require owner review.');
+    } catch (error) {
+      showError('restrictionsStatus', error);
+    }
+  }
   async function refreshAll() {
-    await Promise.all([loadVendorApplications(), loadMetrics(),
+    await Promise.all([loadVendorApplications(), loadRestrictedAccounts(), loadMetrics(),
       ...Object.keys(cursors).map(kind => loadQueue(kind))]);
   }
   for (const kind of Object.keys(cursors)) {
