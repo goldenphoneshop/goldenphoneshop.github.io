@@ -258,7 +258,7 @@ test("referral attribution cannot be changed after registration", async () => {
 });
 
 test("a failed signup attribution is retained and retried only for the same signed-in account", async () => {
-  const html = fs.readFileSync(path.join(__dirname, "..", "..", "Markertplace.html"), "utf8");
+  const html = fs.readFileSync(path.join(__dirname, "..", "..", "index.html"), "utf8");
   const start = html.indexOf("        function rememberSignupReferral(uid)");
   const end = html.indexOf("        function verifiedDealerErrorNotice", start);
   assert.ok(start >= 0 && end > start);

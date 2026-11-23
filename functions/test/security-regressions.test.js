@@ -6,7 +6,7 @@ const vm = require("node:vm");
 
 const root = path.join(__dirname, "..", "..");
 const source = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
-const html = fs.readFileSync(path.join(root, "Markertplace.html"), "utf8");
+const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const firestoreRules = fs.readFileSync(path.join(root, "firestore.rules"), "utf8");
 
 function extract(start, end) {

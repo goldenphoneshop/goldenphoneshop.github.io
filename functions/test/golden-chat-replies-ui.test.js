@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const html = fs.readFileSync(path.join(__dirname, '..', '..', 'Markertplace.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '..', '..', 'index.html'), 'utf8');
 function extract(start, end) {
   const first = html.indexOf(start);
   const last = html.indexOf(end, first);

@@ -119,7 +119,7 @@ function setup(fetchMock) {
     FLUTTERWAVE_WEBHOOK_HASH: { value: () => "wallet-webhook-hash" },
     GEMINI_API_KEY: { value: () => "test-ai-key" },
     GOLDEN_AI_SERVICE_ACCOUNT: "test-ai-service-account",
-    PAYMENT_REDIRECT_URL: "https://goldenphoneshop.github.io/Markertplace.html",
+    PAYMENT_REDIRECT_URL: "https://goldenphoneshop.github.io/index.html",
     onCall: (...args) => {
       const handler = args.at(-1);
       bindings.set(handler, args.length > 1 ? args[0] : {});
@@ -1035,7 +1035,7 @@ test("production checkout, verification and webhook use the wallet merchant key"
   }));
   assert.equal(payment.amount, 91375);
   assert.equal(checkout.platformFee, 6375);
-  assert.equal(payment.redirect_url, "https://goldenphoneshop.github.io/Markertplace.html");
+  assert.equal(payment.redirect_url, "https://goldenphoneshop.github.io/index.html");
   await functions.verifyEscrowPayment(request("buyer", { txRef: checkout.txRef, transactionId: "123" }));
   assert.equal(documents.get(`escrowOrders/${checkout.txRef}`).status, "HELD_IN_ESCROW");
   const response = { code: null, status(code) { this.code = code; return this; }, send() {} };
