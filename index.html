@@ -250,7 +250,7 @@
     <!-- MAIN NAVBAR -->
     <header class="sticky top-0 z-40 bg-darkCard/95 backdrop-blur-md border-b border-darkBorder">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:gap-4">
-            
+
             <!-- Logo -->
             <div class="flex min-w-0 items-center gap-2 sm:gap-3">
                 <button type="button" onclick="toggleSideMenu(true)" aria-label="Open navigation menu" class="flex h-10 flex-shrink-0 items-center gap-2 rounded-lg border border-gold/50 bg-gold/10 px-3 text-xs font-bold text-gold hover:bg-gold/20 transition">
@@ -295,7 +295,7 @@
                     <span class="hidden sm:inline ml-1">Cart</span>
                     <span id="cartItemCount" class="absolute -top-2 -right-2 min-w-5 h-5 px-1 rounded-full bg-gold text-black text-[10px] flex items-center justify-center">0</span>
                 </button>
-                
+
                 <!-- Post Product Button -->
                 <button onclick="handlePostProductClick()" class="hidden sm:flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg border border-gold/50 text-gold hover:bg-gold/10 transition">
                     <i class="fa-solid fa-circle-plus text-sm"></i>
@@ -391,7 +391,7 @@
             <p class="mt-1 text-xs text-gray-400">The invitation must be attached within 24 hours of account creation.</p>
             <button type="button" onclick="openAuthModal('register')" class="mt-3 rounded-lg gold-gradient-bg px-4 py-2 text-xs font-bold text-black">Create account</button>
         </div>
-        
+
         <!-- Hero Banner -->
         <div class="relative rounded-2xl overflow-hidden mb-8 border border-darkBorder bg-gradient-to-r from-darkCard via-darkBg to-darkCard p-6 sm:p-10 shadow-2xl">
             <div class="absolute -right-10 -bottom-10 w-64 h-64 bg-gold/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -1083,7 +1083,7 @@
             <button onclick="closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-lg">
                 <i class="fa-solid fa-xmark"></i>
             </button>
-            
+
             <div class="text-center mb-6">
                 <img src="Image/app-logo.jpg" alt="Golden Eagle Marketplace logo" class="w-16 h-16 rounded-full object-cover border border-gold/50 mx-auto mb-2">
                 <h3 id="authModalTitle" class="text-xl font-bold text-white">Sign In to Golden Eagle</h3>
@@ -1972,7 +1972,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (targetProductId) {
         // Find the product in our list
         const foundProduct = products.find(p => p.id == targetProductId);
-        
+
         if (foundProduct) {
             // Open the product modal for this exact item
             openModal(foundProduct.id);
@@ -7721,10 +7721,10 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             container.innerHTML = categories.map(cat => {
                 const isActive = cat === selectedCategory;
                 return `
-                    <button onclick="filterCategory('${cat}')" 
+                    <button onclick="filterCategory('${cat}')"
                         class="px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
-                            isActive 
-                            ? 'gold-gradient-bg text-black gold-glow' 
+                            isActive
+                            ? 'gold-gradient-bg text-black gold-glow'
                             : 'bg-darkCard text-gray-300 hover:text-white border border-darkBorder hover:border-gold/30'
                         }">
                         ${cat}
@@ -8356,7 +8356,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                                 : ''}
                         </div>
                         <h2 class="text-xl font-extrabold text-white mb-2 leading-snug">${escapeHtml(prod.title)}</h2>
-                        
+
                         <div class="text-2xl font-black text-gold mb-4">₦${Number(prod.price).toLocaleString()}</div>
 
                         <div class="bg-darkBg p-3 rounded-xl border border-darkBorder mb-4 space-y-1.5 text-xs">
@@ -8396,7 +8396,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         ${prod.ownerUid
                             ? `<button type="button" onclick="startEscrowCheckout(this.dataset.productId, this)" data-product-id="${escapeHtml(prod.id)}" class="w-full rounded-xl border border-gold/40 py-3 text-sm font-bold text-gold">Pay with Escrow Protection</button>`
                             : ''}
-                        
+
                         <div class="grid grid-cols-2 gap-2">
                             <button onclick="askAiAboutItem(this.dataset.productTitle)" data-product-title="${escapeHtml(prod.title)}" class="py-2 bg-darkBg border border-darkBorder hover:border-gold/50 text-gray-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1">
                                 <i class="fa-solid fa-robot text-gold"></i> Ask AI About Item
@@ -10131,7 +10131,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         function showToast(message, type = 'info') {
             const container = document.getElementById('toastContainer');
             const toast = document.createElement('div');
-            
+
             let icon = 'fa-circle-info';
             let borderCol = 'border-gold';
             if (type === 'success') { icon = 'fa-circle-check'; borderCol = 'border-green-500'; }
