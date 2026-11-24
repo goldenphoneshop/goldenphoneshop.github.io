@@ -8508,6 +8508,23 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             });
         }
 
+        function restoreQuickFollowButtons(memberUid) {
+            const knownMember = communityPosts.find(post => post.ownerUid === memberUid) ||
+                products.find(product => product.ownerUid === memberUid);
+            if (!knownMember) return;
+            const memberName = knownMember.ownerName || knownMember.vendorName || 'Marketplace member';
+            document.querySelectorAll(
+                `[data-community-post-id] [data-uid="${CSS.escape(memberUid)}"], ` +
+                `[data-profile-uid="${CSS.escape(memberUid)}"]`
+            ).forEach(profileButton => {
+                const card = profileButton.closest('[data-community-post-id], .group');
+                if (!card || card.querySelector(`[data-quick-follow="${CSS.escape(memberUid)}"]`)) return;
+                const wrapper = document.createElement('span');
+                wrapper.innerHTML = renderQuickFollowButton(memberUid, memberName);
+                if (wrapper.firstElementChild) profileButton.insertAdjacentElement('afterend', wrapper.firstElementChild);
+            });
+        }
+
         function subscribeToFollowedVendors() {
             if (followingUnsubscribe) followingUnsubscribe();
             followingUnsubscribe = null;
@@ -8546,6 +8563,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
             if (!memberUid || memberUid === currentUser.uid) return;
             const role = memberRole === 'Vendor' ? 'Vendor' : 'Buyer';
+            const wasFollowing = followedMemberIds.has(memberUid);
 
             const followRef = firebaseFirestore.collection('users').doc(currentUser.uid)
                 .collection('following').doc(memberUid);
@@ -8555,7 +8573,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 await firebaseFirestore.runTransaction(async transaction => {
                     const followingSnapshot = await transaction.get(followRef);
                     const followerSnapshot = await transaction.get(followerRef);
-                    if (followedMemberIds.has(memberUid)) {
+                    if (wasFollowing) {
                         transaction.delete(followRef);
                         transaction.delete(followerRef);
                         return;
@@ -8579,6 +8597,18 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         });
                     }
                 });
+                if (wasFollowing) {
+                    followedMemberIds.delete(memberUid);
+                    followedVendorIds.delete(memberUid);
+                    updateMemberFollowButtons();
+                    restoreQuickFollowButtons(memberUid);
+                } else {
+                    followedMemberIds.add(memberUid);
+                    if (role === 'Vendor') followedVendorIds.add(memberUid);
+                    updateMemberFollowButtons();
+                }
+                renderFeedTabs();
+                if (role === 'Vendor') renderProducts();
                 if (viewedProfileUid === memberUid) {
                     loadPublicProfileStats(memberUid, true);
                 } else if (!viewedProfileUid &&
