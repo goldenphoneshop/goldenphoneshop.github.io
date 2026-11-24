@@ -343,7 +343,10 @@
             </div>
             <div class="space-y-2 py-5">
                 <button type="button" onclick="showMarketplacePage()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
-                    <i class="fa-solid fa-house w-5 text-center"></i> Marketplace
+                    <i class="fa-solid fa-house w-5 text-center"></i> Marketplace Feed
+                </button>
+                <button type="button" onclick="openCommunityPostsPage()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
+                    <i class="fa-solid fa-photo-film w-5 text-center"></i> Community Posts
                 </button>
                 <button type="button" onclick="openMemberSearch()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
                     <i class="fa-solid fa-users w-5 text-center"></i> Find members
@@ -1628,7 +1631,15 @@
     </div>
     <div id="goldenCallModal" class="fixed inset-0 z-[100] flex hidden h-[100dvh] w-screen bg-black" role="dialog" aria-modal="true" aria-labelledby="goldenCallTitle">
         <section class="flex h-full w-full min-h-0 flex-col overflow-y-auto bg-darkCard p-4 text-center sm:p-6">
-            <h2 id="goldenCallTitle" class="text-lg font-bold text-white">Call</h2>
+            <div class="flex items-start justify-between gap-3">
+                <div class="flex-1 pl-10"></div>
+                <h2 id="goldenCallTitle" class="flex-1 text-lg font-bold text-white">Call</h2>
+                <div class="flex flex-1 justify-end">
+                    <button type="button" onclick="goldenCalls.minimize()" aria-label="Minimize call and return to chat" title="Minimize call" class="flex h-8 w-8 items-center justify-center rounded-lg border border-darkBorder bg-darkBg text-gray-200 hover:border-gold/50 hover:text-gold">
+                        <i class="fa-solid fa-minus"></i>
+                    </button>
+                </div>
+            </div>
             <p id="goldenCallStatus" class="mt-1 text-sm text-gray-300" role="status" aria-live="polite"></p>
             <p id="goldenCallTimer" class="mt-1 text-sm font-bold text-gold">00:00</p>
             <div id="goldenCallVideoArea" class="relative my-4 hidden min-h-0 flex-1 overflow-hidden rounded-xl bg-black">
@@ -1650,6 +1661,10 @@
             </div>
         </section>
     </div>
+    <button id="goldenCallMinimized" type="button" onclick="goldenCalls.restore()" class="fixed right-4 top-20 z-[105] hidden items-center gap-2 rounded-full border border-gold/50 bg-darkCard px-3 py-2 text-xs font-bold text-gold shadow-2xl">
+        <i class="fa-solid fa-phone-volume"></i>
+        Return to call
+    </button>
 
     <script src="functions/escrow-fee.js"></script>
     <script src="functions/escrow-fulfillment.js"></script>
@@ -1858,7 +1873,8 @@
             mediaDevices: navigator.mediaDevices,
             RTCPeerConnection: window.RTCPeerConnection,
             AudioContext: window.AudioContext || window.webkitAudioContext,
-            isSecureContext: window.isSecureContext
+            isSecureContext: window.isSecureContext,
+            openChat: () => openChatPage()
         });
         let activeGoldenChatLatestMessageId = null;
         let goldenChatListUnsubscribe = null;
@@ -2671,6 +2687,16 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             document.getElementById('marketplaceMain').classList.remove('hidden');
             document.getElementById('marketplaceFooter').classList.remove('hidden');
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function openCommunityPostsPage() {
+            showMarketplacePage();
+            window.setTimeout(() => {
+                document.getElementById('communityFeedSection')?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            }, 0);
         }
 
         function openAccountPage(section = 'profile') {

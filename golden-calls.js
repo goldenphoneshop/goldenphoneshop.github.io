@@ -8,7 +8,7 @@
   "use strict";
 
   const { db, document, getUser, getChat, serverTimestamp, notify, mediaDevices,
-    RTCPeerConnection, AudioContext, isSecureContext, timers = globalThis } = options;
+    RTCPeerConnection, AudioContext, isSecureContext, openChat, timers = globalThis } = options;
   const calls = db.collection("calls");
   const element = id => document.getElementById(id);
   let session = null;
@@ -70,7 +70,21 @@
       element(id).srcObject = null;
     }
     show("goldenCallModal", false);
+    show("goldenCallMinimized", false);
     showIncoming();
+  }
+
+  function minimize() {
+    if (!session) return;
+    show("goldenCallModal", false);
+    show("goldenCallMinimized", true);
+    if (typeof openChat === "function") openChat();
+  }
+
+  function restore() {
+    if (!session) return;
+    show("goldenCallModal", true);
+    show("goldenCallMinimized", false);
   }
 
   async function endRemote(s) {
@@ -106,6 +120,7 @@
   function displaySession(s, label) {
     show("goldenIncomingCallModal", false);
     show("goldenCallModal", true);
+    show("goldenCallMinimized", false);
     element("goldenCallTitle").textContent = `${s.type === "video" ? "Video" : "Voice"} call`;
     element("goldenCallStatus").textContent = label;
     element("goldenCallTimer").textContent = "00:00";
@@ -648,6 +663,6 @@
     hangup();
   }
 
-  return { start, subscribe, answer, decline, hangup, mute, toggleCamera, enableAudio,
+  return { start, subscribe, answer, decline, hangup, minimize, restore, mute, toggleCamera, enableAudio,
     chooseSpeaker, setSpeaker, toggleBoost, watchHistory, describeCall, stop };
 });

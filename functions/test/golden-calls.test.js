@@ -141,6 +141,7 @@ function client(db, uid, mediaOverride, extra = {}) {
       streams.push(stream);
       return stream;
     }, ...extra.mediaDevices },
+    openChat: extra.openChat,
     AudioContext: extra.AudioContext,
     RTCPeerConnection: FakePeer, isSecureContext: true, timers
   });
@@ -185,6 +186,22 @@ test('voice and video calls exchange descriptions and candidates, control tracks
     caller.controller.stop();
     callee.controller.stop();
   }
+});
+
+test('minimized calls continue while returning focus to chat', async () => {
+  const db = fakeDatabase();
+  let chatOpens = 0;
+  const caller = client(db, 'caller', null, { openChat: () => { chatOpens++; } });
+  await caller.controller.start('video');
+  caller.controller.minimize();
+  assert.equal(caller.elements.get('goldenCallModal').classList.contains('hidden'), true);
+  assert.equal(caller.elements.get('goldenCallMinimized').classList.contains('hidden'), false);
+  assert.equal(chatOpens, 1);
+  assert.equal(caller.streams[0].getTracks().some(track => track.stopped), false);
+  caller.controller.restore();
+  assert.equal(caller.elements.get('goldenCallModal').classList.contains('hidden'), false);
+  assert.equal(caller.elements.get('goldenCallMinimized').classList.contains('hidden'), true);
+  await caller.controller.hangup();
 });
 
 test('denied permission reports an actionable error without creating a call', async () => {
