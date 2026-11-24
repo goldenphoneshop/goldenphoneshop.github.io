@@ -502,19 +502,13 @@
     </main>
 
     <main id="recentlyViewedPage" class="hidden max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
-        <div class="mb-6 flex items-start justify-between gap-4">
-            <div>
-                <h1 class="text-2xl font-extrabold text-white">Recently viewed</h1>
-                <p class="mt-1 text-xs text-gray-400">Private history on this device, plus verified members who recently viewed your profile.</p>
-            </div>
-            <button type="button" onclick="swapRecentlyViewedPanels()" class="hidden h-9 flex-shrink-0 items-center gap-1 rounded-lg border border-darkBorder bg-darkCard px-3 text-xs font-bold text-gray-300 hover:border-gold/50 hover:text-gold lg:flex" aria-label="Swap recently viewed panels">
-                <i class="fa-solid fa-left-right"></i> Swap sides
-            </button>
+        <div class="mb-6">
+            <h1 class="text-2xl font-extrabold text-white">Recently viewed</h1>
+            <p class="mt-1 text-xs text-gray-400">Private history on this device, plus verified members who recently viewed your profile.</p>
         </div>
-        <div id="recentlyViewedSwapArea" class="grid grid-cols-1 gap-5 lg:grid-cols-3" ontouchstart="recentlyViewedTouchStart(event)" ontouchend="recentlyViewedTouchEnd(event)">
-            <section id="recentlyViewedLeftPanel" data-side="left" class="lg:col-span-2">
-                <div class="mb-3 flex items-center justify-between gap-2">
-                    <div class="relative inline-block">
+        <div class="w-full">
+            <div class="mb-4 flex w-full flex-row flex-nowrap items-start justify-between gap-2">
+                <div class="relative min-w-0 flex-1">
                     <button id="recentlyViewedTypeButton" type="button" data-type="product" onclick="toggleRecentlyViewedSelector()" aria-haspopup="menu" aria-expanded="false" class="inline-flex items-center gap-2 rounded-lg border border-darkBorder bg-darkCard px-3 py-2 text-sm font-bold text-white">
                         <span>Products</span><i class="fa-solid fa-chevron-down text-[10px] text-gray-400"></i>
                     </button>
@@ -522,27 +516,25 @@
                         <button type="button" role="menuitem" onclick="selectRecentlyViewedType('product')" class="block w-full px-3 py-2 text-left text-xs font-semibold text-white hover:bg-gold/10 hover:text-gold">Products</button>
                         <button type="button" role="menuitem" onclick="selectRecentlyViewedType('post')" class="block w-full px-3 py-2 text-left text-xs font-semibold text-white hover:bg-gold/10 hover:text-gold">Post</button>
                     </div>
-                    </div>
-                    <button type="button" onclick="swapRecentlyViewedPanels()" class="flex h-9 items-center gap-1 rounded-lg border border-darkBorder bg-darkCard px-3 text-xs font-bold text-gray-300 hover:border-gold/50 hover:text-gold lg:hidden" aria-label="Swap recently viewed panels">
-                        <i class="fa-solid fa-left-right"></i> Swap
-                    </button>
                 </div>
-                <div id="recentlyViewedContent" class="grid grid-cols-1 gap-3 sm:grid-cols-2"></div>
-                <p id="recentlyViewedEmpty" class="hidden rounded-xl border border-darkBorder bg-darkCard p-6 text-sm text-gray-400">No recently viewed products or posts yet.</p>
-            </section>
-            <aside id="recentlyViewedRightPanel" data-side="right">
-                <div class="relative mb-3 inline-block">
-                    <button id="recentlyViewedProfileTypeButton" type="button" data-type="viewers" onclick="toggleRecentlyViewedProfileSelector()" aria-haspopup="menu" aria-expanded="false" class="inline-flex items-center gap-2 rounded-lg border border-darkBorder bg-darkCard px-3 py-2 text-sm font-bold text-white">
-                        <span>Who viewed your profile</span><i class="fa-solid fa-chevron-down text-[10px] text-gray-400"></i>
+                <div class="relative min-w-0 flex-1 text-right">
+                    <button id="recentlyViewedProfileTypeButton" type="button" data-type="viewers" onclick="toggleRecentlyViewedProfileSelector()" aria-haspopup="menu" aria-expanded="false" class="inline-flex max-w-full items-center gap-2 rounded-lg border border-darkBorder bg-darkCard px-3 py-2 text-right text-xs font-bold text-white sm:text-sm">
+                        <span class="truncate">Who viewed your profile</span><i class="fa-solid fa-chevron-down flex-shrink-0 text-[10px] text-gray-400"></i>
                     </button>
-                    <div id="recentlyViewedProfileSelector" class="absolute left-0 top-full z-20 mt-1 hidden w-48 overflow-hidden rounded-lg border border-darkBorder bg-darkCard shadow-xl" role="menu">
+                    <div id="recentlyViewedProfileSelector" class="absolute right-0 top-full z-20 mt-1 hidden w-48 overflow-hidden rounded-lg border border-darkBorder bg-darkCard text-left shadow-xl" role="menu">
                         <button type="button" role="menuitem" onclick="selectRecentlyViewedProfileType('viewers')" class="block w-full px-3 py-2 text-left text-xs font-semibold text-white hover:bg-gold/10 hover:text-gold">Who viewed your profile</button>
                         <button type="button" role="menuitem" onclick="selectRecentlyViewedProfileType('profiles')" class="block w-full px-3 py-2 text-left text-xs font-semibold text-white hover:bg-gold/10 hover:text-gold">Profiles recently viewed</button>
                     </div>
                 </div>
-                <div id="recentlyViewedProfiles" class="hidden space-y-2"></div>
-                <div id="profileViewersList" class="space-y-2"></div>
-            </aside>
+            </div>
+            <div id="recentlyViewedPrimaryView" class="w-full">
+                <div id="recentlyViewedContent" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+                <p id="recentlyViewedEmpty" class="hidden rounded-xl border border-darkBorder bg-darkCard p-6 text-sm text-gray-400">No recently viewed products or posts yet.</p>
+            </div>
+            <div id="recentlyViewedProfileView" class="hidden w-full">
+                <div id="recentlyViewedProfiles" class="hidden grid-cols-1 gap-2 sm:grid-cols-2"></div>
+                <div id="profileViewersList" class="grid grid-cols-1 gap-2 sm:grid-cols-2"></div>
+            </div>
         </div>
     </main>
 
@@ -2833,13 +2825,16 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             selectRecentlyViewedProfileType(
                 document.getElementById('recentlyViewedProfileTypeButton')?.dataset.type || 'viewers'
             );
+            setRecentlyViewedActivePanel('content');
         }
 
         function toggleRecentlyViewedSelector() {
+            setRecentlyViewedActivePanel('content');
             document.getElementById('recentlyViewedSelector').classList.toggle('hidden');
         }
 
         function selectRecentlyViewedType(type) {
+            setRecentlyViewedActivePanel('content');
             const selected = type === 'post' ? 'post' : 'product';
             const button = document.getElementById('recentlyViewedTypeButton');
             button.dataset.type = selected;
@@ -2849,10 +2844,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         }
 
         function toggleRecentlyViewedProfileSelector() {
+            setRecentlyViewedActivePanel('profile');
             document.getElementById('recentlyViewedProfileSelector').classList.toggle('hidden');
         }
 
         function selectRecentlyViewedProfileType(type) {
+            setRecentlyViewedActivePanel('profile');
             const selected = type === 'profiles' ? 'profiles' : 'viewers';
             const button = document.getElementById('recentlyViewedProfileTypeButton');
             button.dataset.type = selected;
@@ -2860,34 +2857,29 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 ? 'Profiles recently viewed'
                 : 'Who viewed your profile';
             document.getElementById('recentlyViewedProfileSelector').classList.add('hidden');
-            document.getElementById('recentlyViewedProfiles').classList.toggle('hidden', selected !== 'profiles');
-            document.getElementById('profileViewersList').classList.toggle('hidden', selected !== 'viewers');
+            const profiles = document.getElementById('recentlyViewedProfiles');
+            const viewers = document.getElementById('profileViewersList');
+            profiles.classList.toggle('hidden', selected !== 'profiles');
+            profiles.classList.toggle('grid', selected === 'profiles');
+            viewers.classList.toggle('hidden', selected !== 'viewers');
+            viewers.classList.toggle('grid', selected === 'viewers');
         }
 
-        function swapRecentlyViewedPanels() {
-            const area = document.getElementById('recentlyViewedSwapArea');
-            const left = document.getElementById('recentlyViewedLeftPanel');
-            const right = document.getElementById('recentlyViewedRightPanel');
-            const leftFirst = area.firstElementChild === left;
-            if (leftFirst) {
-                area.insertBefore(right, left);
+        function setRecentlyViewedActivePanel(panel) {
+            const contentActive = panel !== 'profile';
+            document.getElementById('recentlyViewedPrimaryView').classList.toggle('hidden', !contentActive);
+            document.getElementById('recentlyViewedProfileView').classList.toggle('hidden', contentActive);
+            document.getElementById('recentlyViewedTypeButton').classList.toggle('border-gold/50', contentActive);
+            document.getElementById('recentlyViewedTypeButton').classList.toggle('bg-gold/10', contentActive);
+            document.getElementById('recentlyViewedTypeButton').classList.toggle('text-gold', contentActive);
+            document.getElementById('recentlyViewedProfileTypeButton').classList.toggle('border-gold/50', !contentActive);
+            document.getElementById('recentlyViewedProfileTypeButton').classList.toggle('bg-gold/10', !contentActive);
+            document.getElementById('recentlyViewedProfileTypeButton').classList.toggle('text-gold', !contentActive);
+            if (!contentActive) {
+                document.getElementById('recentlyViewedSelector').classList.add('hidden');
             } else {
-                area.insertBefore(left, right);
+                document.getElementById('recentlyViewedProfileSelector').classList.add('hidden');
             }
-        }
-
-        let recentlyViewedTouchX = null;
-        function recentlyViewedTouchStart(event) {
-            recentlyViewedTouchX = event.changedTouches?.[0]?.clientX ?? null;
-        }
-
-        function recentlyViewedTouchEnd(event) {
-            if (recentlyViewedTouchX == null) return;
-            const endX = event.changedTouches?.[0]?.clientX;
-            if (typeof endX === 'number' && Math.abs(endX - recentlyViewedTouchX) >= 80) {
-                swapRecentlyViewedPanels();
-            }
-            recentlyViewedTouchX = null;
         }
 
         function openRecentlyViewedPost(postId) {
