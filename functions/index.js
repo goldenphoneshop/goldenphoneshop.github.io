@@ -433,6 +433,49 @@ exports.listProfileViewers = onCall(async request => {
   };
 });
 
+exports.quickFollowMember = onCall(async request => {
+  const auth = requireVerifiedUser(request);
+  const memberUid = request.data?.memberUid;
+  if (typeof memberUid !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(memberUid) ||
+      memberUid === auth.uid) {
+    throw new HttpsError("invalid-argument", "Choose a valid member to follow.");
+  }
+  const [viewerSnapshot, memberSnapshot] = await Promise.all([
+    db.collection("users").doc(auth.uid).get(),
+    db.collection("users").doc(memberUid).get()
+  ]);
+  if (!viewerSnapshot.exists || !memberSnapshot.exists ||
+      !["Buyer", "Vendor"].includes(memberSnapshot.data().role)) {
+    throw new HttpsError("not-found", "This member could not be found.");
+  }
+  const followRef = db.collection("users").doc(auth.uid)
+    .collection("following").doc(memberUid);
+  const followerRef = db.collection("users").doc(memberUid)
+    .collection("followers").doc(auth.uid);
+  const added = await db.runTransaction(async transaction => {
+    const [followSnapshot, followerSnapshot] = await Promise.all([
+      transaction.get(followRef),
+      transaction.get(followerRef)
+    ]);
+    if (followSnapshot.exists && followerSnapshot.exists) return false;
+    const timestamp = FieldValue.serverTimestamp();
+    transaction.set(followRef, {
+      memberUid,
+      memberName: String(memberSnapshot.data().name || "Marketplace member").slice(0, 120),
+      memberRole: memberSnapshot.data().role,
+      createdAt: timestamp
+    }, { merge: true });
+    transaction.set(followerRef, {
+      followerUid: auth.uid,
+      followerName: String(viewerSnapshot.data().name || "Marketplace member").slice(0, 120),
+      followerRole: viewerSnapshot.data().role === "Vendor" ? "Vendor" : "Buyer",
+      createdAt: timestamp
+    }, { merge: true });
+    return true;
+  });
+  return { followed: true, alreadyFollowing: !added, memberUid };
+});
+
 async function sumOwnedItemLikes(itemsCollection, statsCollection, ownerUid) {
   const items = await db.collection(itemsCollection)
     .where("ownerUid", "==", ownerUid)

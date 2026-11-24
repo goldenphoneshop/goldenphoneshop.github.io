@@ -115,6 +115,7 @@ test("a visitor can render a post without a media owner", () => {
     currentUser: null,
     escapeHtml: String,
     renderVerifiedDealerBadge: () => "",
+    renderQuickFollowButton: () => "",
     communityDownloadPermissionCache: new Map(),
     openCommunityCommentPostIds: new Set(),
     communityCommentVoiceStates: new Map(),

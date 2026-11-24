@@ -508,7 +508,15 @@
         </div>
         <div class="grid grid-cols-1 gap-5 lg:grid-cols-3">
             <section class="lg:col-span-2">
-                <h2 class="mb-3 text-sm font-bold text-white">Products and posts</h2>
+                <div class="relative mb-3 inline-block">
+                    <button id="recentlyViewedTypeButton" type="button" data-type="product" onclick="toggleRecentlyViewedSelector()" aria-haspopup="menu" aria-expanded="false" class="inline-flex items-center gap-2 rounded-lg border border-darkBorder bg-darkCard px-3 py-2 text-sm font-bold text-white">
+                        <span>Products</span><i class="fa-solid fa-chevron-down text-[10px] text-gray-400"></i>
+                    </button>
+                    <div id="recentlyViewedSelector" class="absolute left-0 top-full z-20 mt-1 hidden w-36 overflow-hidden rounded-lg border border-darkBorder bg-darkCard shadow-xl" role="menu">
+                        <button type="button" role="menuitem" onclick="selectRecentlyViewedType('product')" class="block w-full px-3 py-2 text-left text-xs font-semibold text-white hover:bg-gold/10 hover:text-gold">Products</button>
+                        <button type="button" role="menuitem" onclick="selectRecentlyViewedType('post')" class="block w-full px-3 py-2 text-left text-xs font-semibold text-white hover:bg-gold/10 hover:text-gold">Post</button>
+                    </div>
+                </div>
                 <div id="recentlyViewedContent" class="grid grid-cols-1 gap-3 sm:grid-cols-2"></div>
                 <p id="recentlyViewedEmpty" class="hidden rounded-xl border border-darkBorder bg-darkCard p-6 text-sm text-gray-400">No recently viewed products or posts yet.</p>
             </section>
@@ -2785,9 +2793,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
             const profiles = history.filter(item => item.type === 'profile');
             const contentItems = history.filter(item => item.type !== 'profile');
+            const selectedType = document.getElementById('recentlyViewedTypeButton')
+                ?.dataset.type || 'product';
+            const visibleItems = contentItems.filter(item => item.type === selectedType);
             const content = document.getElementById('recentlyViewedContent');
             const empty = document.getElementById('recentlyViewedEmpty');
-            content.innerHTML = contentItems.map(item => {
+            content.innerHTML = visibleItems.map(item => {
                 const action = item.type === 'product'
                     ? `openDetailModal(this.dataset.itemId)`
                     : `openRecentlyViewedPost(this.dataset.itemId)`;
@@ -2797,12 +2808,28 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     <span class="block px-3 pb-3 text-[10px] text-gray-400">${item.type === 'product' ? 'Product' : 'Community post'}</span>
                 </button>`;
             }).join('');
-            empty.classList.toggle('hidden', contentItems.length > 0);
+            empty.textContent = selectedType === 'post'
+                ? 'No recently viewed posts yet.'
+                : 'No recently viewed products yet.';
+            empty.classList.toggle('hidden', visibleItems.length > 0);
             renderRecentlyViewedPeople(
                 profiles.map(item => ({ uid: item.id, name: item.title, role: item.role })),
                 'recentlyViewedProfiles',
                 'recently viewed'
             );
+        }
+
+        function toggleRecentlyViewedSelector() {
+            document.getElementById('recentlyViewedSelector').classList.toggle('hidden');
+        }
+
+        function selectRecentlyViewedType(type) {
+            const selected = type === 'post' ? 'post' : 'product';
+            const button = document.getElementById('recentlyViewedTypeButton');
+            button.dataset.type = selected;
+            button.querySelector('span').textContent = selected === 'post' ? 'Posts' : 'Products';
+            document.getElementById('recentlyViewedSelector').classList.add('hidden');
+            renderRecentlyViewed();
         }
 
         function openRecentlyViewedPost(postId) {
@@ -3224,9 +3251,10 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 ? `<button type="button" onclick="openCommunityAuthorProfile(this.dataset.uid)" data-uid="${escapeHtml(post.ownerUid)}" class="truncate text-left text-xs font-bold text-gold hover:underline">${escapeHtml(author)}</button>`
                 : `<span class="truncate text-xs font-bold text-gold">${escapeHtml(author)}</span>`;
             const authorIdentity = `<div class="flex min-w-0 items-center gap-1">${profileAction}${renderVerifiedDealerBadge(post.ownerUid)}</div>`;
-            const authorAvatar = currentUser && post.ownerUid
+            const authorAvatar = post.ownerUid
                 ? `<button type="button" onclick="openCommunityAuthorProfile(this.dataset.uid)" data-uid="${escapeHtml(post.ownerUid)}" class="h-9 w-9 flex-shrink-0 overflow-hidden rounded-full border border-gold/40 bg-darkBg" aria-label="Open ${escapeHtml(author)} profile"><img data-community-author-photo="${escapeHtml(post.ownerUid)}" alt="${escapeHtml(author)} profile photo" class="hidden h-full w-full object-cover"><span class="flex h-full w-full items-center justify-center text-xs font-extrabold text-gold">${escapeHtml(author.charAt(0).toUpperCase())}</span></button>`
                 : '';
+            const quickFollow = renderQuickFollowButton(post.ownerUid, post.ownerName);
             const downloadable = currentUser && post.mediaOwnerUid === currentUser.uid
                 ? currentUser.allowMediaDownloads === true
                 : currentUser && communityDownloadPermissionCache.get(post.mediaOwnerUid) === true;
@@ -3244,7 +3272,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 : voiceState?.blob ? 'Voice note ready to post.' : '';
             return `
                 <article data-community-post-id="${escapeHtml(post.id)}" onclick="recordRecentlyViewed({ type: 'post', id: this.dataset.communityPostId, title: this.dataset.postTitle, imageUrl: this.dataset.postImage })" data-post-title="${escapeHtml(post.caption || 'Community post')}" data-post-image="${escapeHtml(images[0] || '')}" class="overflow-hidden rounded-2xl border border-darkBorder bg-darkCard p-3 shadow-lg">
-                    <div class="mb-3 flex items-center justify-between gap-2"><div class="flex min-w-0 items-center gap-2">${authorAvatar}${authorIdentity}</div><span class="text-[10px] text-gray-500">${formatCommunityPostDate(post.createdAt)}</span></div>
+                    <div class="mb-3 flex items-center justify-between gap-2"><div class="flex min-w-0 items-center gap-2">${authorAvatar}${quickFollow}${authorIdentity}</div><span class="text-[10px] text-gray-500">${formatCommunityPostDate(post.createdAt)}</span></div>
                     ${reshareNote}
                     ${media ? `<div class="space-y-2">${media}</div>` : '<p class="rounded-lg bg-darkBg p-4 text-xs text-gray-400">This media is unavailable.</p>'}
                     ${post.caption ? `<p class="mt-3 whitespace-pre-wrap break-words text-sm text-gray-200">${escapeHtml(post.caption)}</p>` : ''}
@@ -8208,7 +8236,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                             <div class="flex items-center justify-between mb-3 border-t border-darkBorder/60 pt-2 text-[11px] text-gray-400">
                                 <div class="flex min-w-0 items-center gap-1">
                                     ${prod.ownerUid
-                                        ? `<button type="button" onclick="openVendorProfile(this.dataset.profileUid)" data-profile-uid="${escapeHtml(prod.ownerUid)}" class="flex min-w-0 items-center gap-2 truncate text-left hover:text-gold hover:underline" aria-label="View ${escapeHtml(prod.vendorName)} profile"><span class="h-7 w-7 flex-shrink-0 overflow-hidden rounded-full border border-gold/40 bg-darkBg"><img data-product-author-photo="${escapeHtml(prod.ownerUid)}" alt="${escapeHtml(prod.vendorName)} profile photo" class="hidden h-full w-full object-cover"><span class="flex h-full w-full items-center justify-center text-[10px] font-extrabold text-gold">${escapeHtml(String(prod.vendorName || 'V').charAt(0).toUpperCase())}</span></span><span class="truncate">${escapeHtml(prod.vendorName)}</span></button>`
+                                                        ? `<button type="button" onclick="openVendorProfile(this.dataset.profileUid)" data-profile-uid="${escapeHtml(prod.ownerUid)}" class="flex min-w-0 items-center gap-2 truncate text-left hover:text-gold hover:underline" aria-label="View ${escapeHtml(prod.vendorName)} profile"><span class="h-7 w-7 flex-shrink-0 overflow-hidden rounded-full border border-gold/40 bg-darkBg"><img data-product-author-photo="${escapeHtml(prod.ownerUid)}" alt="${escapeHtml(prod.vendorName)} profile photo" class="hidden h-full w-full object-cover"><span class="flex h-full w-full items-center justify-center text-[10px] font-extrabold text-gold">${escapeHtml(String(prod.vendorName || 'V').charAt(0).toUpperCase())}</span></span><span class="truncate">${escapeHtml(prod.vendorName)}</span></button>${renderQuickFollowButton(prod.ownerUid, prod.vendorName)}`
                                         : `<span class="max-w-[150px] truncate"><i class="fa-solid fa-store text-gold mr-1"></i>${escapeHtml(prod.vendorName)}</span>`}
                                     ${renderVerifiedDealerBadge(prod.ownerUid)}
                                 </div>
@@ -8420,7 +8448,50 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             `;
         }
 
+        function renderQuickFollowButton(memberUid, memberName) {
+            if (typeof memberUid !== 'string' || !memberUid ||
+                currentUser?.uid === memberUid || followedMemberIds.has(memberUid)) {
+                return '';
+            }
+            return `<button type="button" data-quick-follow="${escapeHtml(memberUid)}" onclick="quickFollowMember(this)" data-member-uid="${escapeHtml(memberUid)}" aria-label="Follow ${escapeHtml(memberName || 'this member')}" title="Follow" class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gold/50 bg-gold/10 text-sm font-extrabold text-gold hover:bg-gold/20">+</button>`;
+        }
+
+        async function quickFollowMember(button) {
+            const memberUid = button?.dataset?.memberUid;
+            if (!currentUser) {
+                showToast('Sign in to follow marketplace members.', 'info');
+                openAuthModal('signin');
+                return;
+            }
+            if (!memberUid || memberUid === currentUser.uid ||
+                followedMemberIds.has(memberUid)) {
+                button?.remove();
+                return;
+            }
+            button.disabled = true;
+            try {
+                await firebaseFunctions.httpsCallable('quickFollowMember')({ memberUid });
+                followedMemberIds.add(memberUid);
+                if (button.dataset.memberRole === 'Vendor') followedVendorIds.add(memberUid);
+                document.querySelectorAll(
+                    `[data-quick-follow="${CSS.escape(memberUid)}"]`
+                ).forEach(element => element.remove());
+                updateMemberFollowButtons();
+                showToast('Now following this member.', 'success');
+            } catch (error) {
+                console.error('Unable to quick-follow member.', error);
+                showToast(error.message || 'This member could not be followed.', 'error');
+                button.disabled = false;
+            }
+        }
+
         function updateMemberFollowButtons() {
+            document.querySelectorAll('[data-quick-follow]').forEach(button => {
+                if (button.dataset.quickFollow === currentUser?.uid ||
+                    followedMemberIds.has(button.dataset.quickFollow)) {
+                    button.remove();
+                }
+            });
             document.querySelectorAll('[data-member-follow]').forEach(button => {
                 const following = followedMemberIds.has(button.dataset.memberUid);
                 button.setAttribute('aria-pressed', String(following));
@@ -8459,6 +8530,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         .map(doc => doc.id));
                     renderFeedTabs();
                     renderProducts();
+                    renderCommunityPosts();
                     updateMemberFollowButtons();
                 }, error => {
                     console.error('Unable to load followed vendors.', error);
