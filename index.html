@@ -444,25 +444,8 @@
             <div id="memberSearchResults" class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
         </section>
 
-        <!-- Marketplace and Following feeds -->
-        <section id="communityFeedSection" class="mb-10">
-            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <h2 class="flex items-center gap-2 text-lg font-bold text-white">
-                        <i class="fa-solid fa-photo-film text-gold"></i> Community posts
-                    </h2>
-                    <p class="mt-1 text-xs text-gray-400">Share short videos and photos, and reshare posts from other members.</p>
-                </div>
-                <button type="button" onclick="openCommunityPostModal()" class="rounded-xl gold-gradient-bg px-4 py-2.5 text-xs font-bold text-black">
-                    <i class="fa-solid fa-circle-plus mr-1"></i> Create post
-                </button>
-            </div>
-            <div id="communityPostGrid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
-            <p id="communityPostEmpty" class="hidden rounded-xl border border-darkBorder bg-darkCard/50 p-6 text-center text-sm text-gray-400">No community posts yet. Share a photo or short video to get started.</p>
-        </section>
-
-        <!-- Marketplace and Following feeds -->
-        <div class="mb-8">
+        <!-- Marketplace product feed -->
+        <div id="marketplaceProductSection" class="mb-8">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-lg font-bold text-white flex items-center gap-2">
                     <i class="fa-solid fa-layer-group text-gold"></i> Marketplace Feed
@@ -483,19 +466,35 @@
             </div>
         </div>
 
-        <!-- Marketplace Products Grid -->
-        <section>
+        <section id="marketplaceProductGridSection">
             <div id="productGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 <!-- Products dynamically rendered here -->
             </div>
 
-            <!-- Empty State -->
             <div id="emptyState" class="hidden text-center py-16 bg-darkCard/50 rounded-2xl border border-darkBorder my-6">
                 <i class="fa-solid fa-box-open text-5xl text-gray-600 mb-4"></i>
                 <h3 class="text-lg font-bold text-gray-300">No products found</h3>
                 <p class="text-sm text-gray-500 max-w-md mx-auto mt-1 mb-4">No listings match your current filter or search criteria. Be the first vendor to add one!</p>
                 <button onclick="resetFilters()" class="px-4 py-2 text-xs font-bold gold-gradient-bg text-black rounded-lg">Clear Filters</button>
             </div>
+        </section>
+    </main>
+
+    <main id="communityPostsPage" class="hidden max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+        <section id="communityFeedSection" class="mb-10">
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 class="flex items-center gap-2 text-lg font-bold text-white">
+                        <i class="fa-solid fa-photo-film text-gold"></i> Community posts
+                    </h2>
+                    <p class="mt-1 text-xs text-gray-400">Share short videos and photos, and reshare posts from other members.</p>
+                </div>
+                <button type="button" onclick="openCommunityPostModal()" class="rounded-xl gold-gradient-bg px-4 py-2.5 text-xs font-bold text-black">
+                    <i class="fa-solid fa-circle-plus mr-1"></i> Create post
+                </button>
+            </div>
+            <div id="communityPostGrid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
+            <p id="communityPostEmpty" class="hidden rounded-xl border border-darkBorder bg-darkCard/50 p-6 text-center text-sm text-gray-400">No community posts yet. Share a photo or short video to get started.</p>
         </section>
     </main>
 
@@ -2685,18 +2684,23 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             document.getElementById('chatPage').classList.add('hidden');
             document.getElementById('accountPage').classList.add('hidden');
             document.getElementById('marketplaceMain').classList.remove('hidden');
+            document.getElementById('communityPostsPage').classList.add('hidden');
             document.getElementById('marketplaceFooter').classList.remove('hidden');
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         function openCommunityPostsPage() {
-            showMarketplacePage();
-            window.setTimeout(() => {
-                document.getElementById('communityFeedSection')?.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'start'
-                });
-            }, 0);
+            toggleSideMenu(false);
+            setGoldenChatFullscreen(false);
+            closeChatContactsModal();
+            stopGoldenChatSubscriptions();
+            document.getElementById('chatPage').classList.add('hidden');
+            document.getElementById('accountPage').classList.add('hidden');
+            document.getElementById('marketplaceMain').classList.add('hidden');
+            document.getElementById('communityPostsPage').classList.remove('hidden');
+            document.getElementById('marketplaceFooter').classList.remove('hidden');
+            renderCommunityPosts();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         function openAccountPage(section = 'profile') {
@@ -2712,6 +2716,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             clearProfileProductStatsSubscriptions();
             stopGoldenChatSubscriptions();
             document.getElementById('marketplaceMain').classList.add('hidden');
+            document.getElementById('communityPostsPage').classList.add('hidden');
             document.getElementById('chatPage').classList.add('hidden');
             document.getElementById('marketplaceFooter').classList.add('hidden');
             document.getElementById('accountPage').classList.remove('hidden');
@@ -5510,6 +5515,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             document.getElementById('chatRoleLabel').textContent =
                 `${currentUser.role} account · at least 1 coin to start a new chat · coins per sent message`;
             document.getElementById('marketplaceMain').classList.add('hidden');
+            document.getElementById('communityPostsPage').classList.add('hidden');
             document.getElementById('accountPage').classList.add('hidden');
             document.getElementById('marketplaceFooter').classList.add('hidden');
             document.getElementById('chatPage').classList.remove('hidden');
