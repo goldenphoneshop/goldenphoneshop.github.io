@@ -348,6 +348,9 @@
                 <button type="button" onclick="openCommunityPostsPage()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
                     <i class="fa-solid fa-photo-film w-5 text-center"></i> Community Posts
                 </button>
+                <button type="button" onclick="openRecentlyViewedPage()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
+                    <i class="fa-solid fa-clock-rotate-left w-5 text-center"></i> Recently viewed
+                </button>
                 <button type="button" onclick="openMemberSearch()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
                     <i class="fa-solid fa-users w-5 text-center"></i> Find members
                 </button>
@@ -496,6 +499,30 @@
             <div id="communityPostGrid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
             <p id="communityPostEmpty" class="hidden rounded-xl border border-darkBorder bg-darkCard/50 p-6 text-center text-sm text-gray-400">No community posts yet. Share a photo or short video to get started.</p>
         </section>
+    </main>
+
+    <main id="recentlyViewedPage" class="hidden max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+        <div class="mb-6">
+            <h1 class="text-2xl font-extrabold text-white">Recently viewed</h1>
+            <p class="mt-1 text-xs text-gray-400">Private history on this device, plus verified members who recently viewed your profile.</p>
+        </div>
+        <div class="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <section class="lg:col-span-2">
+                <h2 class="mb-3 text-sm font-bold text-white">Products and posts</h2>
+                <div id="recentlyViewedContent" class="grid grid-cols-1 gap-3 sm:grid-cols-2"></div>
+                <p id="recentlyViewedEmpty" class="hidden rounded-xl border border-darkBorder bg-darkCard p-6 text-sm text-gray-400">No recently viewed products or posts yet.</p>
+            </section>
+            <aside class="space-y-5">
+                <section>
+                    <h2 class="mb-3 text-sm font-bold text-white">Profiles recently viewed</h2>
+                    <div id="recentlyViewedProfiles" class="space-y-2"></div>
+                </section>
+                <section>
+                    <h2 class="mb-3 text-sm font-bold text-white">Who viewed your profile</h2>
+                    <div id="profileViewersList" class="space-y-2"></div>
+                </section>
+            </aside>
+        </div>
     </main>
 
     <!-- GOLDEN CHAT -->
@@ -2685,8 +2712,109 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             document.getElementById('accountPage').classList.add('hidden');
             document.getElementById('marketplaceMain').classList.remove('hidden');
             document.getElementById('communityPostsPage').classList.add('hidden');
+            document.getElementById('recentlyViewedPage').classList.add('hidden');
             document.getElementById('marketplaceFooter').classList.remove('hidden');
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function recentlyViewedKey() {
+            return `goldenEagle_recentlyViewed:${currentUser?.uid || 'guest'}`;
+        }
+
+        function recordRecentlyViewed(item) {
+            let history = [];
+            try {
+                history = JSON.parse(localStorage.getItem(recentlyViewedKey()) || '[]');
+            } catch (error) {
+                history = [];
+            }
+            history = history.filter(entry => entry.type !== item.type || entry.id !== item.id);
+            history.unshift({ ...item, viewedAtMs: Date.now() });
+            try {
+                localStorage.setItem(recentlyViewedKey(), JSON.stringify(history.slice(0, 40)));
+            } catch (error) {
+                console.warn('Recently viewed history could not be saved.', error);
+            }
+        }
+
+        async function openRecentlyViewedPage() {
+            toggleSideMenu(false);
+            setGoldenChatFullscreen(false);
+            closeChatContactsModal();
+            stopGoldenChatSubscriptions();
+            document.getElementById('chatPage').classList.add('hidden');
+            document.getElementById('accountPage').classList.add('hidden');
+            document.getElementById('marketplaceMain').classList.add('hidden');
+            document.getElementById('communityPostsPage').classList.add('hidden');
+            document.getElementById('recentlyViewedPage').classList.remove('hidden');
+            document.getElementById('marketplaceFooter').classList.remove('hidden');
+            renderRecentlyViewed();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (!currentUser) return;
+            try {
+                const result = await firebaseFunctions.httpsCallable('listProfileViewers')();
+                renderRecentlyViewedPeople(result.data?.viewers || [], 'profileViewersList', 'viewed you');
+            } catch (error) {
+                console.error('Unable to load profile viewers.', error);
+                document.getElementById('profileViewersList').textContent =
+                    'Profile visitors could not be loaded.';
+            }
+        }
+
+        function renderRecentlyViewedPeople(items, targetId, suffix) {
+            const target = document.getElementById(targetId);
+            target.replaceChildren();
+            if (!items.length) {
+                target.textContent = 'No profiles yet.';
+                return;
+            }
+            target.innerHTML = items.map(item => `
+                <button type="button" onclick="openMemberProfile(this.dataset.profileUid)" data-profile-uid="${escapeHtml(item.uid)}" class="w-full rounded-xl border border-darkBorder bg-darkCard p-3 text-left hover:border-gold/50">
+                    <span class="block truncate text-xs font-bold text-white">${escapeHtml(item.name || 'Marketplace member')}</span>
+                    <span class="mt-1 block text-[10px] text-gray-400">${escapeHtml(item.role || 'Member')} · ${escapeHtml(suffix)}</span>
+                </button>
+            `).join('');
+        }
+
+        function renderRecentlyViewed() {
+            let history = [];
+            try {
+                history = JSON.parse(localStorage.getItem(recentlyViewedKey()) || '[]');
+            } catch (error) {
+                history = [];
+            }
+            const profiles = history.filter(item => item.type === 'profile');
+            const contentItems = history.filter(item => item.type !== 'profile');
+            const content = document.getElementById('recentlyViewedContent');
+            const empty = document.getElementById('recentlyViewedEmpty');
+            content.innerHTML = contentItems.map(item => {
+                const action = item.type === 'product'
+                    ? `openDetailModal(this.dataset.itemId)`
+                    : `openRecentlyViewedPost(this.dataset.itemId)`;
+                return `<button type="button" onclick="${action}" data-item-id="${escapeHtml(item.id)}" class="overflow-hidden rounded-xl border border-darkBorder bg-darkCard text-left hover:border-gold/50">
+                    ${item.imageUrl ? `<img src="${escapeHtml(item.imageUrl)}" alt="" class="h-32 w-full object-cover">` : `<div class="flex h-32 items-center justify-center bg-darkBg text-gold"><i class="fa-solid ${item.type === 'product' ? 'fa-box' : 'fa-photo-film'} text-3xl"></i></div>`}
+                    <span class="block p-3 text-xs font-bold text-white">${escapeHtml(item.title || 'Recently viewed post')}</span>
+                    <span class="block px-3 pb-3 text-[10px] text-gray-400">${item.type === 'product' ? 'Product' : 'Community post'}</span>
+                </button>`;
+            }).join('');
+            empty.classList.toggle('hidden', contentItems.length > 0);
+            renderRecentlyViewedPeople(
+                profiles.map(item => ({ uid: item.id, name: item.title, role: item.role })),
+                'recentlyViewedProfiles',
+                'recently viewed'
+            );
+        }
+
+        function openRecentlyViewedPost(postId) {
+            openCommunityPostsPage();
+            window.setTimeout(() => {
+                const post = document.querySelector(
+                    `[data-community-post-id="${CSS.escape(postId)}"]`
+                );
+                post?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                post?.classList.add('ring-2', 'ring-gold');
+                window.setTimeout(() => post?.classList.remove('ring-2', 'ring-gold'), 2000);
+            }, 100);
         }
 
         function openCommunityPostsPage() {
@@ -2698,6 +2826,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             document.getElementById('accountPage').classList.add('hidden');
             document.getElementById('marketplaceMain').classList.add('hidden');
             document.getElementById('communityPostsPage').classList.remove('hidden');
+            document.getElementById('recentlyViewedPage').classList.add('hidden');
             document.getElementById('marketplaceFooter').classList.remove('hidden');
             renderCommunityPosts();
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -3049,6 +3178,30 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 }
             });
             cleanupCommunityPostLikeSubscriptions();
+            loadCommunityAuthorPhotos();
+        }
+
+        async function loadCommunityAuthorPhotos() {
+            const pending = [...new Set(
+                [...document.querySelectorAll('[data-community-author-photo], [data-product-author-photo]')]
+                    .map(element => element.dataset.communityAuthorPhoto ||
+                        element.dataset.productAuthorPhoto)
+            )];
+            await Promise.all(pending.map(async uid => {
+                try {
+                    const snapshot = await firebaseFirestore.collection('users').doc(uid).get();
+                    const path = safeProfilePhotoPath(snapshot.data()?.profilePhotoPath, uid);
+                    if (!path) return;
+                    document.querySelectorAll(`[data-community-author-photo="${CSS.escape(uid)}"], [data-product-author-photo="${CSS.escape(uid)}"]`)
+                        .forEach(element => {
+                            const initials = element.parentElement?.querySelector('span');
+                            loadProfilePhotoInto(element, path, uid, true);
+                            if (initials) initials.classList.add('hidden');
+                        });
+                } catch (error) {
+                    console.error('Unable to load post author profile photo.', error);
+                }
+            }));
         }
 
         function renderCommunityPostCard(post) {
@@ -3071,6 +3224,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 ? `<button type="button" onclick="openCommunityAuthorProfile(this.dataset.uid)" data-uid="${escapeHtml(post.ownerUid)}" class="truncate text-left text-xs font-bold text-gold hover:underline">${escapeHtml(author)}</button>`
                 : `<span class="truncate text-xs font-bold text-gold">${escapeHtml(author)}</span>`;
             const authorIdentity = `<div class="flex min-w-0 items-center gap-1">${profileAction}${renderVerifiedDealerBadge(post.ownerUid)}</div>`;
+            const authorAvatar = currentUser && post.ownerUid
+                ? `<button type="button" onclick="openCommunityAuthorProfile(this.dataset.uid)" data-uid="${escapeHtml(post.ownerUid)}" class="h-9 w-9 flex-shrink-0 overflow-hidden rounded-full border border-gold/40 bg-darkBg" aria-label="Open ${escapeHtml(author)} profile"><img data-community-author-photo="${escapeHtml(post.ownerUid)}" alt="${escapeHtml(author)} profile photo" class="hidden h-full w-full object-cover"><span class="flex h-full w-full items-center justify-center text-xs font-extrabold text-gold">${escapeHtml(author.charAt(0).toUpperCase())}</span></button>`
+                : '';
             const downloadable = currentUser && post.mediaOwnerUid === currentUser.uid
                 ? currentUser.allowMediaDownloads === true
                 : currentUser && communityDownloadPermissionCache.get(post.mediaOwnerUid) === true;
@@ -3087,8 +3243,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 ? 'Recording voice note…'
                 : voiceState?.blob ? 'Voice note ready to post.' : '';
             return `
-                <article data-community-post-id="${escapeHtml(post.id)}" class="overflow-hidden rounded-2xl border border-darkBorder bg-darkCard p-3 shadow-lg">
-                    <div class="mb-3 flex items-center justify-between gap-2">${authorIdentity}<span class="text-[10px] text-gray-500">${formatCommunityPostDate(post.createdAt)}</span></div>
+                <article data-community-post-id="${escapeHtml(post.id)}" onclick="recordRecentlyViewed({ type: 'post', id: this.dataset.communityPostId, title: this.dataset.postTitle, imageUrl: this.dataset.postImage })" data-post-title="${escapeHtml(post.caption || 'Community post')}" data-post-image="${escapeHtml(images[0] || '')}" class="overflow-hidden rounded-2xl border border-darkBorder bg-darkCard p-3 shadow-lg">
+                    <div class="mb-3 flex items-center justify-between gap-2"><div class="flex min-w-0 items-center gap-2">${authorAvatar}${authorIdentity}</div><span class="text-[10px] text-gray-500">${formatCommunityPostDate(post.createdAt)}</span></div>
                     ${reshareNote}
                     ${media ? `<div class="space-y-2">${media}</div>` : '<p class="rounded-lg bg-darkBg p-4 text-xs text-gray-400">This media is unavailable.</p>'}
                     ${post.caption ? `<p class="mt-3 whitespace-pre-wrap break-words text-sm text-gray-200">${escapeHtml(post.caption)}</p>` : ''}
@@ -4643,6 +4799,14 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 renderMemberProfile(currentUser, profileUid);
                 return;
             }
+            recordRecentlyViewed({
+                type: 'profile',
+                id: profileUid,
+                title: 'Marketplace profile',
+                role: 'Member'
+            });
+            firebaseFunctions.httpsCallable('recordProfileView')({ profileUid })
+                .catch(error => console.error('Unable to record profile view.', error));
 
             const content = document.getElementById('memberProfileContent');
             content.textContent = 'Loading profile…';
@@ -4653,7 +4817,14 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     content.textContent = 'This profile is no longer available.';
                     return;
                 }
-                renderMemberProfile(snapshot.data(), profileUid);
+                const profile = snapshot.data();
+                recordRecentlyViewed({
+                    type: 'profile',
+                    id: profileUid,
+                    title: profile.name || 'Marketplace profile',
+                    role: profile.role === 'Vendor' ? 'Vendor' : 'Buyer'
+                });
+                renderMemberProfile(profile, profileUid);
             } catch (error) {
                 console.error('Unable to load marketplace member profile.', error);
                 content.textContent = 'This profile could not load. Check your connection and Firebase setup.';
@@ -5516,6 +5687,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 `${currentUser.role} account · at least 1 coin to start a new chat · coins per sent message`;
             document.getElementById('marketplaceMain').classList.add('hidden');
             document.getElementById('communityPostsPage').classList.add('hidden');
+            document.getElementById('recentlyViewedPage').classList.add('hidden');
             document.getElementById('accountPage').classList.add('hidden');
             document.getElementById('marketplaceFooter').classList.add('hidden');
             document.getElementById('chatPage').classList.remove('hidden');
@@ -8036,7 +8208,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                             <div class="flex items-center justify-between mb-3 border-t border-darkBorder/60 pt-2 text-[11px] text-gray-400">
                                 <div class="flex min-w-0 items-center gap-1">
                                     ${prod.ownerUid
-                                        ? `<button type="button" onclick="openVendorProfile(this.dataset.profileUid)" data-profile-uid="${escapeHtml(prod.ownerUid)}" class="max-w-[150px] truncate text-left hover:text-gold hover:underline" aria-label="View ${escapeHtml(prod.vendorName)} profile"><i class="fa-solid fa-store text-gold mr-1"></i>${escapeHtml(prod.vendorName)}</button>`
+                                        ? `<button type="button" onclick="openVendorProfile(this.dataset.profileUid)" data-profile-uid="${escapeHtml(prod.ownerUid)}" class="flex min-w-0 items-center gap-2 truncate text-left hover:text-gold hover:underline" aria-label="View ${escapeHtml(prod.vendorName)} profile"><span class="h-7 w-7 flex-shrink-0 overflow-hidden rounded-full border border-gold/40 bg-darkBg"><img data-product-author-photo="${escapeHtml(prod.ownerUid)}" alt="${escapeHtml(prod.vendorName)} profile photo" class="hidden h-full w-full object-cover"><span class="flex h-full w-full items-center justify-center text-[10px] font-extrabold text-gold">${escapeHtml(String(prod.vendorName || 'V').charAt(0).toUpperCase())}</span></span><span class="truncate">${escapeHtml(prod.vendorName)}</span></button>`
                                         : `<span class="max-w-[150px] truncate"><i class="fa-solid fa-store text-gold mr-1"></i>${escapeHtml(prod.vendorName)}</span>`}
                                     ${renderVerifiedDealerBadge(prod.ownerUid)}
                                 </div>
@@ -8067,6 +8239,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 </div>
             `).join('');
             syncFeedProductStats(filtered.map(product => String(product.id)));
+            loadCommunityAuthorPhotos();
         }
 
         function syncFeedProductStats(productIds) {
@@ -8356,6 +8529,12 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
         function openDetailModal(id) {
             const prod = products.find(p => p.id === id);
             if (!prod) return;
+            recordRecentlyViewed({
+                type: 'product',
+                id,
+                title: prod.title,
+                imageUrl: getProductMedia(prod)[0]?.url || ''
+            });
 
             activeProductDetailId = id;
             activeProductMedia = getProductMedia(prod);

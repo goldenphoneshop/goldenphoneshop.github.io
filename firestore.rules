@@ -176,6 +176,10 @@ service cloud.firestore {
         && request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if false;
 
+      match /profileViews/{viewerUid} {
+        allow read, write: if false;
+      }
+
       match /following/{memberId} {
         allow get, list: if verifiedAccount()
           && (request.auth.uid == userId

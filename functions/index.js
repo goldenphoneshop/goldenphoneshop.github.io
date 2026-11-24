@@ -394,6 +394,45 @@ exports.searchMarketplaceMembers = onCall(async request => {
   };
 });
 
+exports.recordProfileView = onCall(async request => {
+  const auth = requireVerifiedUser(request);
+  const profileUid = request.data?.profileUid;
+  if (typeof profileUid !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(profileUid) ||
+      profileUid === auth.uid) {
+    return { recorded: false };
+  }
+  const [viewer, target] = await Promise.all([
+    db.collection("users").doc(auth.uid).get(),
+    db.collection("users").doc(profileUid).get()
+  ]);
+  if (!viewer.exists || !target.exists) {
+    throw new HttpsError("not-found", "This profile could not be found.");
+  }
+  await db.collection("users").doc(profileUid).collection("profileViews").doc(auth.uid).set({
+    viewerUid: auth.uid,
+    viewerName: typeof viewer.data().name === "string" ? viewer.data().name.slice(0, 120) : "Marketplace member",
+    viewerRole: viewer.data().role === "Vendor" ? "Vendor" : "Buyer",
+    viewedAt: FieldValue.serverTimestamp()
+  });
+  return { recorded: true };
+});
+
+exports.listProfileViewers = onCall(async request => {
+  const auth = requireVerifiedUser(request);
+  const snapshot = await db.collection("users").doc(auth.uid).collection("profileViews")
+    .orderBy("viewedAt", "desc")
+    .limit(50)
+    .get();
+  return {
+    viewers: snapshot.docs.map(document => ({
+      uid: document.id,
+      name: document.data().viewerName,
+      role: document.data().viewerRole,
+      viewedAtMs: timestampMillis(document.data().viewedAt)
+    }))
+  };
+});
+
 async function sumOwnedItemLikes(itemsCollection, statsCollection, ownerUid) {
   const items = await db.collection(itemsCollection)
     .where("ownerUid", "==", ownerUid)
