@@ -321,13 +321,6 @@
             </div>
         </div>
 
-        <!-- Mobile Post Product Sub-bar -->
-        <div class="sm:hidden px-4 py-2 border-t border-darkBorder flex justify-between items-center bg-darkBg/60">
-            <button onclick="handlePostProductClick()" class="w-full py-2 text-xs font-bold rounded-lg gold-gradient-bg text-black flex items-center justify-center gap-2">
-                <i class="fa-solid fa-circle-plus"></i>
-                <span id="mobilePostActionLabel">Create post</span>
-            </button>
-        </div>
     </header>
 
     <!-- SIDE NAVIGATION MENU -->
@@ -534,6 +527,21 @@
             </div>
         </div>
     </main>
+
+    <div id="globalSearchResultsModal" class="fixed inset-0 z-[75] hidden items-center justify-center bg-black/75 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="globalSearchResultsHeading" onclick="if (event.target === this) closeGlobalSearchResults()">
+        <section class="max-h-[88vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-darkBorder bg-darkCard shadow-2xl">
+            <header class="flex items-center justify-between gap-3 border-b border-darkBorder p-4">
+                <div class="min-w-0">
+                    <h2 id="globalSearchResultsHeading" class="truncate text-lg font-extrabold text-white">Search results</h2>
+                    <p id="globalSearchStatus" class="mt-1 text-xs text-gray-400" role="status"></p>
+                </div>
+                <button type="button" onclick="closeGlobalSearchResults()" class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-darkBorder text-gray-300 hover:text-gold" aria-label="Close search results">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </header>
+            <div id="globalSearchResults" class="max-h-[72vh] space-y-5 overflow-y-auto p-4"></div>
+        </section>
+    </div>
 
     <!-- GOLDEN CHAT -->
     <main id="chatPage" class="hidden max-w-7xl mx-auto px-3 sm:px-6 py-4 flex-1 w-full">
@@ -1795,6 +1803,7 @@
         const boostingProductIds = new Set();
         let productBoostExpiryTimer = null;
         let currentUser = null;
+        let globalSearchTimer = null;
         const pendingSignupReferralCode = (new URLSearchParams(window.location.search).get('ref') || '').trim().slice(0, 32);
         let referralInfoRequestRevision = 0;
         let notificationsUnsubscribe = null;
@@ -2119,6 +2128,7 @@ function initializeFirebaseAuth() {
         }
         currentUser = {
             uid: user.uid,
+            photoURL: typeof user.photoURL === 'string' ? user.photoURL : '',
             email: user.email || '',
             phoneNumber: user.phoneNumber || '',
             name: user.displayName || localProfile?.name || user.email?.split('@')[0] ||
@@ -2678,8 +2688,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 container.innerHTML = `
                     <div class="flex items-center gap-1.5 rounded-full border border-darkBorder bg-darkBg py-1.5 pl-2 pr-2 sm:gap-2 sm:px-3">
                         <button type="button" onclick="openAccountPage('profile')" class="flex min-w-0 items-center gap-1.5 rounded-full text-left hover:text-gold" aria-label="Open my account">
-                        <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full gold-gradient-bg text-[10px] font-extrabold text-black">
-                            ${escapeHtml(displayName.charAt(0).toUpperCase())}
+                        <div class="h-7 w-7 flex-shrink-0 overflow-hidden rounded-full border border-gold/40 gold-gradient-bg text-[10px] font-extrabold text-black">
+                            <img data-header-profile-photo alt="${escapeHtml(displayName)} profile photo" class="hidden h-full w-full object-cover">
+                            <span class="flex h-full w-full items-center justify-center">${escapeHtml(displayName.charAt(0).toUpperCase())}</span>
                         </div>
                         <div class="min-w-0 text-left">
                             <span class="block max-w-[72px] truncate text-[10px] font-bold leading-none text-white sm:max-w-[120px] sm:text-xs">${escapeHtml(displayName)}</span>
@@ -2691,6 +2702,18 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         </button>
                     </div>
                 `;
+                const avatar = container.querySelector('[data-header-profile-photo]');
+                const initial = avatar?.nextElementSibling;
+                const photoPath = safeProfilePhotoPath(currentUser.profilePhotoPath, currentUser.uid);
+                if (photoPath) {
+                    loadProfilePhotoInto(avatar, photoPath, currentUser.uid).then(() => {
+                        if (!avatar.classList.contains('hidden') && initial) initial.classList.add('hidden');
+                    });
+                } else if (typeof currentUser.photoURL === 'string' && /^https:\/\//i.test(currentUser.photoURL)) {
+                    avatar.src = currentUser.photoURL;
+                    avatar.classList.remove('hidden');
+                    if (initial) initial.classList.add('hidden');
+                }
             } else {
                 container.innerHTML = `
                     <button onclick="openAuthModal('signin')" class="px-4 py-2 text-xs font-bold gold-gradient-bg text-black rounded-lg gold-glow hover:opacity-95 transition flex items-center gap-1.5">
@@ -2781,7 +2804,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 return;
             }
             target.innerHTML = items.map(item => `
-                <button type="button" onclick="openMemberProfile(this.dataset.profileUid)" data-profile-uid="${escapeHtml(item.uid)}" class="w-full rounded-xl border border-darkBorder bg-darkCard p-3 text-left hover:border-gold/50">
+                <button type="button" onclick="openProfileFromSearch(this.dataset.profileUid)" data-profile-uid="${escapeHtml(item.uid)}" class="w-full cursor-pointer rounded-xl border border-darkBorder bg-darkCard p-3 text-left transition hover:border-gold/50 hover:bg-gold/5">
                     <span class="block truncate text-xs font-bold text-white">${escapeHtml(item.name || 'Marketplace member')}</span>
                     <span class="mt-1 block text-[10px] text-gray-400">${escapeHtml(item.role || 'Member')} · ${escapeHtml(suffix)}</span>
                 </button>
@@ -8064,8 +8087,112 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
         function handleSearch(event) {
             if (event) event.preventDefault();
+            const immediate = Boolean(event);
             searchQuery = document.getElementById('searchInput').value.trim().toLowerCase();
             renderProducts();
+            if (globalSearchTimer) window.clearTimeout(globalSearchTimer);
+            if (!searchQuery) {
+                closeGlobalSearchResults();
+                return;
+            }
+            if (immediate) {
+                searchPublicContent(searchQuery, true);
+            } else {
+                globalSearchTimer = window.setTimeout(() => searchPublicContent(searchQuery, true), 250);
+            }
+        }
+
+        function openProfileFromSearch(uid) {
+            closeGlobalSearchResults();
+            openAccountPage('profile');
+            if (currentUser) openMemberProfile(uid);
+        }
+
+        function closeGlobalSearchResults() {
+            document.getElementById('globalSearchResultsModal').classList.add('hidden');
+            document.getElementById('globalSearchResultsModal').classList.remove('flex');
+        }
+
+        function openPostFromSearch(postId) {
+            closeGlobalSearchResults();
+            openCommunityPostsPage();
+            window.setTimeout(() => {
+                const post = document.querySelector(`[data-community-post-id="${CSS.escape(postId)}"]`);
+                post?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                post?.classList.add('ring-2', 'ring-gold');
+                window.setTimeout(() => post?.classList.remove('ring-2', 'ring-gold'), 2000);
+            }, 100);
+        }
+
+        async function searchPublicContent(query, openResults = false) {
+            const normalizedQuery = typeof query === 'string' ? query.trim().toLowerCase() : '';
+            if (!normalizedQuery) return;
+            const modal = document.getElementById('globalSearchResultsModal');
+            const status = document.getElementById('globalSearchStatus');
+            const container = document.getElementById('globalSearchResults');
+            if (openResults) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                status.textContent = `Searching for “${query.trim()}”…`;
+            }
+            const terms = normalizedQuery.split(/\s+/).filter(Boolean);
+            const matches = value => {
+                const text = String(value || '').toLowerCase();
+                return terms.every(term => text.includes(term));
+            };
+            const productMatches = products.filter(product => matches([
+                product.title,
+                product.category,
+                product.shortDesc,
+                product.fullDesc,
+                product.vendorName
+            ].join(' '))).slice(0, 20);
+            const postMatches = communityPosts.filter(post => matches([
+                post.caption,
+                post.ownerName,
+                post.mediaOwnerName
+            ].join(' '))).slice(0, 20);
+            let memberMatches = [];
+            if (currentUser && normalizedQuery.length >= 2) {
+                try {
+                    const result = await firebaseFunctions.httpsCallable('searchMarketplaceMembers')({
+                        query: query.trim()
+                    });
+                    memberMatches = Array.isArray(result.data?.members) ? result.data.members : [];
+                } catch (error) {
+                    console.error('Unable to search marketplace profiles.', error);
+                }
+            }
+            container.innerHTML = `
+                ${renderGlobalSearchGroup('Products', productMatches.map(product => `
+                    <button type="button" onclick="closeGlobalSearchResults(); openDetailModal(this.dataset.productId)" data-product-id="${escapeHtml(product.id)}" class="w-full rounded-xl border border-darkBorder bg-darkBg p-3 text-left transition hover:border-gold/50">
+                        <span class="block truncate text-sm font-bold text-white">${escapeHtml(product.title)}</span>
+                        <span class="mt-1 block text-xs text-gray-400">${escapeHtml(product.category || 'Marketplace product')} · ₦${Number(product.price || 0).toLocaleString()}</span>
+                    </button>`).join(''))}
+                ${renderGlobalSearchGroup('Community Posts', postMatches.map(post => `
+                    <button type="button" onclick="openPostFromSearch(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="w-full rounded-xl border border-darkBorder bg-darkBg p-3 text-left transition hover:border-gold/50">
+                        <span class="block line-clamp-2 text-sm font-bold text-white">${escapeHtml(post.caption || 'Community post')}</span>
+                        <span class="mt-1 block text-xs text-gray-400">${escapeHtml(post.ownerName || 'Marketplace member')}</span>
+                    </button>`).join(''))}
+                ${renderGlobalSearchGroup('Profiles', memberMatches.map(member => `
+                    <button type="button" onclick="openProfileFromSearch(this.dataset.profileUid)" data-profile-uid="${escapeHtml(member.uid)}" class="w-full rounded-xl border border-darkBorder bg-darkBg p-3 text-left transition hover:border-gold/50">
+                        <span class="block truncate text-sm font-bold text-white">${escapeHtml(member.name || 'Marketplace member')}</span>
+                        <span class="mt-1 block text-xs text-gray-400">${escapeHtml(member.role || 'Member')}${member.location ? ` · ${escapeHtml(member.location)}` : ''}</span>
+                    </button>`).join(''), !currentUser ? 'Sign in to search member profiles.' : '')}
+            `;
+            const total = productMatches.length + postMatches.length + memberMatches.length;
+            status.textContent = total
+                ? `${total} result${total === 1 ? '' : 's'} found.`
+                : 'No matching public products, posts, or profiles were found.';
+        }
+
+        function renderGlobalSearchGroup(title, items, note = '') {
+            return `<section>
+                <h3 class="mb-2 text-xs font-extrabold uppercase tracking-wide text-gold">${escapeHtml(title)}</h3>
+                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    ${items || `<p class="text-xs text-gray-400 sm:col-span-2">${escapeHtml(note || `No matching ${title.toLowerCase()}.`)}</p>`}
+                </div>
+            </section>`;
         }
 
         function resetFilters() {
