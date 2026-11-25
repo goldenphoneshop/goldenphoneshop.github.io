@@ -29,6 +29,58 @@ service cloud.firestore {
         ).data.participantIds;
     }
 
+    match /football_cache/{documentId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /football_highlights/{highlightId} {
+      allow read: if true;
+      allow create: if ownerAdmin()
+        && request.resource.data.keys().hasOnly(['title', 'videoId', 'addedAt', 'addedBy'])
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 160
+        && request.resource.data.videoId is string
+        && request.resource.data.videoId.matches('^[A-Za-z0-9_-]{11}$')
+        && request.resource.data.addedBy == request.auth.uid
+        && request.resource.data.addedAt == request.time;
+      allow delete: if ownerAdmin();
+      allow update: if false;
+    }
+
+    match /match_chats/{matchId}/messages/{messageId} {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['authorId', 'authorName', 'text', 'createdAt'])
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.authorName is string
+        && request.resource.data.authorName.size() > 0
+        && request.resource.data.authorName.size() <= 120
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() < 300
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    match /match_polls/{matchId}/votes/{userId} {
+      allow read: if true;
+      allow create: if signedIn()
+        && userId == request.auth.uid
+        && request.resource.data.keys().hasOnly(['choice', 'createdAt', 'updatedAt'])
+        && request.resource.data.choice in ['home', 'draw', 'away']
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if signedIn()
+        && userId == request.auth.uid
+        && request.resource.data.keys().hasOnly(['choice', 'createdAt', 'updatedAt'])
+        && request.resource.data.choice in ['home', 'draw', 'away']
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if signedIn() && userId == request.auth.uid;
+    }
+
     function validUserProfile(data) {
       return data.keys().hasOnly([
           'uid',

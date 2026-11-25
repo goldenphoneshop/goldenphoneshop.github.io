@@ -76,9 +76,86 @@ const OWNER_ADMIN_UID = "LROHsLUXfEPnC6bDmSvy3vcRnNE3";
 const PERMANENT_VERIFIED_DEALER_UID = "71ZtsYMKKtMsOSdHhBHAbjHzcqc2";
 const PERMANENT_VERIFIED_DEALER_EMAIL = "employmentteamr303@gmail.com";
 const FIRST_SANCTION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+const FOOTBALL_CACHE_MS = 60 * 1000;
 
 function isOwnerAdmin(auth) {
   return auth?.uid === OWNER_ADMIN_UID;
+}
+
+function fallbackFootballMatches() {
+  const now = new Date();
+  return [
+    {
+      id: -1,
+      date: now.toISOString(),
+      status: { short: "NS", long: "Not Started", elapsed: null },
+      league: { name: "Demo Football", country: "Sample", logo: "" },
+      venue: { name: "Match data preview" },
+      teams: {
+        home: { id: -11, name: "Golden Eagles", logo: "" },
+        away: { id: -12, name: "City United", logo: "" }
+      },
+      goals: { home: null, away: null }
+    }
+  ];
+}
+
+function cleanFootballFixture(fixture) {
+  const matchId = Number(fixture?.fixture?.id);
+  if (!Number.isSafeInteger(matchId)) return null;
+  return {
+    id: matchId,
+    date: typeof fixture.fixture?.date === "string" ? fixture.fixture.date : "",
+    status: {
+      short: String(fixture.fixture?.status?.short || ""),
+      long: String(fixture.fixture?.status?.long || ""),
+      elapsed: Number.isInteger(fixture.fixture?.status?.elapsed)
+        ? fixture.fixture.status.elapsed
+        : null
+    },
+    league: {
+      name: String(fixture.league?.name || "Football"),
+      country: String(fixture.league?.country || ""),
+      logo: String(fixture.league?.logo || "")
+    },
+    venue: { name: String(fixture.fixture?.venue?.name || "") },
+    teams: {
+      home: {
+        id: Number(fixture.teams?.home?.id) || 0,
+        name: String(fixture.teams?.home?.name || "Home"),
+        logo: String(fixture.teams?.home?.logo || "")
+      },
+      away: {
+        id: Number(fixture.teams?.away?.id) || 0,
+        name: String(fixture.teams?.away?.name || "Away"),
+        logo: String(fixture.teams?.away?.logo || "")
+      }
+    },
+    goals: {
+      home: Number.isInteger(fixture.goals?.home) ? fixture.goals.home : null,
+      away: Number.isInteger(fixture.goals?.away) ? fixture.goals.away : null
+    }
+  };
+}
+
+async function fetchFootballFixtures(apiKey) {
+  const date = new Date().toISOString().slice(0, 10);
+  const requests = [
+    "https://v3.football.api-sports.io/fixtures?live=all",
+    `https://v3.football.api-sports.io/fixtures?date=${date}`
+  ].map(url => fetch(url, {
+    headers: { "x-apisports-key": apiKey },
+    signal: AbortSignal.timeout(12000)
+  }));
+  const responses = await Promise.all(requests);
+  for (const response of responses) {
+    if (!response.ok) throw new Error(`Football provider returned HTTP ${response.status}.`);
+  }
+  const payloads = await Promise.all(responses.map(response => response.json()));
+  const fixtures = payloads.flatMap(payload => Array.isArray(payload.response) ? payload.response : []);
+  return [...new Map(fixtures.map(item => [item?.fixture?.id, cleanFootballFixture(item)])
+    .filter(([, item]) => item)).values()]
+    .sort((left, right) => String(left.date).localeCompare(String(right.date)));
 }
 
 function containsPhoneNumber(value) {
@@ -217,6 +294,65 @@ function requireQuizAdmin(request) {
   }
   return auth;
 }
+
+exports.getFootballMatches = onCall(async () => {
+  const now = Date.now();
+  const cacheRef = db.collection("football_cache").doc("matches");
+  const cached = await cacheRef.get();
+  if (cached.exists && Number.isSafeInteger(cached.data().expiresAtMs) &&
+      cached.data().expiresAtMs > now && Array.isArray(cached.data().matches)) {
+    return {
+      matches: cached.data().matches,
+      cached: true,
+      fallback: cached.data().fallback === true,
+      fetchedAtMs: cached.data().fetchedAtMs || 0
+    };
+  }
+  const apiKey = typeof process.env.FOOTBALL_API_KEY === "string"
+    ? process.env.FOOTBALL_API_KEY.trim()
+    : "";
+  let matches = fallbackFootballMatches();
+  let fallback = true;
+  if (apiKey) {
+    try {
+      matches = await fetchFootballFixtures(apiKey);
+      fallback = false;
+    } catch (error) {
+      logger.error("Football score refresh failed; serving cached or fallback data.", {
+        message: error.message
+      });
+      if (cached.exists && Array.isArray(cached.data().matches)) {
+        matches = cached.data().matches;
+        fallback = cached.data().fallback === true;
+      }
+    }
+  }
+  const fetchedAtMs = now;
+  await cacheRef.set({
+    matches,
+    fallback,
+    fetchedAtMs,
+    expiresAtMs: fetchedAtMs + FOOTBALL_CACHE_MS,
+    updatedAt: FieldValue.serverTimestamp()
+  });
+  return { matches, cached: false, fallback, fetchedAtMs };
+});
+
+exports.deleteFootballHighlight = onCall(async request => {
+  const auth = requireQuizAdmin(request);
+  const highlightId = request.data?.highlightId;
+  if (typeof highlightId !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(highlightId)) {
+    throw new HttpsError("invalid-argument", "Choose a valid football highlight.");
+  }
+  await db.collection("football_highlights").doc(highlightId).delete();
+  await db.collection("adminSecurityAudit").doc().create({
+    action: "delete-football-highlight",
+    actorUid: auth.uid,
+    targetUid: highlightId,
+    createdAt: FieldValue.serverTimestamp()
+  });
+  return { deleted: true };
+});
 
 function accountWalletRef(uid) {
   return db.collection("quizWallets").doc(uid);
