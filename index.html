@@ -430,9 +430,14 @@
                 <h2 class="text-lg font-bold text-white flex items-center gap-2">
                     <i class="fa-solid fa-layer-group text-gold"></i> Marketplace Feed
                 </h2>
-                <span id="productCountBadge" class="text-xs text-gray-400 bg-darkCard px-3 py-1 rounded-full border border-darkBorder">
-                    Loading products...
-                </span>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="openMemberSearch()" class="rounded-xl border border-gold/40 bg-gold/10 px-4 py-2 text-xs font-bold text-gold hover:bg-gold/20">
+                        <i class="fa-solid fa-users mr-1"></i> Find members
+                    </button>
+                    <span id="productCountBadge" class="text-xs text-gray-400 bg-darkCard px-3 py-1 rounded-full border border-darkBorder">
+                        Loading products...
+                    </span>
+                </div>
             </div>
 
             <div id="feedTabs" class="flex items-center gap-2 overflow-x-auto pb-3 scrollbar-none" aria-label="Product feeds">
@@ -445,6 +450,21 @@
                 <!-- Dynamic categories loaded via JS -->
             </div>
         </div>
+        <section id="marketplaceMemberSearchSection" class="mb-6 hidden rounded-2xl border border-darkBorder bg-darkCard p-4 sm:p-6" aria-labelledby="marketplaceMemberSearchHeading">
+            <div class="mb-4">
+                <h2 id="marketplaceMemberSearchHeading" class="flex items-center gap-2 text-lg font-bold text-white">
+                    <i class="fa-solid fa-users text-gold"></i> Find members
+                </h2>
+                <p class="mt-1 text-xs text-gray-400">Search by exact email, display name, location, account type, or public business/about information. Email addresses are only used to find a match and are never shown.</p>
+            </div>
+            <form data-member-search-prefix="marketplace" class="flex flex-col gap-2 sm:flex-row" onsubmit="searchMarketplaceMembers(event)">
+                <label for="marketplaceMemberSearchInput" class="sr-only">Search member email or profile information</label>
+                <input id="marketplaceMemberSearchInput" type="search" maxlength="120" placeholder="Exact email, name, location, or business information" class="min-w-0 flex-1 rounded-xl border border-darkBorder bg-darkBg px-3 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-gold focus:outline-none">
+                <button id="marketplaceMemberSearchButton" type="submit" class="rounded-xl gold-gradient-bg px-5 py-2.5 text-sm font-bold text-black">Search members</button>
+            </form>
+            <p id="marketplaceMemberSearchStatus" class="mt-3 hidden text-xs text-gray-300" role="status" aria-live="polite"></p>
+            <div id="marketplaceMemberSearchResults" class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+        </section>
 
         <section id="marketplaceProductGridSection">
             <div id="productGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -2974,16 +2994,22 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
         function openMemberSearch() {
             toggleSideMenu(false);
-            const section = document.getElementById('memberSearchSection');
-            if (document.getElementById('communityPostsPage').classList.contains('hidden')) {
+            const inCommunity = !document.getElementById('communityPostsPage').classList.contains('hidden');
+            const prefix = inCommunity ? '' : 'marketplace';
+            const sectionId = prefix ? 'marketplaceMemberSearchSection' : 'memberSearchSection';
+            const inputId = prefix ? 'marketplaceMemberSearchInput' : 'memberSearchInput';
+            if (!inCommunity) {
+                showMarketplacePage();
+            } else if (document.getElementById('communityPostsPage').classList.contains('hidden')) {
                 openCommunityPostsPage();
             }
+            const section = document.getElementById(sectionId);
             const willOpen = section.classList.contains('hidden');
             section.classList.toggle('hidden', !willOpen);
             if (willOpen) {
                 window.setTimeout(() => {
                     section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    document.getElementById('memberSearchInput').focus({ preventScroll: true });
+                    document.getElementById(inputId).focus({ preventScroll: true });
                 }, 0);
             }
         }
@@ -2995,11 +3021,16 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 openAuthModal('signin');
                 return;
             }
-            const input = document.getElementById('memberSearchInput');
+            const form = event.currentTarget;
+            const prefix = form.dataset.memberSearchPrefix === 'marketplace' ? 'marketplace' : '';
+            const field = name => prefix
+                ? `marketplaceMemberSearch${name}`
+                : `memberSearch${name}`;
+            const input = document.getElementById(field('Input'));
             const query = input.value.trim();
-            const status = document.getElementById('memberSearchStatus');
-            const button = document.getElementById('memberSearchButton');
-            const results = document.getElementById('memberSearchResults');
+            const status = document.getElementById(field('Status'));
+            const button = document.getElementById(field('Button'));
+            const results = document.getElementById(field('Results'));
             if (query.length < 2 || query.length > 120) {
                 status.textContent = 'Enter at least 2 characters and no more than 120.';
                 status.classList.remove('hidden');
@@ -3017,7 +3048,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 const response = await firebaseFunctions.httpsCallable('searchMarketplaceMembers')({ query });
                 if (requestId !== memberSearchRequestId) return;
                 const members = Array.isArray(response.data?.members) ? response.data.members : [];
-                renderMemberSearchResults(members);
+                renderMemberSearchResults(members, field('Results'));
                 status.textContent = members.length
                     ? `${members.length} matching ${members.length === 1 ? 'member' : 'members'}.`
                     : 'No matching members found. Email searches must use the exact account email.';
@@ -3033,8 +3064,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
         }
 
-        function renderMemberSearchResults(members) {
-            const container = document.getElementById('memberSearchResults');
+        function renderMemberSearchResults(members, targetId = 'memberSearchResults') {
+            const container = document.getElementById(targetId);
             container.replaceChildren();
             members.forEach(member => {
                 if (!member || typeof member.uid !== 'string' || member.uid === currentUser?.uid) return;
@@ -3380,7 +3411,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const downloadButton = downloadable
                 ? `<button type="button" onclick="event.stopPropagation(); togglePostMenu('${escapeHtml(post.id)}', false); downloadCommunityPostMedia(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-gray-200 hover:bg-gold/10 hover:text-gold"><i class="fa-solid fa-download w-4"></i>Download post</button>`
                 : '';
-            const deleteButton = (currentUser?.uid === post.ownerUid || currentUser?.isAdmin === true)
+            const deleteButton = currentUser?.uid === post.ownerUid
                 ? `<button type="button" onclick="event.stopPropagation(); togglePostMenu('${escapeHtml(post.id)}', false); deleteOwnedMarketplaceContent('communityPost', this.dataset.postId, this)" data-post-id="${escapeHtml(post.id)}" class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-red-300 hover:bg-red-500/10"><i class="fa-solid fa-trash w-4"></i>Delete post</button>`
                 : '';
             const postMenu = `<div class="relative flex-shrink-0">
@@ -7698,6 +7729,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 const videoUrl = media.find(item => item.type === 'video')?.url || '';
                 await postRef.set({
                     id: postRef.id,
+                    authorId: currentUser.uid,
                     ownerUid: currentUser.uid,
                     ownerName: currentUser.name.slice(0, 120),
                     caption,
@@ -7740,6 +7772,7 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 const repostRef = firebaseFirestore.collection('communityPosts').doc();
                 await repostRef.set({
                     id: repostRef.id,
+                    authorId: currentUser.uid,
                     ownerUid: currentUser.uid,
                     ownerName: currentUser.name.slice(0, 120),
                     caption: '',
@@ -8980,9 +9013,62 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             const form = document.getElementById('escrowCheckoutForm');
             form.reset();
             form.dataset.productId = productId;
+            delete form.dataset.items;
+            const voucherInput = document.getElementById('escrowVoucherCode');
+            if (voucherInput) voucherInput.disabled = false;
             escrowVoucherQuote = null;
             escrowVoucherRevision += 1;
             document.getElementById('escrowVoucherStatus').textContent = '';
+            document.querySelector('#escrowFulfillmentMethod option[value="delivery"]').textContent =
+                `Home/Location Delivery — ${formatNaira(escrowFulfillment.homeDeliveryFee)}`;
+            document.getElementById('escrowStation').innerHTML = '<option value="">Choose a station</option>' +
+                escrowFulfillment.stations.map(station => `<option value="${escapeHtml(station.id)}">${escapeHtml(station.label)}</option>`).join('');
+            updateEscrowFulfillmentForm();
+            document.getElementById('escrowCheckoutModal').classList.remove('hidden');
+            document.getElementById('escrowCheckoutModal').classList.add('flex');
+        }
+
+        function startEscrowCartCheckout() {
+            if (!currentUser) {
+                openAuthModal('signin');
+                return;
+            }
+            const items = cartItems
+                .filter(item => item.selected !== false)
+                .map(item => {
+                    const product = products.find(entry => entry.id === item.productId);
+                    if (!product) return null;
+                    return {
+                        productId: item.productId,
+                        quantity: item.quantity,
+                        expectedPrice: Number(product.price),
+                        ownerUid: product.ownerUid
+                    };
+                })
+                .filter(Boolean);
+            if (!items.length) {
+                showToast('Select at least one cart item.', 'info');
+                return;
+            }
+            const vendors = new Set(items.map(item => item.ownerUid));
+            if (vendors.size !== 1) {
+                showToast('Checkout selected products from one vendor at a time.', 'error');
+                return;
+            }
+            if (typeof escrowFulfillment === 'undefined') {
+                showToast('Fulfillment options could not be loaded. Refresh and try again.', 'error');
+                return;
+            }
+            const form = document.getElementById('escrowCheckoutForm');
+            form.reset();
+            form.dataset.items = JSON.stringify(items);
+            delete form.dataset.productId;
+            escrowVoucherQuote = null;
+            escrowVoucherRevision += 1;
+            document.getElementById('escrowVoucherStatus').textContent =
+                'Vouchers are not available for multi-product cart checkout.';
+            const voucherInput = document.getElementById('escrowVoucherCode');
+            if (voucherInput) voucherInput.disabled = true;
             document.querySelector('#escrowFulfillmentMethod option[value="delivery"]').textContent =
                 `Home/Location Delivery — ${formatNaira(escrowFulfillment.homeDeliveryFee)}`;
             document.getElementById('escrowStation').innerHTML = '<option value="">Choose a station</option>' +
@@ -8996,6 +9082,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             escrowVoucherRevision += 1;
             document.getElementById('escrowCheckoutModal').classList.add('hidden');
             document.getElementById('escrowCheckoutModal').classList.remove('flex');
+            const voucherInput = document.getElementById('escrowVoucherCode');
+            if (voucherInput) voucherInput.disabled = false;
         }
 
         function clearEscrowVoucher() {
@@ -9007,6 +9095,11 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
         async function applyEscrowVoucher() {
             const form = document.getElementById('escrowCheckoutForm');
+            if (form.dataset.items) {
+                document.getElementById('escrowVoucherStatus').textContent =
+                    'Vouchers are not available for multi-product cart checkout.';
+                return;
+            }
             const code = document.getElementById('escrowVoucherCode').value.trim().toUpperCase();
             const status = document.getElementById('escrowVoucherStatus');
             const uid = currentUser?.uid;
@@ -9050,17 +9143,27 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             for (const id of ['escrowDeliveryAddress', 'escrowDeliveryCity', 'escrowDeliveryState', 'escrowDeliveryPhone']) {
                 document.getElementById(id).required = delivery;
             }
-            const product = products.find(item => item.id === document.getElementById('escrowCheckoutForm').dataset.productId);
+            const form = document.getElementById('escrowCheckoutForm');
+            const cartItemsPayload = form.dataset.items ? JSON.parse(form.dataset.items) : null;
             try {
-                const price = escrowVoucherQuote?.productId === product.id &&
+                let price;
+                let fee;
+                if (cartItemsPayload) {
+                    price = cartItemsPayload.reduce((total, item) => total + Number(item.expectedPrice) * item.quantity, 0);
+                    fee = cartItemsPayload.reduce((total, item) =>
+                        total + calculateEscrowFee(Number(item.expectedPrice) * item.quantity), 0);
+                } else {
+                    const product = products.find(item => item.id === form.dataset.productId);
+                    price = escrowVoucherQuote?.productId === product.id &&
                     escrowVoucherQuote.originalPrice === Number(product.price)
                     ? escrowVoucherQuote.productPrice : Number(product.price);
-                const fee = calculateEscrowFee(price);
+                    fee = calculateEscrowFee(price);
+                }
                 const fulfillmentFee = delivery ? escrowFulfillment.homeDeliveryFee : 0;
                 const totalKobo = Math.round(price * 100) + Math.round(fee * 100) + Math.round(fulfillmentFee * 100);
                 if (!Number.isSafeInteger(totalKobo)) throw new RangeError('Total price is too large.');
                 document.getElementById('escrowCheckoutTotal').textContent =
-                    `Product: ${formatNaira(price)} · Protection: ${formatNaira(fee)} · Fulfillment: ${formatNaira(fulfillmentFee)} · Total: ${formatNaira(totalKobo / 100)}`;
+                    `${cartItemsPayload ? 'Items' : 'Product'}: ${formatNaira(price)} · Protection: ${formatNaira(fee)} · Fulfillment: ${formatNaira(fulfillmentFee)} · Total: ${formatNaira(totalKobo / 100)}`;
             } catch (error) {
                 console.error('Unable to calculate escrow checkout.', error);
                 document.getElementById('escrowCheckoutTotal').textContent = 'Checkout total unavailable. Refresh and try again.';
@@ -9073,9 +9176,11 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 openAuthModal('signin');
                 return;
             }
-            const productId = event.currentTarget.dataset.productId;
-            const product = products.find(item => item.id === productId);
-            if (!product) {
+            const form = event.currentTarget;
+            const cartCheckoutItems = form.dataset.items ? JSON.parse(form.dataset.items) : null;
+            const productId = form.dataset.productId;
+            const product = productId ? products.find(item => item.id === productId) : null;
+            if ((!cartCheckoutItems?.length) && !product) {
                 showToast('This listing is no longer available.', 'error');
                 return;
             }
@@ -9092,19 +9197,24 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     phone: document.getElementById('escrowDeliveryPhone').value.trim(),
                     landmark: document.getElementById('escrowDeliveryLandmark').value.trim() };
             const fulfillmentFee = method === 'delivery' ? escrowFulfillment.homeDeliveryFee : 0;
-            const originalPrice = Number(product.price);
+            const originalPrice = cartCheckoutItems
+                ? cartCheckoutItems.reduce((total, item) => total + Number(item.expectedPrice) * item.quantity, 0)
+                : Number(product.price);
             const code = document.getElementById('escrowVoucherCode').value.trim().toUpperCase();
-            const voucher = code && escrowVoucherQuote?.code === code &&
+            const voucher = !cartCheckoutItems && code && escrowVoucherQuote?.code === code &&
                 escrowVoucherQuote.productId === productId && escrowVoucherQuote.originalPrice === originalPrice
                 ? escrowVoucherQuote : null;
-            if (code && !voucher) {
+            if (code && !voucher && !cartCheckoutItems) {
                 showToast('Apply the promotional code and review the total before paying.', 'error');
                 return;
             }
             const price = voucher ? voucher.productPrice : originalPrice;
             let fee;
             try {
-                fee = calculateEscrowFee(price);
+                fee = cartCheckoutItems
+                    ? cartCheckoutItems.reduce((total, item) =>
+                        total + calculateEscrowFee(Number(item.expectedPrice) * item.quantity), 0)
+                    : calculateEscrowFee(price);
             } catch (error) {
                 console.error('Unable to calculate escrow checkout.', error);
                 showToast('The checkout total could not be calculated.', 'error');
@@ -9116,16 +9226,27 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 return;
             }
             const total = totalKobo / 100;
-            if (!window.confirm(`Vendor price: ${formatNaira(price)}; protection fee: ${formatNaira(fee)}; fulfillment fee: ${formatNaira(fulfillmentFee)}; total: ${formatNaira(total)}. Continue?`)) return;
+            if (!window.confirm(`Items: ${formatNaira(price)}; protection fee: ${formatNaira(fee)}; fulfillment fee: ${formatNaira(fulfillmentFee)}; total: ${formatNaira(total)}. Continue?`)) return;
             const checkoutEmail = currentUser.email || window.prompt('Enter an email address for your payment receipt:');
             if (!checkoutEmail) return;
             const button = document.getElementById('escrowCheckoutSubmit');
             button.disabled = true;
             try {
-                const result = await firebaseFunctions.httpsCallable('initiateEscrowCheckout')({
-                    productId, expectedPrice: originalPrice, checkoutEmail: checkoutEmail.trim(), fulfillment,
-                    ...(voucher ? { voucherCode: code, expectedDiscount: voucher.discount } : {})
-                });
+                const checkoutPayload = cartCheckoutItems
+                    ? {
+                        items: cartCheckoutItems.map(item => ({
+                            productId: item.productId,
+                            quantity: item.quantity,
+                            expectedPrice: item.expectedPrice
+                        })),
+                        checkoutEmail: checkoutEmail.trim(),
+                        fulfillment
+                    }
+                    : {
+                        productId, expectedPrice: originalPrice, checkoutEmail: checkoutEmail.trim(), fulfillment,
+                        ...(voucher ? { voucherCode: code, expectedDiscount: voucher.discount } : {})
+                    };
+                const result = await firebaseFunctions.httpsCallable('initiateEscrowCheckout')(checkoutPayload);
                 if (result.data?.productPrice !== price || result.data?.platformFee !== fee ||
                     result.data?.fulfillmentFee !== fulfillmentFee || result.data?.totalPaid !== total) {
                     throw new Error('The checkout total changed. Refresh and review the price.');
@@ -10437,6 +10558,19 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             renderCart();
         }
 
+        function toggleCartSelection(productId, checked) {
+            const item = cartItems.find(entry => entry.productId === productId);
+            if (item) item.selected = checked;
+            saveCartData();
+            renderCart();
+        }
+
+        function toggleAllCartItems(checked) {
+            cartItems.forEach(item => { item.selected = checked; });
+            saveCartData();
+            renderCart();
+        }
+
         function formatNaira(amount) {
             return `₦${Number(amount).toLocaleString('en-NG')}`;
         }
@@ -10459,6 +10593,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }
 
             let subtotal = 0;
+            let selectedSubtotal = 0;
+            let selectedFee = 0;
+            const selectedItems = [];
             cartContent.innerHTML = cartItems.map(item => {
                 const product = products.find(product => product.id === item.productId);
                 if (!product) {
@@ -10470,12 +10607,20 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                     `;
                 }
 
-                subtotal += Number(product.price) * item.quantity;
+                const lineSubtotal = Number(product.price) * item.quantity;
+                subtotal += lineSubtotal;
+                const checked = item.selected !== false;
+                if (checked) {
+                    selectedSubtotal += lineSubtotal;
+                    selectedFee += calculateEscrowFee(lineSubtotal);
+                    selectedItems.push({ product, quantity: item.quantity, lineSubtotal });
+                }
                 const image = getProductImages(product)[0] || '';
                 const stock = Number(product.stock);
                 const canAddMore = Number.isFinite(stock) && item.quantity < stock;
                 return `
                     <div class="flex items-center gap-3 rounded-xl border border-darkBorder bg-darkBg p-3">
+                        <input type="checkbox" aria-label="Select ${escapeHtml(product.title)} for checkout" onchange="toggleCartSelection(this.dataset.productId, this.checked)" data-product-id="${escapeHtml(product.id)}" class="h-4 w-4 flex-shrink-0 accent-yellow-500" ${checked ? 'checked' : ''}>
                         <img src="${escapeHtml(image)}" alt="" class="w-16 h-16 object-cover rounded-lg bg-darkCard" onerror="this.onerror=null;this.src='https://placehold.co/100x100/131b2e/ffd700?text=GSM'">
                         <div class="min-w-0 flex-1">
                             <h3 class="text-xs font-bold text-white line-clamp-2">${escapeHtml(product.title)}</h3>
@@ -10492,19 +10637,22 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             }).join('');
 
             summary.classList.remove('hidden');
-            subtotalElement.textContent = formatNaira(subtotal);
-            const singleProduct = cartItems.length === 1 && cartItems[0].quantity === 1
-                ? products.find(product => product.id === cartItems[0].productId)
-                : null;
-            if (singleProduct) {
-                escrowPreview.innerHTML = renderEscrowFeePreview(singleProduct.price);
+            const selectionCount = selectedItems.length;
+            subtotalElement.textContent = formatNaira(selectedSubtotal);
+            const fulfillmentNote = 'Fulfillment is selected on the next step.';
+            escrowPreview.innerHTML = `
+                <label class="mb-2 inline-flex items-center gap-2 text-xs text-white"><input type="checkbox" onchange="toggleAllCartItems(this.checked)" class="h-4 w-4 accent-yellow-500" ${selectionCount === cartItems.length && cartItems.length ? 'checked' : ''}>Select all</label>
+                <div>Selected items subtotal: <strong>${formatNaira(selectedSubtotal)}</strong></div>
+                <div>Combined escrow fee: <strong>${formatNaira(selectedFee)}</strong></div>
+                <div>Total payable before fulfillment: <strong>${formatNaira(selectedSubtotal + selectedFee)}</strong></div>
+                <div class="mt-1 text-[10px] text-gray-400">${fulfillmentNote}</div>`;
+            const selectedVendors = new Set(selectedItems.map(item => item.product.ownerUid).filter(Boolean));
+            if (selectedItems.length && selectedVendors.size === 1) {
+                checkout.innerHTML = `<button type="button" onclick="startEscrowCartCheckout()" class="rounded-lg border border-gold/40 px-4 py-2 font-bold text-gold">Pay ${selectionCount} selected product${selectionCount === 1 ? '' : 's'} with Escrow Protection</button>`;
+            } else if (selectedItems.length > 1) {
+                checkout.textContent = 'Selected products must belong to one vendor for this payment. Deselect items from other vendors, then checkout each vendor separately.';
             } else {
-                escrowPreview.textContent = 'Escrow fee preview is available for one listed product at a time.';
-            }
-            if (singleProduct?.ownerUid) {
-                checkout.innerHTML = `<button type="button" onclick="startEscrowCheckout(this.dataset.productId, this)" data-product-id="${escapeHtml(singleProduct.id)}" class="rounded-lg border border-gold/40 px-4 py-2 font-bold text-gold">Pay with Escrow Protection</button>`;
-            } else {
-                checkout.textContent = 'Choose one listed product for escrow checkout. Your cart is saved on this device; no payment has been taken.';
+                checkout.textContent = 'Select at least one valid product for escrow checkout.';
             }
         }
 

@@ -52,6 +52,12 @@ function setup(fetchMock) {
     return query;
   }
   const db = {
+    async getAll(...refs) {
+      return refs.map(ref => {
+        const value = documents.get(ref.key);
+        return { exists: value !== undefined, data: () => value };
+      });
+    },
     collection(name) {
       return { where: (field, operator, value) => makeQuery(name, [{ field, operator, value }]), doc: id => ({
         key: `${name}/${id}`,
@@ -161,7 +167,8 @@ function request(uid, data = {}, admin = false) {
   return {
     auth: { uid: admin ? "LROHsLUXfEPnC6bDmSvy3vcRnNE3" : uid,
       token: { email_verified: true, firebase: {}, admin } },
-    data: { orderId: "order1", ...(data.productId ? { fulfillment: { method: "pickup", stationId: "oshodi" } } : {}), ...data }
+    data: { orderId: "order1", ...((data.productId || data.items)
+      ? { fulfillment: { method: "pickup", stationId: "oshodi" } } : {}), ...data }
   };
 }
 
@@ -637,6 +644,65 @@ test("sandbox checkout uses the server listing price and creates an order exactl
   assert.equal(attempts.filter(result => !result.alreadyVerified).length, 1);
   assert.equal(documents.get(`escrowOrders/${checkout.txRef}`).status, "HELD_IN_ESCROW");
   assert.equal(documents.get(`escrowOrders/${checkout.txRef}`).totalPaid, 8062.5);
+});
+
+test("same-vendor cart checkout reserves quantities and verifies one aggregate order", async () => {
+  let payload;
+  const { documents, functions } = setup(async (url, options) => {
+    if (url.endsWith("/payments")) {
+      payload = JSON.parse(options.body);
+      return { ok: true, json: async () => ({
+        status: "success", data: { link: "https://checkout.flutterwave.com/v3/hosted/pay/cart" }
+      }) };
+    }
+    return { ok: true, json: async () => ({
+      status: "success",
+      data: { id: 321, status: "successful", tx_ref: payload.tx_ref,
+        amount: payload.amount, currency: "NGN", customer: { email: "buyer@example.test" } }
+    }) };
+  });
+  documents.set("users/buyer", { role: "Buyer" });
+  documents.set("users/vendor", { role: "Vendor" });
+  documents.set("products/product1", { ownerUid: "vendor", title: "Phone", stock: 3, price: 1000 });
+  documents.set("products/product2", { ownerUid: "vendor", title: "Screen", stock: 2, price: 500 });
+  const result = await functions.initiateEscrowCheckout(request("buyer", {
+    items: [
+      { productId: "product1", quantity: 2, expectedPrice: 1000 },
+      { productId: "product2", quantity: 1, expectedPrice: 500 }
+    ],
+    checkoutEmail: "buyer@example.test"
+  }));
+  assert.equal(result.productPrice, 2500);
+  assert.equal(result.platformFee, 187.5);
+  assert.equal(result.totalPaid, 2687.5);
+  assert.equal(documents.get("products/product1").stock, 1);
+  assert.equal(documents.get("products/product2").stock, 1);
+  const pending = documents.get(`escrowPendingPayments/${result.txRef}`);
+  assert.equal(pending.items.length, 2);
+  assert.equal(pending.items[0].quantity, 2);
+  await functions.verifyEscrowPayment(request("buyer", { txRef: result.txRef, transactionId: "321" }));
+  const order = documents.get(`escrowOrders/${result.txRef}`);
+  assert.equal(order.items.length, 2);
+  assert.equal(order.totalPaid, 2687.5);
+});
+
+test("cart checkout rejects products from different vendors", async () => {
+  const { documents, functions } = setup(async () => ({
+    ok: true, json: async () => ({ status: "success",
+      data: { link: "https://checkout.flutterwave.com/v3/hosted/pay/cart" } })
+  }));
+  documents.set("users/buyer", { role: "Buyer" });
+  documents.set("users/vendor1", { role: "Vendor" });
+  documents.set("users/vendor2", { role: "Vendor" });
+  documents.set("products/product1", { ownerUid: "vendor1", title: "Phone", stock: 2, price: 1000 });
+  documents.set("products/product2", { ownerUid: "vendor2", title: "Screen", stock: 2, price: 500 });
+  await assert.rejects(functions.initiateEscrowCheckout(request("buyer", {
+    items: [
+      { productId: "product1", quantity: 1, expectedPrice: 1000 },
+      { productId: "product2", quantity: 1, expectedPrice: 500 }
+    ],
+    checkoutEmail: "buyer@example.test"
+  })), error => error.code === "failed-precondition");
 });
 
 test("concurrent checkout requests cannot reserve the same final item", async () => {

@@ -1571,12 +1571,192 @@ exports.quoteStoreVoucher = onCall(async request => {
   });
 });
 
+async function initiateMultiItemEscrowCheckout(request, auth, secret, redirectUrl) {
+  const requestedItems = request.data?.items;
+  if (!Array.isArray(requestedItems) || requestedItems.length < 1 || requestedItems.length > 20) {
+    throw new HttpsError("invalid-argument", "Select between 1 and 20 products.");
+  }
+  const normalizedItems = requestedItems.map(item => {
+    if (!item || typeof item.productId !== "string" ||
+        !/^[A-Za-z0-9_-]{1,160}$/.test(item.productId) ||
+        !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 100) {
+      throw new HttpsError("invalid-argument", "Each cart item needs a valid product and quantity.");
+    }
+    return {
+      productId: item.productId,
+      quantity: item.quantity,
+      expectedPriceKobo: escrowAmountKobo(item.expectedPrice)
+    };
+  });
+  if (new Set(normalizedItems.map(item => item.productId)).size !== normalizedItems.length) {
+    throw new HttpsError("invalid-argument", "Combine duplicate cart items before checkout.");
+  }
+  const buyer = await db.collection("users").doc(auth.uid).get();
+  if (!buyer.exists || buyer.data().role !== "Buyer") {
+    throw new HttpsError("permission-denied", "Only buyers can use escrow checkout.");
+  }
+  const productRefs = normalizedItems.map(item => db.collection("products").doc(item.productId));
+  const productSnapshots = await db.getAll(...productRefs);
+  const listingItems = normalizedItems.map((item, index) => {
+    const snapshot = productSnapshots[index];
+    const listing = snapshot.data();
+    if (!snapshot.exists || typeof listing?.ownerUid !== "string" ||
+        listing.ownerUid === auth.uid || !Number.isSafeInteger(listing.stock) ||
+        listing.stock < item.quantity || typeof listing.title !== "string" ||
+        !listing.title.trim()) {
+      throw new HttpsError("failed-precondition", "A selected product is unavailable or its stock changed.");
+    }
+    const unitPriceKobo = escrowAmountKobo(listing.price);
+    if (unitPriceKobo !== item.expectedPriceKobo) {
+      throw new HttpsError("failed-precondition", "A selected product price changed. Review the cart.");
+    }
+    return {
+      productId: item.productId,
+      quantity: item.quantity,
+      ownerUid: listing.ownerUid,
+      title: listing.title,
+      unitPriceKobo,
+      linePriceKobo: unitPriceKobo * item.quantity
+    };
+  });
+  const vendorUid = listingItems[0].ownerUid;
+  if (listingItems.some(item => item.ownerUid !== vendorUid)) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Checkout products from one vendor at a time. Separate products from other vendors."
+    );
+  }
+  const vendor = await db.collection("users").doc(vendorUid).get();
+  if (!vendor.exists || vendor.data().role !== "Vendor") {
+    throw new HttpsError("failed-precondition", "This cart does not have an eligible vendor.");
+  }
+  const selected = request.data?.fulfillment;
+  let fulfillment;
+  let fulfillmentFee;
+  if (selected?.method === "pickup") {
+    const station = escrowFulfillment.stations.find(item => item.id === selected.stationId);
+    if (!station) throw new HttpsError("invalid-argument", "Choose a valid pickup station.");
+    fulfillment = { method: "pickup", stationId: station.id, stationName: station.label };
+    fulfillmentFee = 0;
+  } else if (selected?.method === "delivery") {
+    const field = (name, max, required = true) => {
+      const value = typeof selected[name] === "string" ? selected[name].trim() : "";
+      if ((required && !value) || value.length > max) {
+        throw new HttpsError("invalid-argument", `Enter a valid ${name}.`);
+      }
+      return value;
+    };
+    const phone = field("phone", 25);
+    if (!/^\+?[0-9][0-9 ()-]{6,23}[0-9]$/.test(phone) ||
+        phone.replace(/\D/g, "").length < 8) {
+      throw new HttpsError("invalid-argument", "Enter a valid phone number.");
+    }
+    fulfillment = { method: "delivery", address: field("address", 200), city: field("city", 100),
+      state: field("state", 100), phone, landmark: field("landmark", 200, false) };
+    fulfillmentFee = escrowFulfillment.homeDeliveryFee;
+  } else {
+    throw new HttpsError("invalid-argument", "Choose a fulfillment method.");
+  }
+  const email = auth.token.email_verified === true && typeof auth.token.email === "string"
+    ? auth.token.email.trim()
+    : typeof request.data?.checkoutEmail === "string" ? request.data.checkoutEmail.trim() : "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+    throw new HttpsError("invalid-argument", "Enter an email address for your payment receipt.");
+  }
+  const txRef = `escrow-${crypto.randomUUID()}`;
+  const pendingRef = db.collection("escrowPendingPayments").doc(txRef);
+  const fulfillmentKobo = escrowAmountKobo(fulfillmentFee, true);
+  const pricing = await db.runTransaction(async transaction => {
+    const currentSnapshots = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+    const reservedItems = listingItems.map((item, index) => {
+      const current = currentSnapshots[index];
+      if (!current.exists || current.data().ownerUid !== item.ownerUid ||
+          escrowAmountKobo(current.data().price) !== item.unitPriceKobo ||
+          current.data().title !== item.title ||
+          !Number.isSafeInteger(current.data().stock) || current.data().stock < item.quantity) {
+        throw new HttpsError("failed-precondition", "A selected listing changed or is out of stock.");
+      }
+      transaction.update(productRefs[index], { stock: current.data().stock - item.quantity });
+      return {
+        productId: item.productId,
+        productTitle: item.title,
+        quantity: item.quantity,
+        unitPrice: item.unitPriceKobo / 100,
+        productPrice: item.linePriceKobo / 100
+      };
+    });
+    const productKobo = reservedItems.reduce((total, item) =>
+      total + escrowAmountKobo(item.productPrice), 0);
+    const feeKobo = reservedItems.reduce((total, item) =>
+      total + escrowAmountKobo(calculateEscrowFee(item.productPrice), true), 0);
+    const totalKobo = productKobo + feeKobo + fulfillmentKobo;
+    if (!Number.isSafeInteger(totalKobo)) {
+      throw new HttpsError("failed-precondition", "The cart total is too large.");
+    }
+    transaction.create(pendingRef, {
+      buyerUid: auth.uid,
+      vendorUid,
+      items: reservedItems,
+      productId: reservedItems.length === 1 ? reservedItems[0].productId : null,
+      productTitle: reservedItems.map(item => item.productTitle).join(", ").slice(0, 500),
+      productPrice: productKobo / 100,
+      platformFee: feeKobo / 100,
+      fulfillment,
+      fulfillmentFee,
+      totalPaid: totalKobo / 100,
+      currency: "NGN",
+      email,
+      status: "PENDING",
+      reservationStatus: "HELD",
+      reservationExpiresAtMs: Date.now() + 15 * 60 * 1000,
+      createdAt: FieldValue.serverTimestamp()
+    });
+    return { productKobo, feeKobo, totalKobo };
+  });
+  const response = await fetch("https://api.flutterwave.com/v3/payments", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      tx_ref: txRef,
+      amount: pricing.totalKobo / 100,
+      currency: "NGN",
+      redirect_url: redirectUrl,
+      customer: { email },
+      meta: { fulfillment, fulfillmentFee, itemCount: listingItems.reduce((sum, item) => sum + item.quantity, 0) },
+      configurations: { session_duration: 15 },
+      customizations: { title: "Golden Eagle multi-item escrow checkout" }
+    }),
+    signal: AbortSignal.timeout(15000)
+  });
+  if (!response.ok) {
+    logger.error("Escrow cart checkout initialization failed.", { txRef, status: response.status });
+    throw new HttpsError("unavailable", "Flutterwave could not start checkout.");
+  }
+  const checkout = await response.json();
+  const checkoutUrl = new URL(checkout.data?.link || "");
+  if (checkout.status !== "success" || checkoutUrl.protocol !== "https:" ||
+      checkoutUrl.hostname !== "checkout.flutterwave.com") {
+    throw new HttpsError("unavailable", "Flutterwave returned an invalid checkout link.");
+  }
+  return {
+    checkoutUrl: checkoutUrl.href,
+    txRef,
+    productPrice: pricing.productKobo / 100,
+    platformFee: pricing.feeKobo / 100,
+    fulfillmentFee,
+    totalPaid: pricing.totalKobo / 100
+  };
+}
+
 exports.initiateEscrowCheckout = onCall(
   { secrets: [FLW_SECRET_KEY, FLUTTERWAVE_SECRET_KEY] },
   async request => {
     const auth = requireVerifiedUser(request);
     const secret = escrowPaymentKey();
     const redirectUrl = escrowCheckoutRedirectUrl();
+    if (Array.isArray(request.data?.items)) {
+      return initiateMultiItemEscrowCheckout(request, auth, secret, redirectUrl);
+    }
     const productId = request.data?.productId;
     if (typeof productId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(productId)) {
       throw new HttpsError("invalid-argument", "Choose a valid product.");
@@ -1782,11 +1962,20 @@ async function verifyEscrowTransaction(txRef, transactionId, secret) {
       (redemption.data().status === "RESERVED" && redemption.data().txRef === txRef);
     let needsRefund = false;
     if (data.reservationStatus === "RELEASED") {
-      const productRef = db.collection("products").doc(data.productId);
-      const product = await transaction.get(productRef);
-      if (voucherAvailable && product.exists && product.data().ownerUid === data.vendorUid &&
-          Number.isSafeInteger(product.data().stock) && product.data().stock > 0) {
-        transaction.update(productRef, { stock: product.data().stock - 1 });
+      const reservationItems = Array.isArray(data.items) && data.items.length
+        ? data.items
+        : [{ productId: data.productId, quantity: 1 }];
+      const productRefs = reservationItems.map(item => db.collection("products").doc(item.productId));
+      const productSnapshots = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+      const stockAvailable = voucherAvailable && reservationItems.every((item, index) => {
+        const product = productSnapshots[index];
+        return product.exists && product.data().ownerUid === data.vendorUid &&
+          Number.isSafeInteger(product.data().stock) && product.data().stock >= item.quantity;
+      });
+      if (stockAvailable) {
+        reservationItems.forEach((item, index) => transaction.update(productRefs[index], {
+          stock: productSnapshots[index].data().stock - item.quantity
+        }));
       } else {
         needsRefund = true;
       }
@@ -1805,6 +1994,7 @@ async function verifyEscrowTransaction(txRef, transactionId, secret) {
     transaction.create(orderRef, {
       buyerUid: data.buyerUid,
       vendorUid: data.vendorUid,
+      ...(Array.isArray(data.items) ? { items: data.items } : {}),
       productId: data.productId,
       productTitle: data.productTitle,
       productPrice: data.productPrice,
@@ -1862,23 +2052,30 @@ async function releaseExpiredEscrowStock(txRef, now, paymentFailed = false) {
         pending.data().reservationStatus !== "HELD" ||
         (!paymentFailed && pending.data().reservationExpiresAtMs > now)) return false;
     const data = pending.data();
-    const productRef = db.collection("products").doc(data.productId);
-    const product = await transaction.get(productRef);
+    const reservationItems = Array.isArray(data.items) && data.items.length
+      ? data.items
+      : [{ productId: data.productId, quantity: 1 }];
+    const productRefs = reservationItems.map(item => db.collection("products").doc(item.productId));
+    const products = await Promise.all(productRefs.map(ref => transaction.get(ref)));
     const redemptionRef = data.voucherCode ? voucherPairRef("voucherRedemptions", data.voucherCode, data.buyerUid) : null;
     const redemption = redemptionRef ? await transaction.get(redemptionRef) : null;
     if (redemptionRef && (!redemption.exists || redemption.data().status !== "RESERVED" ||
         redemption.data().txRef !== txRef)) {
       throw new HttpsError("failed-precondition", "The voucher reservation needs reconciliation.");
     }
-    if (product.exists && product.data().ownerUid === data.vendorUid) {
-      if (!Number.isSafeInteger(product.data().stock) || product.data().stock < 0 ||
-          !Number.isSafeInteger(product.data().stock + 1)) {
-        throw new HttpsError("failed-precondition", "The product stock needs reconciliation.");
+    reservationItems.forEach((item, index) => {
+      const product = products[index];
+      if (product.exists && product.data().ownerUid === data.vendorUid) {
+        const restored = product.data().stock + item.quantity;
+        if (!Number.isSafeInteger(product.data().stock) || product.data().stock < 0 ||
+            !Number.isSafeInteger(restored)) {
+          throw new HttpsError("failed-precondition", "The product stock needs reconciliation.");
+        }
+        transaction.update(productRefs[index], { stock: restored });
+      } else {
+        logger.error("Escrow reservation product no longer exists.", { txRef, productId: item.productId });
       }
-      transaction.update(productRef, { stock: product.data().stock + 1 });
-    } else {
-      logger.error("Escrow reservation product no longer exists.", { txRef });
-    }
+    });
     if (redemptionRef) transaction.update(redemptionRef, { status: "RELEASED" });
     transaction.update(pendingRef, {
       reservationStatus: "RELEASED", reservationReleasedAt: FieldValue.serverTimestamp()
@@ -3212,7 +3409,7 @@ exports.deleteOwnedMarketplaceContent = onCall(async request => {
     ? db.collection("products").doc(itemId)
     : db.collection("communityPosts").doc(itemId);
   const snapshot = await parentRef.get();
-  if (!snapshot.exists || (snapshot.data().ownerUid !== auth.uid && !isOwnerAdmin(auth))) {
+  if (!snapshot.exists || snapshot.data().ownerUid !== auth.uid) {
     throw new HttpsError("permission-denied", "You can only delete your own content.");
   }
   await parentRef.delete();

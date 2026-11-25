@@ -301,6 +301,7 @@ service cloud.firestore {
     function validCommunityPost(data, postId) {
       return data.keys().hasOnly([
           'id',
+          'authorId',
           'ownerUid',
           'ownerName',
           'caption',
@@ -313,6 +314,7 @@ service cloud.firestore {
           'createdAt'
         ])
         && data.id == postId
+        && data.authorId == request.auth.uid
         && data.ownerUid == request.auth.uid
         && data.ownerName is string
         && data.ownerName.size() > 0
@@ -348,7 +350,8 @@ service cloud.firestore {
             && request.resource.data.videoUrl
               == get(/databases/$(database)/documents/communityPosts/$(request.resource.data.repostOf)).data.videoUrl));
       allow update: if false;
-      allow delete: if false;
+      allow delete: if signedIn()
+        && request.auth.uid == resource.data.authorId;
     }
 
     match /communityPosts/{postId}/comments/{commentId} {

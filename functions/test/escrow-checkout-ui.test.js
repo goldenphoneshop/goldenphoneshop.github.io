@@ -239,19 +239,19 @@ test("the cart offers checkout only for a single vendor product", () => {
     context
   );
   context.renderCart();
-  assert.match(nodes.cartEscrowPreview.innerHTML, /Fee \(7\.5%\): NGN 562\.5/);
+  assert.match(nodes.cartEscrowPreview.innerHTML, /Combined escrow fee: <strong>NGN 562\.5/);
   assert.match(nodes.cartEscrowPreview.innerHTML, /NGN 8062\.5/);
-  assert.match(nodes.cartEscrowPreview.innerHTML, /estimate excludes delivery or pickup fees/i);
-  assert.match(nodes.cartCheckout.innerHTML, /startEscrowCheckout/);
-  assert.match(nodes.cartCheckout.innerHTML, /Pay with Escrow Protection/i);
+  assert.match(nodes.cartEscrowPreview.innerHTML, /Fulfillment is selected on the next step/i);
+  assert.match(nodes.cartCheckout.innerHTML, /startEscrowCartCheckout/);
+  assert.match(nodes.cartCheckout.innerHTML, /Pay 1 selected product with Escrow Protection/i);
   context.products[0].price = 85000;
   context.renderCart();
-  assert.match(nodes.cartEscrowPreview.innerHTML, /Fee \(7\.5%\): NGN 6375/);
+  assert.match(nodes.cartEscrowPreview.innerHTML, /Combined escrow fee: <strong>NGN 6375/);
   assert.match(nodes.cartEscrowPreview.innerHTML, /NGN 91375/);
   context.cartItems[0].quantity = 2;
   context.renderCart();
-  assert.match(nodes.cartEscrowPreview.textContent, /one listed product at a time/i);
-  assert.match(nodes.cartCheckout.textContent, /choose one listed product/i);
+  assert.match(nodes.cartEscrowPreview.innerHTML, /Combined escrow fee/i);
+  assert.match(nodes.cartCheckout.innerHTML, /Pay 1 selected product/i);
   context.cartItems.length = 0;
   context.renderCart();
   assert.equal(nodes.cartEscrowPreview.innerHTML, "");
