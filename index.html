@@ -347,9 +347,6 @@
                 <button type="button" onclick="openRecentlyViewedPage()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
                     <i class="fa-solid fa-clock-rotate-left w-5 text-center"></i> Recently viewed
                 </button>
-                <button type="button" onclick="openMemberSearch()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
-                    <i class="fa-solid fa-users w-5 text-center"></i> Find members
-                </button>
                 <button type="button" onclick="openChatPage()" class="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-gray-200 hover:bg-darkBg hover:text-gold">
                     <i class="fa-solid fa-comments w-5 text-center"></i> Golden Chat
                     <span class="ml-auto flex items-center gap-1.5">
@@ -488,9 +485,14 @@
                     </h2>
                     <p class="mt-1 text-xs text-gray-400">Share short videos and photos, and reshare posts from other members.</p>
                 </div>
-                <button type="button" onclick="openCommunityPostModal()" class="rounded-xl gold-gradient-bg px-4 py-2.5 text-xs font-bold text-black">
-                    <i class="fa-solid fa-circle-plus mr-1"></i> Create post
-                </button>
+                <div class="flex flex-wrap items-center justify-end gap-2">
+                    <button type="button" onclick="openMemberSearch()" class="rounded-xl border border-gold/40 bg-gold/10 px-4 py-2.5 text-xs font-bold text-gold hover:bg-gold/20">
+                        <i class="fa-solid fa-users mr-1"></i> Find members
+                    </button>
+                    <button type="button" onclick="openCommunityPostModal()" class="rounded-xl gold-gradient-bg px-4 py-2.5 text-xs font-bold text-black">
+                        <i class="fa-solid fa-circle-plus mr-1"></i> Create post
+                    </button>
+                </div>
             </div>
             <div id="communityPostGrid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
             <p id="communityPostEmpty" class="hidden rounded-xl border border-darkBorder bg-darkCard/50 p-6 text-center text-sm text-gray-400">No community posts yet. Share a photo or short video to get started.</p>
@@ -3259,6 +3261,29 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 document.getElementById('communityPostEmpty'));
         }
 
+        function togglePostMenu(postId, forceOpen = null) {
+            const menu = document.querySelector(`[data-post-menu="${CSS.escape(postId)}"]`);
+            const button = document.querySelector(`[data-post-menu-button="${CSS.escape(postId)}"]`);
+            if (!menu || !button) return;
+            const shouldOpen = forceOpen == null ? menu.classList.contains('hidden') : forceOpen;
+            document.querySelectorAll('[data-post-menu]').forEach(item => item.classList.add('hidden'));
+            document.querySelectorAll('[data-post-menu-button]').forEach(item =>
+                item.setAttribute('aria-expanded', 'false')
+            );
+            menu.classList.toggle('hidden', !shouldOpen);
+            button.setAttribute('aria-expanded', String(shouldOpen));
+        }
+
+        document.addEventListener('click', event => {
+            if (event.target.closest('[data-post-menu], [data-post-menu-button]')) return;
+            document.querySelectorAll('[data-post-menu]').forEach(menu =>
+                menu.classList.add('hidden')
+            );
+            document.querySelectorAll('[data-post-menu-button]').forEach(button =>
+                button.setAttribute('aria-expanded', 'false')
+            );
+        });
+
         function renderCommunityPostCards(posts, container, emptyState) {
             container.querySelectorAll('form[data-post-id]').forEach(form => {
                 const input = form.querySelector('textarea');
@@ -3347,11 +3372,18 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 ? currentUser.allowMediaDownloads === true
                 : currentUser && communityDownloadPermissionCache.get(post.mediaOwnerUid) === true;
             const downloadButton = downloadable
-                ? `<button type="button" onclick="downloadCommunityPostMedia(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] text-gray-300 hover:border-gold/50 hover:text-gold"><i class="fa-solid fa-download mr-1"></i>Download</button>`
+                ? `<button type="button" onclick="event.stopPropagation(); togglePostMenu('${escapeHtml(post.id)}', false); downloadCommunityPostMedia(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-gray-200 hover:bg-gold/10 hover:text-gold"><i class="fa-solid fa-download w-4"></i>Download post</button>`
                 : '';
-            const deleteButton = currentUser?.uid === post.ownerUid
-                ? `<button type="button" onclick="deleteOwnedMarketplaceContent('communityPost', this.dataset.postId, this)" data-post-id="${escapeHtml(post.id)}" class="rounded-lg border border-red-500/40 px-3 py-1.5 text-[10px] font-bold text-red-300 hover:bg-red-500/10"><i class="fa-solid fa-trash mr-1"></i>Delete</button>`
+            const deleteButton = (currentUser?.uid === post.ownerUid || currentUser?.isAdmin === true)
+                ? `<button type="button" onclick="event.stopPropagation(); togglePostMenu('${escapeHtml(post.id)}', false); deleteOwnedMarketplaceContent('communityPost', this.dataset.postId, this)" data-post-id="${escapeHtml(post.id)}" class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-red-300 hover:bg-red-500/10"><i class="fa-solid fa-trash w-4"></i>Delete post</button>`
                 : '';
+            const postMenu = `<div class="relative flex-shrink-0">
+                <button type="button" onclick="event.stopPropagation(); togglePostMenu('${escapeHtml(post.id)}')" class="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-darkBg hover:text-gold" aria-label="Post options" aria-expanded="false" data-post-menu-button="${escapeHtml(post.id)}"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                <div data-post-menu="${escapeHtml(post.id)}" class="absolute right-0 top-9 z-30 hidden w-40 overflow-hidden rounded-xl border border-darkBorder bg-darkCard py-1 shadow-2xl">
+                    ${downloadButton}${deleteButton}
+                    ${!downloadButton && !deleteButton ? '<p class="px-3 py-2 text-xs text-gray-400">No actions available.</p>' : ''}
+                </div>
+            </div>`;
             const commentsOpen = openCommunityCommentPostIds.has(post.id);
             const voiceState = communityCommentVoiceStates.get(post.id);
             const isRecording = voiceState?.recorder?.state === 'recording';
@@ -3360,7 +3392,10 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 : voiceState?.blob ? 'Voice note ready to post.' : '';
             return `
                 <article data-community-post-id="${escapeHtml(post.id)}" onclick="recordRecentlyViewed({ type: 'post', id: this.dataset.communityPostId, title: this.dataset.postTitle, imageUrl: this.dataset.postImage })" data-post-title="${escapeHtml(post.caption || 'Community post')}" data-post-image="${escapeHtml(images[0] || '')}" class="overflow-hidden rounded-2xl border border-darkBorder bg-darkCard p-3 shadow-lg">
-                    <div class="mb-3 flex items-center justify-between gap-2"><div class="flex min-w-0 items-center gap-2">${authorAvatar}${quickFollow}${authorIdentity}</div><span class="text-[10px] text-gray-500">${formatCommunityPostDate(post.createdAt)}</span></div>
+                    <div class="mb-3 flex items-start justify-between gap-2">
+                        <div class="flex min-w-0 items-center gap-2">${authorAvatar}${quickFollow}${authorIdentity}</div>
+                        <div class="flex flex-shrink-0 items-center gap-1"><span class="text-[10px] text-gray-500">${formatCommunityPostDate(post.createdAt)}</span>${postMenu}</div>
+                    </div>
                     ${reshareNote}
                     ${media ? `<div class="space-y-2">${media}</div>` : '<p class="rounded-lg bg-darkBg p-4 text-xs text-gray-400">This media is unavailable.</p>'}
                     ${post.caption ? `<p class="mt-3 whitespace-pre-wrap break-words text-sm text-gray-200">${escapeHtml(post.caption)}</p>` : ''}
@@ -3368,8 +3403,6 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         <button type="button" onclick="toggleCommunityPostLike(this)" data-community-post-like data-post-id="${escapeHtml(post.id)}" data-liked="false" data-like-count="" aria-pressed="false" title="Spend 1 Like credit. Tap Like again within 10 seconds to undo it; after that it is permanent." class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] font-bold text-gray-200 hover:border-gold/50 hover:text-gold"><i class="fa-regular fa-thumbs-up mr-1"></i><span data-community-post-like-label>Like</span> · <span data-community-post-like-count>—</span></button>
                         <button type="button" onclick="reshareCommunityPost(this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" class="rounded-lg border border-gold/30 px-3 py-1.5 text-[10px] font-bold text-gold hover:bg-gold/10"><i class="fa-solid fa-retweet mr-1"></i>Reshare</button>
                         <button type="button" onclick="toggleCommunityComments(this, this.dataset.postId)" data-post-id="${escapeHtml(post.id)}" aria-expanded="${commentsOpen}" class="rounded-lg border border-darkBorder px-3 py-1.5 text-[10px] font-bold text-gray-200 hover:border-gold/50 hover:text-gold"><i class="fa-regular fa-comment mr-1"></i>Comments</button>
-                        ${downloadButton}
-                        ${deleteButton}
                     </div>
                     <section data-community-comment-panel data-post-id="${escapeHtml(post.id)}" class="${commentsOpen ? 'mt-3 border-t border-darkBorder pt-3' : 'hidden'}" aria-label="Comments">
                         <div data-community-comment-list data-post-id="${escapeHtml(post.id)}" class="max-h-60 space-y-2 overflow-y-auto" aria-live="polite">

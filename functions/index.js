@@ -3212,7 +3212,7 @@ exports.deleteOwnedMarketplaceContent = onCall(async request => {
     ? db.collection("products").doc(itemId)
     : db.collection("communityPosts").doc(itemId);
   const snapshot = await parentRef.get();
-  if (!snapshot.exists || snapshot.data().ownerUid !== auth.uid) {
+  if (!snapshot.exists || (snapshot.data().ownerUid !== auth.uid && !isOwnerAdmin(auth))) {
     throw new HttpsError("permission-denied", "You can only delete your own content.");
   }
   await parentRef.delete();
