@@ -37,12 +37,16 @@ service cloud.firestore {
     match /football_highlights/{highlightId} {
       allow read: if true;
       allow create: if ownerAdmin()
-        && request.resource.data.keys().hasOnly(['title', 'videoId', 'addedAt', 'addedBy'])
+        && request.resource.data.keys().hasOnly(['title', 'videoId', 'fixtureId', 'addedAt', 'addedBy'])
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
         && request.resource.data.title.size() <= 160
         && request.resource.data.videoId is string
         && request.resource.data.videoId.matches('^[A-Za-z0-9_-]{11}$')
+        && (!request.resource.data.keys().hasAny(['fixtureId'])
+          || request.resource.data.fixtureId == null
+          || (request.resource.data.fixtureId is string
+            && request.resource.data.fixtureId.size() <= 32))
         && request.resource.data.addedBy == request.auth.uid
         && request.resource.data.addedAt == request.time;
       allow delete: if ownerAdmin();
@@ -51,34 +55,65 @@ service cloud.firestore {
 
     match /match_chats/{matchId}/messages/{messageId} {
       allow read: if true;
-      allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['authorId', 'authorName', 'text', 'createdAt'])
+      allow create: if verifiedAccount()
+        && request.resource.data.keys().hasOnly([
+          'authorId', 'authorName', 'text', 'voicePath', 'replyTo', 'createdAt'
+        ])
         && request.resource.data.authorId == request.auth.uid
         && request.resource.data.authorName is string
-        && request.resource.data.authorName.size() > 0
-        && request.resource.data.authorName.size() <= 120
+        && request.resource.data.authorName
+          == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
         && request.resource.data.text is string
-        && request.resource.data.text.size() > 0
         && request.resource.data.text.size() < 300
+        && (request.resource.data.text.size() > 0
+          || request.resource.data.keys().hasAny(['voicePath']))
+        && (!request.resource.data.keys().hasAny(['voicePath'])
+          || (request.resource.data.voicePath is string
+            && request.resource.data.voicePath
+              .matches('^match_voice_notes/' + matchId + '/' + request.auth.uid + '_[0-9]+\\.(webm|mp4)$')))
+        && (!request.resource.data.keys().hasAny(['replyTo'])
+          || (request.resource.data.replyTo is map
+            && request.resource.data.replyTo.keys().hasOnly(['id', 'senderName', 'textPreview'])
+            && request.resource.data.replyTo.id is string
+            && request.resource.data.replyTo.id.size() <= 80
+            && request.resource.data.replyTo.senderName is string
+            && request.resource.data.replyTo.senderName.size() <= 120
+            && request.resource.data.replyTo.textPreview is string
+            && request.resource.data.replyTo.textPreview.size() <= 120))
         && request.resource.data.createdAt == request.time;
       allow update, delete: if false;
     }
 
     match /match_polls/{matchId}/votes/{userId} {
       allow read: if true;
-      allow create: if signedIn()
+      allow create: if verifiedAccount()
         && userId == request.auth.uid
         && request.resource.data.keys().hasOnly(['choice', 'createdAt', 'updatedAt'])
         && request.resource.data.choice in ['home', 'draw', 'away']
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
-      allow update: if signedIn()
+      allow update: if verifiedAccount()
         && userId == request.auth.uid
         && request.resource.data.keys().hasOnly(['choice', 'createdAt', 'updatedAt'])
         && request.resource.data.choice in ['home', 'draw', 'away']
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.updatedAt == request.time;
-      allow delete: if signedIn() && userId == request.auth.uid;
+      allow delete: if verifiedAccount() && userId == request.auth.uid;
+    }
+
+    match /match_reactions/{matchId}/reactions/{reactionId} {
+      allow read: if true;
+      allow create: if verifiedAccount()
+        && request.resource.data.keys().hasOnly(['uid', 'emoji', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.emoji in ['⚽', '🔥', '😱', '👏']
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    match /footballPredictionStats/{uid} {
+      allow read: if verifiedAccount() && uid == request.auth.uid;
+      allow write: if false;
     }
 
     function validUserProfile(data) {
@@ -227,6 +262,38 @@ service cloud.firestore {
         && request.resource.data.role == resource.data.role
         && request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if false;
+
+      match /pinnedMatches/{matchId} {
+        allow read, write: if verifiedAccount() && request.auth.uid == userId
+          && (request.method == 'delete'
+            || (request.resource.data.keys().hasOnly(['matchId', 'pinnedAt'])
+              && request.resource.data.matchId == matchId
+              && request.resource.data.pinnedAt == request.time));
+      }
+
+      match /footballAlertPrefs/preferences {
+        allow read, write: if verifiedAccount() && request.auth.uid == userId
+          && (request.method == 'delete'
+            || (request.resource.data.keys().hasOnly([
+                'pushEnabled', 'emailEnabled', 'kickoffEnabled', 'goalEnabled', 'replyEnabled', 'updatedAt'
+              ])
+              && request.resource.data.updatedAt == request.time
+              && request.resource.data.pushEnabled is bool
+              && request.resource.data.emailEnabled is bool
+              && request.resource.data.kickoffEnabled is bool
+              && request.resource.data.goalEnabled is bool
+              && request.resource.data.replyEnabled is bool));
+      }
+
+      match /fcmTokens/{tokenHash} {
+        allow read, write: if verifiedAccount() && request.auth.uid == userId
+          && (request.method == 'delete'
+            || (request.resource.data.keys().hasOnly(['token', 'updatedAt'])
+              && request.resource.data.token is string
+              && request.resource.data.token.size() > 0
+              && request.resource.data.token.size() <= 4096
+              && request.resource.data.updatedAt == request.time));
+      }
 
       match /profileViews/{viewerUid} {
         allow read, write: if false;

@@ -62,6 +62,18 @@ service firebase.storage {
       allow delete: if verifiedAccount() && request.auth.uid == userId;
     }
 
+    match /match_voice_notes/{matchId}/{fileName} {
+      allow read: if true;
+      allow create: if verifiedAccount()
+        && fileName.matches('^' + request.auth.uid + '_[0-9]+\\.(webm|mp4)$')
+        && request.resource.size > 0
+        && request.resource.size <= 2 * 1024 * 1024
+        && request.resource.contentType.matches('^audio/(webm|mp4)(;.*)?$');
+      allow update: if false;
+      allow delete: if verifiedAccount()
+        && fileName.matches('^' + request.auth.uid + '_[0-9]+\\.(webm|mp4)$');
+    }
+
     match /golden-chat-media/{chatId}/{userId}/{messageId} {
       function isParticipant() {
         return verifiedAccount()

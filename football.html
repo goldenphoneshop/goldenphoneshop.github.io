@@ -3,110 +3,151 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Golden Eagle Football Hub</title>
+  <title>Golden Eagle Live Match Center</title>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
   <style>
-    :root { color-scheme: dark; --bg:#080d16; --card:#121b2b; --line:#27334a; --gold:#f5c84c; --muted:#98a5ba; }
-    * { box-sizing: border-box; } body { margin:0; min-height:100vh; background:radial-gradient(circle at top,#17233a 0,var(--bg) 45%); color:#f7f8fb; font-family:Inter,system-ui,sans-serif; }
-    button,input,textarea { font:inherit; } button { cursor:pointer; } a { color:inherit; text-decoration:none; }
-    .top { position:sticky; top:0; z-index:20; display:flex; align-items:center; justify-content:space-between; gap:.8rem; padding:.85rem clamp(.8rem,3vw,2rem); border-bottom:1px solid var(--line); background:rgba(8,13,22,.94); backdrop-filter:blur(14px); }
-    .brand { display:flex; align-items:center; gap:.7rem; font-weight:900; }.brand img { width:42px; height:42px; border-radius:50%; border:1px solid var(--gold); object-fit:cover; }
-    .nav { display:flex; gap:.4rem; }.pill { border:1px solid var(--line); border-radius:999px; padding:.55rem .85rem; background:var(--card); color:#dce3ef; }.pill.active { color:#111827; background:var(--gold); border-color:var(--gold); font-weight:800; }
-    main { width:min(1180px,100%); margin:auto; padding:1.2rem; }.hero { overflow:hidden; border:1px solid rgba(245,200,76,.35); border-radius:1.4rem; padding:1.5rem; background:linear-gradient(135deg,rgba(245,200,76,.18),rgba(18,27,43,.92)); }
-    h1,h2,h3,p { margin-top:0; }.muted { color:var(--muted); }.gold { color:var(--gold); }
-    .tabs { display:flex; gap:.5rem; margin:1.2rem 0; overflow-x:auto; }.tabs button { white-space:nowrap; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:1rem; }.card { border:1px solid var(--line); border-radius:1rem; background:var(--card); padding:1rem; }
-    .match { cursor:pointer; transition:border-color .2s,transform .2s; }.match:hover { border-color:rgba(245,200,76,.65); transform:translateY(-2px); }.teams { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:.8rem; margin:1rem 0; }.team { text-align:center; min-width:0; }.team img { width:44px; height:44px; object-fit:contain; }.team strong { display:block; overflow-wrap:anywhere; }.score { font-size:1.45rem; font-weight:900; color:var(--gold); }
-    .status { display:inline-flex; border-radius:999px; padding:.25rem .55rem; background:#17352d; color:#83f0c4; font-size:.75rem; font-weight:800; }.layout { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(280px,.8fr); gap:1rem; }
-    .videos { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:1rem; }.video iframe { width:100%; aspect-ratio:16/9; border:0; border-radius:.8rem; background:#000; }
-    .chat { height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:.55rem; padding:.3rem; }.msg { max-width:88%; border:1px solid var(--line); border-radius:.8rem; padding:.55rem .7rem; background:#0b1220; font-size:.86rem; }.msg.mine { align-self:flex-end; border-color:rgba(245,200,76,.45); }.row { display:flex; gap:.5rem; } input,textarea { width:100%; border:1px solid var(--line); border-radius:.7rem; padding:.7rem; color:white; background:#0b1220; } textarea { resize:vertical; }
-    .primary { border:0; border-radius:.7rem; padding:.7rem 1rem; background:var(--gold); color:#111827; font-weight:900; }.secondary { border:1px solid var(--line); border-radius:.7rem; padding:.65rem .9rem; color:#fff; background:var(--card); }.danger { border-color:#7f2930; color:#ffb3b8; }
-    .poll { display:grid; grid-template-columns:repeat(3,1fr); gap:.5rem; }.poll button { position:relative; overflow:hidden; }.poll span { position:relative; z-index:1; }.poll .bar { position:absolute; inset:0 auto 0 0; background:rgba(245,200,76,.2); }
-    .promo { margin:1.2rem 0; display:flex; align-items:center; justify-content:space-between; gap:1rem; border:1px solid rgba(245,200,76,.45); border-radius:1rem; padding:1rem; background:linear-gradient(90deg,#231b06,var(--card)); }.products { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:.7rem; }.product img { width:100%; height:110px; object-fit:cover; border-radius:.65rem; }
-    [hidden] { display:none !important; } .modal { position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; padding:1rem; background:rgba(0,0,0,.78); }.modal-card { width:min(420px,100%); border:1px solid var(--line); border-radius:1rem; padding:1.2rem; background:var(--card); }
-    @media(max-width:760px){ .layout{grid-template-columns:1fr}.nav .label{display:none}.top{align-items:flex-start}.hero{padding:1rem}.promo{align-items:flex-start;flex-direction:column} }
+    :root{color-scheme:dark;--bg:#080d16;--card:#111a2a;--card2:#182235;--line:#29364d;--gold:#f5c84c;--muted:#98a5ba;--green:#36d399}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#17243a 0,var(--bg) 48%);color:#f7f9fc;font-family:Inter,system-ui,sans-serif}button,input,textarea,select{font:inherit}button{cursor:pointer}a{color:inherit;text-decoration:none}[hidden]{display:none!important}
+    .top{position:sticky;top:0;z-index:40;display:flex;align-items:center;justify-content:space-between;gap:.7rem;padding:.8rem clamp(.8rem,3vw,2rem);border-bottom:1px solid var(--line);background:rgba(8,13,22,.94);backdrop-filter:blur(15px)}.brand{display:flex;align-items:center;gap:.65rem;font-weight:900}.brand img{width:40px;height:40px;border-radius:50%;border:1px solid var(--gold);object-fit:cover}.pill{border:1px solid var(--line);border-radius:999px;background:var(--card);padding:.55rem .8rem;color:#fff}.pill.active,.primary{border-color:var(--gold);background:var(--gold);color:#111827;font-weight:900}.row{display:flex;gap:.6rem}.muted{color:var(--muted)}.gold{color:var(--gold)}
+    main{width:min(1220px,100%);margin:auto;padding:1rem}.card{border:1px solid var(--line);border-radius:1rem;background:var(--card);padding:1rem}.secondary{border:1px solid var(--line);border-radius:.7rem;background:var(--card2);color:#fff;padding:.6rem .85rem}.danger{border-color:#7f2930;color:#ffb8bd}.small{font-size:.78rem}
+    .stage-shell{position:relative;margin-bottom:.8rem}.tv-stage{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border:1px solid rgba(245,200,76,.45);border-radius:1.2rem;background:linear-gradient(160deg,#1a2438,#080d16 65%);box-shadow:0 20px 70px rgba(0,0,0,.35)}.tv-stage.collapsed{aspect-ratio:4/1}.stage-head{position:absolute;inset:0 0 auto;z-index:3;display:flex;justify-content:space-between;gap:.5rem;padding:.7rem}.stage-live{display:inline-flex;align-items:center;gap:.4rem;border-radius:999px;background:#b51e32;padding:.35rem .65rem;font-size:.75rem;font-weight:900}.stage-body{position:absolute;inset:3.2rem 0 0;display:grid;place-items:center;padding:1rem;text-align:center}.stage-score{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:clamp(.7rem,4vw,3rem);width:min(900px,100%)}.stage-team img{width:clamp(52px,9vw,110px);height:clamp(52px,9vw,110px);object-fit:contain}.stage-team strong{display:block;margin-top:.5rem;font-size:clamp(.9rem,2vw,1.4rem)}.stage-number{font-size:clamp(2rem,8vw,5rem);font-weight:1000;color:var(--gold)}.stage-mini{position:fixed;right:1rem;bottom:1rem;z-index:60;width:min(360px,calc(100vw - 2rem));aspect-ratio:16/9;border:1px solid var(--gold);border-radius:.9rem;background:var(--card);box-shadow:0 20px 60px #000;overflow:hidden}.stage-mini .stage-body{inset:2.8rem 0 0;padding:.5rem}.stage-mini .stage-team img{width:44px;height:44px}.stage-mini .stage-number{font-size:1.8rem}.stage-mini .stage-team strong{font-size:.72rem}
+    .stage-tabs{display:flex;gap:.4rem;margin:.8rem 0;overflow-x:auto}.stage-tabs button{white-space:nowrap}.stage-tabs .active{background:var(--gold);color:#111827;border-color:var(--gold)}
+    .pinned{position:sticky;top:72px;z-index:25;display:flex;gap:.5rem;margin:.7rem 0 1rem;overflow-x:auto;padding:.35rem;border:1px solid var(--line);border-radius:.9rem;background:rgba(8,13,22,.92);backdrop-filter:blur(10px)}.pin-card{min-width:180px;border:1px solid var(--line);border-radius:.75rem;background:var(--card);padding:.55rem .7rem;text-align:left}.pin-card.active{border-color:var(--gold)}.filters{display:flex;gap:.45rem;overflow-x:auto;margin-bottom:.7rem}.filter{white-space:nowrap}.filter.active{background:var(--gold);border-color:var(--gold);color:#111827}.search{display:flex;gap:.5rem;margin-bottom:1rem}.search input,.field{width:100%;border:1px solid var(--line);border-radius:.7rem;background:#0a1120;color:white;padding:.65rem}
+    .matches{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:.85rem}.match{position:relative;transition:.2s}.match:hover{border-color:rgba(245,200,76,.65);transform:translateY(-2px)}.match-top{display:flex;justify-content:space-between;gap:.5rem}.icon{border:1px solid var(--line);border-radius:50%;width:32px;height:32px;background:var(--card2);color:#fff}.icon.active{border-color:var(--gold);color:var(--gold)}.teams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.6rem;margin:1rem 0}.team{text-align:center}.team img{width:42px;height:42px;object-fit:contain}.score{font-size:1.45rem;font-weight:900;color:var(--gold)}.watch{width:100%;margin-top:.6rem}
+    .content-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(290px,.8fr);gap:1rem}.pitch{position:relative;min-height:260px;border:1px solid #31533f;border-radius:1rem;background:repeating-linear-gradient(90deg,#0e4f31 0 16.6%,#105c38 16.6% 33.2%);overflow:hidden}.pitch:before{content:"";position:absolute;inset:12px;border:2px solid rgba(255,255,255,.55)}.pitch-mid{position:absolute;left:50%;top:12px;bottom:12px;border-left:2px solid rgba(255,255,255,.5)}.ball{position:absolute;left:50%;top:50%;font-size:1.4rem;transition:all 1s ease}.feed{max-height:330px;overflow:auto}.event{border-left:3px solid var(--gold);padding:.55rem .7rem;margin-bottom:.5rem;background:#0b1220;border-radius:.3rem}.goal-flash{animation:goal .9s ease}.floating{position:absolute;font-size:1.8rem;animation:floatUp 2.4s ease forwards;pointer-events:none}@keyframes goal{50%{box-shadow:0 0 45px rgba(245,200,76,.8)}}@keyframes floatUp{to{transform:translateY(-130px) scale(1.5);opacity:0}}
+    .poll{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem}.poll button{position:relative;overflow:hidden}.poll .bar{position:absolute;inset:0 auto 0 0;background:rgba(245,200,76,.22)}.poll span{position:relative;z-index:1}.points{display:flex;justify-content:space-between;border:1px solid var(--line);border-radius:.8rem;padding:.7rem;background:var(--card2)}
+    .chat{height:360px;overflow:auto;display:flex;flex-direction:column;gap:.55rem;padding:.2rem}.msg{max-width:90%;border:1px solid var(--line);border-radius:.8rem;background:#0a1120;padding:.6rem;font-size:.85rem}.msg.mine{align-self:flex-end;border-color:rgba(245,200,76,.5)}.reply{border-left:2px solid var(--gold);padding-left:.45rem;margin-bottom:.35rem;color:var(--muted);font-size:.72rem}.chat-actions{display:flex;justify-content:flex-end;gap:.4rem;margin-top:.35rem}.voice-wave{width:100%;height:34px;display:block}.rec{background:#a52834}.recording{animation:pulse 1s infinite}@keyframes pulse{50%{opacity:.55}}
+    .videos,.products{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem}.video iframe{width:100%;aspect-ratio:16/9;border:0;border-radius:.75rem}.product img{width:100%;height:120px;object-fit:cover;border-radius:.7rem}.promo{display:flex;justify-content:space-between;gap:1rem;align-items:center;margin:1rem 0;border:1px solid rgba(245,200,76,.5);border-radius:1rem;background:linear-gradient(90deg,#2b2108,var(--card));padding:1rem}.hidden{display:none!important}
+    .modal{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,.8)}.modal-card{width:min(440px,100%);border:1px solid var(--line);border-radius:1rem;background:var(--card);padding:1rem}.toggle{display:flex;justify-content:space-between;gap:1rem;align-items:center;border-bottom:1px solid var(--line);padding:.8rem 0}
+    @media(max-width:760px){.content-grid{grid-template-columns:1fr}.stage-number{font-size:2rem}.top .nav-label{display:none}.promo{flex-direction:column;align-items:flex-start}main{padding:.75rem}.stage-shell{margin-top:.3rem}.filters{padding-bottom:.2rem}}
   </style>
 </head>
 <body>
   <header class="top">
     <a class="brand" href="./index.html"><img src="./Image/app-logo.jpg" alt="Golden Eagle"><span>GOLDEN EAGLE <span class="gold">FOOTBALL</span></span></a>
-    <nav class="nav" aria-label="Golden Eagle sections">
+    <nav class="row" aria-label="Golden Eagle sections">
       <a class="pill" href="./index.html">Marketplace</a>
-      <span class="pill active">Football Hub</span>
-      <button id="accountButton" class="pill" type="button" onclick="openAuth()">Sign in</button>
+      <span class="pill active">Live Match Center</span>
+      <button id="accountButton" class="pill" type="button">Sign in</button>
     </nav>
   </header>
   <main>
-    <section class="hero">
-      <p class="gold"><strong>LIVE • TODAY • UPCOMING</strong></p>
-      <h1>Golden Eagle Football Hub</h1>
-      <p class="muted">Scores, fan predictions, match conversations, and official highlights—without scraping or copyrighted streams.</p>
-    </section>
-
-    <div class="tabs" role="tablist" aria-label="Football Hub views">
-      <button class="pill active" id="matchesTab" type="button" onclick="showTab('matches')">Matches</button>
-      <button class="pill" id="highlightsTab" type="button" onclick="showTab('highlights')">Highlights & Past Matches</button>
+    <div class="row" style="justify-content:flex-end;flex-wrap:wrap;margin-bottom:.6rem">
+      <button id="alertsButton" class="secondary" type="button">🔔 Enable Match Alerts</button>
     </div>
 
-    <section id="matchesView">
-      <div id="matchStatus" class="muted">Loading matches…</div>
-      <div id="matchGrid" class="grid"></div>
-      <section id="matchRoom" class="card" hidden>
-        <div class="row" style="justify-content:space-between;align-items:center">
-          <div><p class="gold" style="margin-bottom:.2rem">SELECTED MATCH</p><h2 id="selectedMatchTitle"></h2></div>
-          <button class="secondary" type="button" onclick="closeMatchRoom()">Close</button>
+    <section id="stageShell" class="stage-shell">
+      <div id="tvStage" class="tv-stage">
+        <div class="stage-head">
+          <span class="stage-live">LIVE STAGE</span>
+          <div class="row">
+            <button class="secondary small" type="button" id="collapseStage">Collapse</button>
+            <button class="secondary small" type="button" id="miniStage">Mini bar</button>
+          </div>
         </div>
-        <div class="layout">
-          <section>
-            <h3>Match chat</h3>
-            <div id="matchChat" class="chat" aria-live="polite"></div>
-            <form id="chatForm" class="row" onsubmit="sendMatchMessage(event)" style="margin-top:.7rem">
-              <input id="chatMessage" maxlength="299" placeholder="Share a match comment…" autocomplete="off">
-              <button class="primary" type="submit">Send</button>
-            </form>
-          </section>
-          <aside>
-            <h3>Fan prediction</h3>
-            <p id="pollStatus" class="muted">Choose one result.</p>
-            <div id="matchPoll" class="poll"></div>
-          </aside>
+        <div class="stage-body">
+          <div id="stageMatch" class="stage-score"><p class="muted">Choose a match using 📺 Watch Live.</p></div>
         </div>
-      </section>
+      </div>
     </section>
+    <div id="miniStageHost"></div>
+    <section id="pinnedBar" class="pinned" hidden aria-label="Pinned matches"></section>
 
-    <section id="highlightsView" hidden>
-      <div id="adminHighlightForm" class="card" hidden>
-        <h2>Add official highlight</h2>
-        <p class="muted">Only add videos you own or official rights-holder YouTube embeds. The app stores only the official YouTube video ID.</p>
-        <form onsubmit="addHighlight(event)" class="grid" style="grid-template-columns:1fr 1fr auto;align-items:end">
-          <label>Match title<input id="highlightTitle" maxlength="160" required></label>
-          <label>Official YouTube URL<input id="highlightUrl" type="url" required></label>
-          <button class="primary" type="submit">Add</button>
+    <div class="stage-tabs">
+      <button class="pill active" data-stage-tab="pitch">Live Pitch & Events</button>
+      <button class="pill" data-stage-tab="stats">Stats & Lineups</button>
+      <button class="pill" data-stage-tab="chat">Fan Chat</button>
+      <button class="pill" data-stage-tab="poll">Match Predictions</button>
+      <button class="pill" data-stage-tab="video">Official Video</button>
+    </div>
+
+    <section id="stagePanels" class="card" hidden>
+      <div id="pitchPanel">
+        <div class="content-grid">
+          <div><div id="livePitch" class="pitch"><div class="pitch-mid"></div><span id="liveBall" class="ball">⚽</span></div></div>
+          <div><h3>Live events</h3><div id="eventFeed" class="feed muted">Choose a live fixture to load events.</div></div>
+        </div>
+      </div>
+      <div id="statsPanel" class="hidden"><h3>Statistics & lineups</h3><div id="statsContent" class="content-grid"></div></div>
+      <div id="chatPanel" class="hidden">
+        <div id="replyContext" class="hidden card" style="margin-bottom:.6rem"></div>
+        <div id="matchChat" class="chat"></div>
+        <div id="chatRecordStatus" class="muted small"></div>
+        <form class="row" id="chatForm" style="margin-top:.7rem">
+          <input id="chatMessage" maxlength="299" placeholder="Comment on the match…">
+          <button id="voiceRecordButton" class="secondary" type="button" aria-label="Record voice note">🎙️</button>
+          <button class="primary" type="submit">Send</button>
         </form>
       </div>
-      <div id="highlightList" class="videos" style="margin-top:1rem"></div>
+      <div id="pollPanel" class="hidden">
+        <div class="points"><span>Prediction points</span><strong id="predictionPoints">0</strong><span id="predictionStreak">Streak 0</span></div>
+        <p id="pollStatus" class="muted"></p>
+        <div id="matchPoll" class="poll"></div>
+      </div>
+      <div id="videoPanel" class="hidden">
+        <h3>Official video</h3>
+        <div id="officialVideo"></div>
+      </div>
+    </section>
+
+    <div class="filters" id="statusFilters">
+      <button class="pill filter active" data-filter="all">All</button>
+      <button class="pill filter" data-filter="live">🔴 Live Now</button>
+      <button class="pill filter" data-filter="upcoming">Upcoming</button>
+      <button class="pill filter" data-filter="finished">Finished</button>
+    </div>
+    <div class="filters" id="leagueFilters"></div>
+    <div class="search"><input id="teamSearch" type="search" placeholder="Search team or league…"><button class="secondary" id="clearSearch" type="button">Clear</button></div>
+    <p id="matchStatus" class="muted">Loading fixtures…</p>
+    <div id="matchGrid" class="matches"></div>
+
+    <section class="card" style="margin-top:1rem">
+      <div class="row" style="justify-content:space-between;align-items:center"><h2>Highlights & Past Matches</h2><button id="showHighlights" class="secondary" type="button">Open</button></div>
+      <div id="adminHighlightForm" class="card hidden" style="margin:1rem 0">
+        <h3>Add official highlight</h3>
+        <form id="highlightForm" class="content-grid">
+          <input id="highlightTitle" maxlength="160" placeholder="Official match highlight title" required>
+          <div class="row"><input id="highlightUrl" type="url" placeholder="Official YouTube URL" required><button class="primary" type="submit">Add</button></div>
+        </form>
+      </div>
+      <div id="highlightList" class="videos"></div>
     </section>
 
     <section class="promo">
-      <div><p class="gold"><strong>SHOP THE MATCHDAY</strong></p><h2>Phones, accessories and repair gear</h2><p class="muted">Featured products come from the Golden Eagle marketplace.</p></div>
-      <a class="primary" href="./index.html">Open Marketplace</a>
+      <div><p class="gold"><strong>MATCHDAY SHOP</strong></p><h2>Phones, accessories & repair gear</h2><p class="muted">Browse featured Golden Eagle marketplace products.</p></div>
+      <a class="pill active" href="./index.html">Open Marketplace</a>
     </section>
     <div id="featuredProducts" class="products"></div>
   </main>
 
   <div id="authModal" class="modal" hidden>
     <section class="modal-card">
-      <div class="row" style="justify-content:space-between;align-items:center"><h2>Join the match conversation</h2><button class="pill" type="button" onclick="closeAuth()">×</button></div>
-      <p class="muted">Scores and highlights are public. Sign in or create an account to chat and vote.</p>
-      <form id="authForm" onsubmit="submitAuth(event)">
+      <div class="row" style="justify-content:space-between"><h2>Sign in for fan features</h2><button class="pill" type="button" id="closeAuth">×</button></div>
+      <p class="muted">Scores and highlights are public. Chat, votes, pins sync, voice notes, and alerts require a verified account.</p>
+      <form id="authForm">
         <label>Email<input id="authEmail" type="email" required></label>
         <label>Password<input id="authPassword" type="password" minlength="8" required></label>
-        <div class="row" style="margin-top:.8rem"><button class="primary" type="submit">Sign in</button><button class="secondary" type="button" onclick="registerAuth()">Create account</button></div>
+        <div class="row" style="margin-top:.8rem"><button class="primary" type="submit">Sign in</button><button class="secondary" id="registerButton" type="button">Create account</button></div>
         <p id="authStatus" class="muted"></p>
       </form>
+    </section>
+  </div>
+
+  <div id="alertsModal" class="modal" hidden>
+    <section class="modal-card">
+      <div class="row" style="justify-content:space-between"><h2>Match alerts</h2><button class="pill" type="button" id="closeAlerts">×</button></div>
+      <label class="toggle">Phone push alerts <input id="pushAlerts" type="checkbox"></label>
+      <label class="toggle">Gmail / email alerts <input id="emailAlerts" type="checkbox"></label>
+      <label class="toggle">Kick-off reminders <input id="kickoffAlerts" type="checkbox"></label>
+      <label class="toggle">Goal updates <input id="goalAlerts" type="checkbox"></label>
+      <label class="toggle">Replies to my chat <input id="replyAlerts" type="checkbox"></label>
+      <button id="saveAlerts" class="primary" style="width:100%;margin-top:1rem" type="button">Save alerts</button>
+      <p id="alertsStatus" class="muted"></p>
     </section>
   </div>
 
@@ -119,177 +160,295 @@
       messagingSenderId: "120512676475",
       appId: "1:120512676475:web:9f451f54ff3d36771258de"
     };
+    const FIREBASE_VAPID_KEY = "";
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db = firebase.firestore();
+    const storage = firebase.storage();
     const functions = firebase.functions();
+    let messaging = null;
+    if ("serviceWorker" in navigator && firebase.messaging.isSupported()) messaging = firebase.messaging();
     const OWNER_UID = "LROHsLUXfEPnC6bDmSvy3vcRnNE3";
-    let selectedMatch = null;
-    let chatUnsubscribe = null;
-    let pollUnsubscribe = null;
-    let currentUser = null;
-    const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+    const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[char]));
+    const $ = id => document.getElementById(id);
+    let currentUser = null, currentProfileName = "", allMatches = [], selectedMatch = null, statusFilter = "all", leagueFilter = "";
+    let chatUnsubscribe = null, pollUnsubscribe = null, reactionUnsubscribe = null, detailTimer = null;
+    let replyTarget = null, recorder = null, recordChunks = [], recordStartedAt = 0, recordTimer = null;
+    const pinnedIds = new Set(JSON.parse(localStorage.getItem("goldenEagle_pinnedMatches") || "[]"));
 
-    function openAuth() { document.getElementById("authModal").hidden = false; }
-    function closeAuth() { document.getElementById("authModal").hidden = true; }
-    async function submitAuth(event) {
+    const openAuth = () => { authModal.hidden = false; };
+    const closeAuthModal = () => { authModal.hidden = true; };
+    closeAuth.onclick = closeAuthModal;
+    authForm.addEventListener("submit", async event => {
       event.preventDefault();
-      try {
-        await auth.signInWithEmailAndPassword(authEmail.value.trim(), authPassword.value);
-        closeAuth();
-      } catch (error) { authStatus.textContent = error.message; }
-    }
-    async function registerAuth() {
+      try { await auth.signInWithEmailAndPassword(authEmail.value.trim(), authPassword.value); closeAuthModal(); }
+      catch (error) { authStatus.textContent = error.message; }
+    });
+    registerButton.onclick = async () => {
       try {
         const credential = await auth.createUserWithEmailAndPassword(authEmail.value.trim(), authPassword.value);
         await credential.user.sendEmailVerification();
-        authStatus.textContent = "Account created. Verify your email, then sign in again.";
+        authStatus.textContent = "Account created. Verify your email, then sign in.";
       } catch (error) { authStatus.textContent = error.message; }
-    }
-    auth.onAuthStateChanged(user => {
+    };
+    auth.onAuthStateChanged(async user => {
       currentUser = user && (!user.email || user.emailVerified) ? user : null;
       accountButton.textContent = currentUser ? (currentUser.displayName || "Account") : "Sign in";
       adminHighlightForm.hidden = currentUser?.uid !== OWNER_UID;
+      currentProfileName = "";
+      if (currentUser) {
+        const profile = await db.collection("users").doc(currentUser.uid).get();
+        currentProfileName = profile.data()?.name || currentUser.displayName || currentUser.email || "Member";
+      }
+      await syncPinnedMatches();
+      if (selectedMatch) { subscribeChat(); subscribePoll(); subscribeReactions(); }
+      loadPredictionPoints();
     });
+    accountButton.onclick = () => currentUser ? openAlertPreferences() : openAuth();
 
-    function showTab(tab) {
-      matchesView.hidden = tab !== "matches";
-      highlightsView.hidden = tab !== "highlights";
-      matchesTab.classList.toggle("active", tab === "matches");
-      highlightsTab.classList.toggle("active", tab === "highlights");
+    function statusGroup(match) {
+      const status = match.status?.short || "";
+      if (["1H","2H","HT","ET","BT","P","LIVE"].includes(status)) return "live";
+      if (["FT","AET","PEN","FT_PEN"].includes(status)) return "finished";
+      return "upcoming";
+    }
+    function filteredMatches() {
+      const query = teamSearch.value.trim().toLowerCase();
+      return allMatches.filter(match => {
+        const group = statusGroup(match);
+        const league = String(match.league?.name || "");
+        return (statusFilter === "all" || group === statusFilter) &&
+          (!leagueFilter || league.toLowerCase().includes(leagueFilter.toLowerCase())) &&
+          (!query || [match.teams?.home?.name,match.teams?.away?.name,league].join(" ").toLowerCase().includes(query));
+      });
     }
     async function loadMatches() {
       try {
-        const response = await functions.httpsCallable("getFootballMatches")();
-        const matches = response.data?.matches || [];
-        matchStatus.textContent = response.data?.fallback ? "Preview fixtures — provider unavailable or API key pending." : `Updated ${new Date(response.data.fetchedAtMs).toLocaleTimeString()}`;
-        matchGrid.innerHTML = matches.map(match => `
-          <article class="card match" onclick="openMatch('${match.id}')" data-match='${escapeHtml(JSON.stringify(match))}'>
-            <div class="row" style="justify-content:space-between"><span class="muted">${escapeHtml(match.league?.name || "Football")}</span><span class="status">${escapeHtml(match.status?.elapsed ? `${match.status.elapsed}'` : match.status?.short)}</span></div>
-            <div class="teams">
-              <div class="team">${match.teams?.home?.logo ? `<img src="${escapeHtml(match.teams.home.logo)}" alt="">` : ""}<strong>${escapeHtml(match.teams?.home?.name)}</strong></div>
-              <div class="score">${match.goals?.home ?? "-"} : ${match.goals?.away ?? "-"}</div>
-              <div class="team">${match.teams?.away?.logo ? `<img src="${escapeHtml(match.teams.away.logo)}" alt="">` : ""}<strong>${escapeHtml(match.teams?.away?.name)}</strong></div>
-            </div>
-            <p class="muted" style="text-align:center;margin-bottom:0">${new Date(match.date).toLocaleString()}</p>
-          </article>`).join("") || '<p class="muted">No fixtures available.</p>';
-      } catch (error) { matchStatus.textContent = error.message || "Matches could not load."; }
+        const result = await functions.httpsCallable("getFootballMatches")();
+        allMatches = result.data?.matches || [];
+        matchStatus.textContent = result.data?.fallback ? "Preview fixtures — the server-side football provider is not configured yet." : `Updated ${new Date(result.data.fetchedAtMs).toLocaleTimeString()}`;
+        renderLeagueFilters();
+        renderMatches();
+        renderPinnedBar();
+        const fixtureFromUrl = Number(new URLSearchParams(location.search).get("fixture"));
+        if (fixtureFromUrl && !selectedMatch) openMatch(fixtureFromUrl, true);
+      } catch (error) { matchStatus.textContent = error.message || "Fixtures could not load."; }
     }
-    function openMatch(matchId) {
-      const card = document.querySelector(`[onclick="openMatch('${matchId}')"]`);
-      try { selectedMatch = JSON.parse(card.dataset.match); } catch { return; }
-      matchRoom.hidden = false;
-      selectedMatchTitle.textContent = `${selectedMatch.teams.home.name} vs ${selectedMatch.teams.away.name}`;
-      subscribeMatchChat();
-      subscribePoll();
-      matchRoom.scrollIntoView({ behavior: "smooth", block: "start" });
+    function renderLeagueFilters() {
+      const leagues = ["Premier League","La Liga","Champions League","NPFL"];
+      leagueFilters.innerHTML = leagues.map(league => `<button class="pill filter ${leagueFilter === league ? "active" : ""}" data-league="${escapeHtml(league)}">${escapeHtml(league)}</button>`).join("");
+      leagueFilters.querySelectorAll("[data-league]").forEach(button => button.onclick = () => {
+        leagueFilter = leagueFilter === button.dataset.league ? "" : button.dataset.league;
+        renderLeagueFilters(); renderMatches();
+      });
     }
-    function closeMatchRoom() {
-      matchRoom.hidden = true;
-      selectedMatch = null;
-      chatUnsubscribe?.(); pollUnsubscribe?.();
+    function renderMatches() {
+      const matches = filteredMatches();
+      matchGrid.innerHTML = matches.map(match => `
+        <article class="card match">
+          <div class="match-top"><span class="muted small">${escapeHtml(match.league?.name || "Football")}</span><span class="row"><button class="icon ${pinnedIds.has(String(match.id)) ? "active" : ""}" type="button" aria-label="Pin match" onclick="togglePin('${match.id}')">📌</button><button class="icon" type="button" aria-label="Watch live" onclick="openMatch('${match.id}')">📺</button></span></div>
+          <div class="teams">
+            <div class="team">${match.teams?.home?.logo ? `<img src="${escapeHtml(match.teams.home.logo)}" alt="">` : ""}<strong>${escapeHtml(match.teams?.home?.name)}</strong></div>
+            <div class="score">${match.goals?.home ?? "-"} : ${match.goals?.away ?? "-"}</div>
+            <div class="team">${match.teams?.away?.logo ? `<img src="${escapeHtml(match.teams.away.logo)}" alt="">` : ""}<strong>${escapeHtml(match.teams?.away?.name)}</strong></div>
+          </div>
+          <p class="muted small" style="text-align:center">${escapeHtml(match.status?.elapsed ? `${match.status.elapsed}'` : match.status?.short)} · ${escapeHtml(new Date(match.date).toLocaleString())}</p>
+        </article>`).join("") || '<p class="muted">No matches match this filter.</p>';
+      renderPinnedBar();
     }
-    function subscribeMatchChat() {
-      chatUnsubscribe?.();
-      const matchId = String(selectedMatch.id);
-      chatUnsubscribe = db.collection("match_chats").doc(matchId).collection("messages")
-        .orderBy("createdAt", "asc").limitToLast(100)
-        .onSnapshot(snapshot => {
-          matchChat.innerHTML = snapshot.docs.map(doc => {
-            const message = doc.data();
-            return `<div class="msg ${currentUser?.uid === message.authorId ? "mine" : ""}"><strong>${escapeHtml(message.authorName)}</strong><br>${escapeHtml(message.text)}</div>`;
-          }).join("");
-          matchChat.scrollTop = matchChat.scrollHeight;
-        }, error => { matchChat.textContent = error.message; });
+    statusFilters.querySelectorAll("[data-filter]").forEach(button => button.onclick = () => {
+      statusFilter = button.dataset.filter;
+      statusFilters.querySelectorAll("[data-filter]").forEach(item => item.classList.toggle("active", item === button));
+      renderMatches();
+    });
+    teamSearch.oninput = renderMatches;
+    clearSearch.onclick = () => { teamSearch.value = ""; renderMatches(); };
+
+    async function togglePin(matchId) {
+      const id = String(matchId);
+      if (pinnedIds.has(id)) pinnedIds.delete(id); else pinnedIds.add(id);
+      localStorage.setItem("goldenEagle_pinnedMatches", JSON.stringify([...pinnedIds]));
+      if (currentUser) {
+        const ref = db.collection("users").doc(currentUser.uid).collection("pinnedMatches").doc(id);
+        if (pinnedIds.has(id)) await ref.set({ matchId:id, pinnedAt:firebase.firestore.FieldValue.serverTimestamp() });
+        else await ref.delete();
+      }
+      renderMatches();
     }
+    async function syncPinnedMatches() {
+      if (!currentUser) return;
+      const snapshot = await db.collection("users").doc(currentUser.uid).collection("pinnedMatches").get();
+      snapshot.forEach(doc => pinnedIds.add(doc.id));
+      localStorage.setItem("goldenEagle_pinnedMatches", JSON.stringify([...pinnedIds]));
+      renderMatches();
+    }
+    function renderPinnedBar() {
+      const pinned = allMatches.filter(match => pinnedIds.has(String(match.id)));
+      pinnedBar.hidden = !pinned.length;
+      pinnedBar.innerHTML = `<strong class="pill">📌 Pinned</strong>` + pinned.map(match =>
+        `<button class="pin-card ${selectedMatch?.id === match.id ? "active" : ""}" type="button" onclick="openMatch('${match.id}',true)"><strong>${escapeHtml(match.teams.home.name)}</strong> <span class="gold">${match.goals.home ?? "-"}:${match.goals.away ?? "-"}</span> <strong>${escapeHtml(match.teams.away.name)}</strong><span class="muted small"> · ${escapeHtml(match.status?.short || "")}</span></button>`
+      ).join("");
+    }
+
+    async function openMatch(matchId, scroll = false) {
+      selectedMatch = allMatches.find(match => String(match.id) === String(matchId));
+      if (!selectedMatch) return;
+      stageShell.scrollIntoView({ behavior:"smooth", block:"start" });
+      renderStageScore();
+      stagePanels.hidden = false;
+      subscribeChat(); subscribePoll(); subscribeReactions(); loadLiveDetails();
+      clearInterval(detailTimer); detailTimer = setInterval(loadLiveDetails, 60000);
+      renderPinnedBar();
+    }
+    function renderStageScore() {
+      stageMatch.innerHTML = `
+        <div class="stage-team">${selectedMatch.teams.home.logo ? `<img src="${escapeHtml(selectedMatch.teams.home.logo)}" alt="">` : ""}<strong>${escapeHtml(selectedMatch.teams.home.name)}</strong></div>
+        <div><div class="stage-number">${selectedMatch.goals.home ?? "-"} : ${selectedMatch.goals.away ?? "-"}</div><p class="gold">${escapeHtml(selectedMatch.status?.elapsed ? `${selectedMatch.status.elapsed}'` : selectedMatch.status?.long || "")}</p></div>
+        <div class="stage-team">${selectedMatch.teams.away.logo ? `<img src="${escapeHtml(selectedMatch.teams.away.logo)}" alt="">` : ""}<strong>${escapeHtml(selectedMatch.teams.away.name)}</strong></div>`;
+    }
+    collapseStage.onclick = () => {
+      tvStage.classList.toggle("collapsed");
+      collapseStage.textContent = tvStage.classList.contains("collapsed") ? "Expand" : "Collapse";
+    };
+    miniStage.onclick = () => {
+      tvStage.classList.toggle("stage-mini");
+      miniStageHost.classList.toggle("stage-mini-placeholder", tvStage.classList.contains("stage-mini"));
+    };
+    document.querySelectorAll("[data-stage-tab]").forEach(button => button.onclick = () => {
+      document.querySelectorAll("[data-stage-tab]").forEach(item => item.classList.toggle("active", item === button));
+      ["pitch","stats","chat","poll","video"].forEach(name => document.getElementById(`${name}Panel`).classList.toggle("hidden", name !== button.dataset.stageTab));
+    });
+
+    async function loadLiveDetails() {
+      if (!selectedMatch) return;
+      try {
+        const result = await functions.httpsCallable("getMatchLiveDetails")({ fixtureId:selectedMatch.id });
+        const detail = result.data || {};
+        if (detail.fixture) {
+          Object.assign(selectedMatch, detail.fixture);
+          renderStageScore(); renderMatches(); renderPinnedBar();
+        }
+        eventFeed.innerHTML = (detail.events || []).slice().reverse().map(event =>
+          `<div class="event"><strong>${escapeHtml(event.time ?? "")}${event.extra ? `+${escapeHtml(event.extra)}` : ""}' ${escapeHtml(event.type)}</strong><br><span class="muted">${escapeHtml(event.player)}${event.assist ? ` · Assist: ${escapeHtml(event.assist)}` : ""} · ${escapeHtml(event.team)}</span></div>`
+        ).join("") || '<p class="muted">No live events yet.</p>';
+        const possession = detail.statistics?.flatMap(team => team.values || []).find(stat => stat.type === "Ball Possession");
+        if (possession) liveBall.style.left = `${Math.min(85,Math.max(15,parseInt(possession.value) || 50))}%`;
+        statsContent.innerHTML = (detail.statistics || []).map(team => `<section><h3>${escapeHtml(team.team)}</h3>${team.values.map(stat => `<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding:.35rem 0"><span class="muted">${escapeHtml(stat.type)}</span><strong>${escapeHtml(stat.value ?? "-")}</strong></div>`).join("")}</section>`).join("") +
+          (detail.lineups || []).map(team => `<section><h3>${escapeHtml(team.team)} · ${escapeHtml(team.formation)}</h3><p class="muted">${escapeHtml(team.startXI.join(", "))}</p></section>`).join("");
+        renderOfficialVideo();
+        if (detail.events?.some(event => String(event.type).toLowerCase() === "goal")) tvStage.classList.add("goal-flash");
+        setTimeout(() => tvStage.classList.remove("goal-flash"), 1000);
+      } catch (error) { eventFeed.textContent = error.message || "Live details unavailable."; }
+    }
+    async function renderOfficialVideo() {
+      officialVideo.innerHTML = '<p class="muted">No official stream or highlight is linked to this fixture.</p>';
+      const snapshot = await db.collection("football_highlights").where("fixtureId","==",String(selectedMatch.id)).limit(1).get();
+      if (!snapshot.empty) {
+        const data = snapshot.docs[0].data();
+        officialVideo.innerHTML = `<iframe style="width:100%;aspect-ratio:16/9;border:0;border-radius:.8rem" src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(data.videoId)}" title="${escapeHtml(data.title)}" allowfullscreen></iframe>`;
+      }
+    }
+
+    function subscribeChat() {
+      chatUnsubscribe?.(); if (!selectedMatch) return;
+      chatUnsubscribe = db.collection("match_chats").doc(String(selectedMatch.id)).collection("messages").orderBy("createdAt","asc").limitToLast(100).onSnapshot(snapshot => {
+        matchChat.innerHTML = snapshot.docs.map(doc => {
+          const msg = doc.data(); const own = msg.authorId === currentUser?.uid;
+          return `<div id="message-${escapeHtml(doc.id)}" class="msg ${own ? "mine" : ""}">
+            ${msg.replyTo ? `<button type="button" class="reply" onclick="jumpToMessage('${escapeHtml(msg.replyTo.id)}')"><strong>${escapeHtml(msg.replyTo.senderName)}</strong><br>${escapeHtml(msg.replyTo.textPreview)}</button>` : ""}
+            <strong>${escapeHtml(msg.authorName)}</strong><br>${msg.text ? escapeHtml(msg.text) : ""}
+            ${msg.voicePath ? `<audio controls preload="none" class="voice-wave" data-voice-path="${escapeHtml(msg.voicePath)}"></audio>` : ""}
+            <div class="chat-actions"><button class="secondary small" type="button" onclick="setReply('${escapeHtml(doc.id)}','${escapeHtml(msg.authorName)}','${escapeHtml((msg.text || "Voice note").slice(0,120))}')">Reply</button></div>
+          </div>`;
+        }).join("");
+        matchChat.querySelectorAll("[data-voice-path]").forEach(async audio => {
+          try { audio.src = await storage.ref(audio.dataset.voicePath).getDownloadURL(); }
+          catch (error) { console.error("Unable to load match voice note.", error); }
+        });
+        matchChat.scrollTop = matchChat.scrollHeight;
+      });
+    }
+    function setReply(id,name,text){ replyTarget={id,senderName:name,textPreview:text}; replyContext.hidden=false; replyContext.innerHTML=`<div class="row" style="justify-content:space-between"><span>Replying to <strong>${escapeHtml(name)}</strong><br><span class="muted">${escapeHtml(text)}</span></span><button class="secondary" type="button" onclick="clearReply()">×</button></div>`; }
+    function clearReply(){replyTarget=null;replyContext.hidden=true;replyContext.textContent=""}
+    function jumpToMessage(id){document.getElementById(`message-${id}`)?.scrollIntoView({behavior:"smooth",block:"center"})}
+    chatForm.onsubmit = sendMatchMessage;
     async function sendMatchMessage(event) {
       event.preventDefault();
       if (!currentUser) return openAuth();
       const text = chatMessage.value.trim();
-      if (!text || text.length >= 300 || !selectedMatch) return;
+      if (!selectedMatch || (!text && !recordChunks.length)) return;
+      if (text.length >= 300) return;
       await db.collection("match_chats").doc(String(selectedMatch.id)).collection("messages").add({
-        authorId: currentUser.uid,
-        authorName: currentUser.displayName || currentUser.email || "Golden Eagle member",
-        text,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        authorId:currentUser.uid,authorName:currentProfileName,text,createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+        ...(replyTarget ? {replyTo:replyTarget} : {})
       });
-      chatMessage.value = "";
+      chatMessage.value=""; clearReply();
     }
-    function subscribePoll() {
-      pollUnsubscribe?.();
-      const matchId = String(selectedMatch.id);
-      pollUnsubscribe = db.collection("match_polls").doc(matchId).collection("votes")
-        .onSnapshot(snapshot => {
-          const counts = { home:0, draw:0, away:0 };
-          snapshot.forEach(doc => { if (counts[doc.data().choice] !== undefined) counts[doc.data().choice]++; });
-          const total = counts.home + counts.draw + counts.away;
-          const options = [["home","Win home"],["draw","Draw"],["away","Win away"]];
-          matchPoll.innerHTML = options.map(([choice,label]) => {
-            const percent = total ? Math.round(counts[choice] / total * 100) : 0;
-            return `<button class="secondary" type="button" onclick="vote('${choice}')"><i class="bar" style="width:${percent}%"></i><span>${label}<br>${percent}% · ${counts[choice]}</span></button>`;
-          }).join("");
-          pollStatus.textContent = total ? `${total} fan prediction${total === 1 ? "" : "s"}.` : "Be the first to predict this match.";
-        }, error => { pollStatus.textContent = error.message; });
-    }
-    async function vote(choice) {
+    voiceRecordButton.onclick = async () => {
       if (!currentUser) return openAuth();
-      const matchId = String(selectedMatch.id);
-      const ref = db.collection("match_polls").doc(matchId).collection("votes").doc(currentUser.uid);
-      const now = firebase.firestore.FieldValue.serverTimestamp();
-      const existing = await ref.get();
-      await ref.set(existing.exists
-        ? { choice, createdAt: existing.data().createdAt, updatedAt: now }
-        : { choice, createdAt: now, updatedAt: now });
-    }
-    function youtubeId(value) {
+      if (!selectedMatch) return;
+      if (recorder?.state === "recording") { recorder.stop(); return; }
       try {
-        const url = new URL(value);
-        if (url.hostname === "youtu.be") return url.pathname.slice(1).split("/")[0];
-        if (["youtube.com","www.youtube.com","m.youtube.com"].includes(url.hostname)) {
-          return url.searchParams.get("v") || (url.pathname.startsWith("/embed/") ? url.pathname.split("/")[2] : "");
-        }
-      } catch {}
-      return "";
-    }
-    function subscribeHighlights() {
-      db.collection("football_highlights").orderBy("addedAt","desc").limit(50)
-        .onSnapshot(snapshot => {
-          highlightList.innerHTML = snapshot.docs.map(doc => {
-            const data = doc.data();
-            return `<article class="card video"><iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(data.videoId)}" title="${escapeHtml(data.title)}" loading="lazy" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe><h3 style="margin: .8rem 0 0">${escapeHtml(data.title)}</h3>${currentUser?.uid === OWNER_UID ? `<button class="secondary danger" type="button" onclick="deleteHighlight('${escapeHtml(doc.id)}')">Delete</button>` : ""}</article>`;
-          }).join("") || '<p class="muted">No official highlights have been added.</p>';
-        });
-    }
-    async function addHighlight(event) {
-      event.preventDefault();
-      if (currentUser?.uid !== OWNER_UID) return openAuth();
-      const videoId = youtubeId(highlightUrl.value.trim());
-      if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) return alert("Paste a valid official YouTube video URL.");
-      await db.collection("football_highlights").add({
-        title: highlightTitle.value.trim(),
-        videoId,
-        addedBy: currentUser.uid,
-        addedAt: firebase.firestore.FieldValue.serverTimestamp()
+        const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+        const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+        recorder = new MediaRecorder(stream,{mimeType:mime});
+        recordChunks=[]; recordStartedAt=Date.now(); chatRecordStatus.textContent="Recording… maximum 30 seconds";
+        voiceRecordButton.classList.add("recording"); voiceRecordButton.classList.add("rec");
+        recorder.ondataavailable = event => { if(event.data.size) recordChunks.push(event.data); };
+        recorder.onstop = async () => {
+          clearTimeout(recordTimer); stream.getTracks().forEach(track=>track.stop());
+          voiceRecordButton.classList.remove("recording","rec");
+          chatRecordStatus.textContent="";
+          const blob=new Blob(recordChunks,{type:mime});
+          if(!blob.size||blob.size>2*1024*1024)return alert("Voice note is empty or larger than 2MB.");
+          const timestamp=Date.now(), ext=mime.includes("webm")?"webm":"mp4";
+          const path=`match_voice_notes/${selectedMatch.id}/${currentUser.uid}_${timestamp}.${ext}`;
+          const ref=storage.ref(path);
+          await ref.put(blob,{contentType:mime});
+          await db.collection("match_chats").doc(String(selectedMatch.id)).collection("messages").add({
+            authorId:currentUser.uid,authorName:currentProfileName,text:"",voicePath:path,createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+            ...(replyTarget?{replyTo:replyTarget}:{})
+          });
+          clearReply();
+        };
+        recorder.start(); recordTimer=setTimeout(()=>recorder.state==="recording"&&recorder.stop(),30000);
+      } catch(error){chatRecordStatus.textContent=error.message}
+    };
+
+    function subscribePoll() {
+      pollUnsubscribe?.(); if (!selectedMatch) return;
+      pollUnsubscribe=db.collection("match_polls").doc(String(selectedMatch.id)).collection("votes").onSnapshot(snapshot=>{
+        const counts={home:0,draw:0,away:0};snapshot.forEach(doc=>{if(counts[doc.data().choice]!==undefined)counts[doc.data().choice]++});
+        const total=counts.home+counts.draw+counts.away, options=[["home","Win home"],["draw","Draw"],["away","Win away"]];
+        matchPoll.innerHTML=options.map(([choice,label])=>{const percent=total?Math.round(counts[choice]/total*100):0;return `<button class="secondary" type="button" onclick="castVote('${choice}')"><i class="bar" style="width:${percent}%"></i><span>${label}<br>${percent}% · ${counts[choice]}</span></button>`}).join("");
+        pollStatus.textContent=total?`${total} predictions`:"Be the first to predict.";
       });
-      event.target.reset();
     }
-    async function deleteHighlight(id) {
-      if (currentUser?.uid !== OWNER_UID || !confirm("Delete this official highlight?")) return;
-      await functions.httpsCallable("deleteFootballHighlight")({ highlightId: id });
+    async function castVote(choice){if(!currentUser)return openAuth();await functions.httpsCallable("castFootballPrediction")({fixtureId:selectedMatch.id,choice})}
+    async function subscribeReactions(){
+      reactionUnsubscribe?.(); if(!selectedMatch)return;
+      reactionUnsubscribe=db.collection("match_reactions").doc(String(selectedMatch.id)).collection("reactions").orderBy("createdAt","desc").limit(8).onSnapshot(snapshot=>snapshot.docChanges().forEach(change=>{
+        if(change.type!=="added")return;const emoji=change.doc.data().emoji,node=document.createElement("span");node.className="floating";node.textContent=emoji;node.style.left=`${10+Math.random()*75}%`;node.style.bottom="8%";tvStage.appendChild(node);setTimeout(()=>node.remove(),2500);
+      }));
     }
-    function loadFeaturedProducts() {
-      db.collection("products").limit(6).get().then(snapshot => {
-        featuredProducts.innerHTML = snapshot.docs.map(doc => {
-          const product = doc.data();
-          const image = Array.isArray(product.imageUrls) ? product.imageUrls[0] : product.imageUrl;
-          return `<a class="card product" href="./index.html?productId=${encodeURIComponent(doc.id)}">${image ? `<img src="${escapeHtml(image)}" alt="">` : ""}<strong>${escapeHtml(product.title || "Marketplace product")}</strong><p class="gold">₦${Number(product.price || 0).toLocaleString()}</p></a>`;
-        }).join("");
-      }).catch(() => { featuredProducts.textContent = "Marketplace products could not load."; });
-    }
-    subscribeHighlights();
-    loadMatches();
-    loadFeaturedProducts();
-    setInterval(loadMatches, 60000);
+    async function react(emoji){if(!currentUser)return openAuth();await db.collection("match_reactions").doc(String(selectedMatch.id)).collection("reactions").add({uid:currentUser.uid,emoji,createdAt:firebase.firestore.FieldValue.serverTimestamp()})}
+    async function loadPredictionPoints(){if(!currentUser){predictionPoints.textContent="0";return}const snap=await db.collection("footballPredictionStats").doc(currentUser.uid).get();const data=snap.data()||{};predictionPoints.textContent=data.points||0;predictionStreak.textContent=`Streak ${data.streak||0}`}
+
+    const youtubeId=value=>{try{const u=new URL(value);if(u.hostname==="youtu.be")return u.pathname.slice(1).split("/")[0];if(["youtube.com","www.youtube.com","m.youtube.com"].includes(u.hostname))return u.searchParams.get("v")||(u.pathname.startsWith("/embed/")?u.pathname.split("/")[2]:"")}catch{}return""};
+    function subscribeHighlights(){db.collection("football_highlights").orderBy("addedAt","desc").limit(50).onSnapshot(snapshot=>{highlightList.innerHTML=snapshot.docs.map(doc=>{const data=doc.data();return `<article class="card video"><iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(data.videoId)}" title="${escapeHtml(data.title)}" loading="lazy" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe><h3>${escapeHtml(data.title)}</h3>${currentUser?.uid===OWNER_UID?`<button class="secondary danger" type="button" onclick="deleteHighlight('${escapeHtml(doc.id)}')">Delete</button>`:""}</article>`}).join("")||'<p class="muted">No official highlights added.</p>'})}
+    highlightForm.onsubmit=async event=>{event.preventDefault();if(currentUser?.uid!==OWNER_UID)return openAuth();const videoId=youtubeId(highlightUrl.value.trim());if(!/^[A-Za-z0-9_-]{11}$/.test(videoId))return alert("Paste a valid official YouTube URL.");await db.collection("football_highlights").add({title:highlightTitle.value.trim(),videoId,fixtureId:selectedMatch?String(selectedMatch.id):null,addedBy:currentUser.uid,addedAt:firebase.firestore.FieldValue.serverTimestamp()});event.target.reset()};
+    async function deleteHighlight(id){if(currentUser?.uid!==OWNER_UID||!confirm("Delete this official highlight?"))return;await functions.httpsCallable("deleteFootballHighlight")({highlightId:id})}
+    showHighlights.onclick=()=>{adminHighlightForm.hidden=currentUser?.uid!==OWNER_UID;highlightList.scrollIntoView({behavior:"smooth"})};
+    function loadFeaturedProducts(){db.collection("products").limit(6).get().then(snapshot=>{featuredProducts.innerHTML=snapshot.docs.map(doc=>{const p=doc.data(),image=Array.isArray(p.imageUrls)?p.imageUrls[0]:p.imageUrl;return `<a class="card product" href="./index.html?productId=${encodeURIComponent(doc.id)}">${image?`<img src="${escapeHtml(image)}" alt="">`:""}<strong>${escapeHtml(p.title||"Marketplace product")}</strong><p class="gold">₦${Number(p.price||0).toLocaleString()}</p></a>`}).join("")}).catch(()=>featuredProducts.textContent="Marketplace products could not load.")});
+
+    async function openAlertPreferences(){if(!currentUser)return openAuth();alertsModal.hidden=false;const snap=await db.collection("users").doc(currentUser.uid).collection("footballAlertPrefs").doc("preferences").get();const p=snap.data()||{};pushAlerts.checked=p.pushEnabled===true;emailAlerts.checked=p.emailEnabled===true;kickoffAlerts.checked=p.kickoffEnabled!==false;goalAlerts.checked=p.goalEnabled!==false;replyAlerts.checked=p.replyEnabled!==false}
+    closeAlerts.onclick=()=>alertsModal.hidden=true;
+    alertsButton.onclick=openAlertPreferences;
+    saveAlerts.onclick=async()=>{if(!currentUser)return openAuth();try{if(pushAlerts.checked&&!FIREBASE_VAPID_KEY){alertsStatus.textContent="Push is not configured yet. Ask the site owner to add FIREBASE_VAPID_KEY.";return}if(pushAlerts.checked&&messaging){const permission=await Notification.requestPermission();if(permission!=="granted")throw new Error("Notification permission was not granted.");const registration=await navigator.serviceWorker.register("./firebase-messaging-sw.js");const token=await messaging.getToken({vapidKey:FIREBASE_VAPID_KEY,serviceWorkerRegistration:registration});if(!token)throw new Error("No push token was issued.");await db.collection("users").doc(currentUser.uid).collection("fcmTokens").doc(await tokenHash(token)).set({token,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})}await db.collection("users").doc(currentUser.uid).collection("footballAlertPrefs").doc("preferences").set({pushEnabled:pushAlerts.checked,emailEnabled:emailAlerts.checked,kickoffEnabled:kickoffAlerts.checked,goalEnabled:goalAlerts.checked,replyEnabled:replyAlerts.checked,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});alertsStatus.textContent="Alert preferences saved."}catch(error){alertsStatus.textContent=error.message}};
+    async function tokenHash(token){const bytes=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(token));return [...new Uint8Array(bytes)].map(v=>v.toString(16).padStart(2,"0")).join("").slice(0,40)}
+    if(messaging){messaging.onMessage(payload=>{document.title=`⚽ ${payload.notification?.title||"Match alert"}`;setTimeout(()=>document.title="Golden Eagle Live Match Center",5000)})}
+
+    loadMatches();subscribeHighlights();loadFeaturedProducts();setInterval(loadMatches,60000);
   </script>
 </body>
 </html>

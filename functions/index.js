@@ -77,6 +77,7 @@ const PERMANENT_VERIFIED_DEALER_UID = "71ZtsYMKKtMsOSdHhBHAbjHzcqc2";
 const PERMANENT_VERIFIED_DEALER_EMAIL = "employmentteamr303@gmail.com";
 const FIRST_SANCTION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const FOOTBALL_CACHE_MS = 60 * 1000;
+const FOOTBALL_ALERT_WINDOW_MS = 15 * 60 * 1000;
 
 function isOwnerAdmin(auth) {
   return auth?.uid === OWNER_ADMIN_UID;
@@ -352,6 +353,309 @@ exports.deleteFootballHighlight = onCall(async request => {
     createdAt: FieldValue.serverTimestamp()
   });
   return { deleted: true };
+});
+
+exports.getMatchLiveDetails = onCall(async request => {
+  const fixtureId = Number(request.data?.fixtureId);
+  if (!Number.isSafeInteger(fixtureId) || fixtureId < 1) {
+    throw new HttpsError("invalid-argument", "Choose a valid fixture.");
+  }
+  const cacheRef = db.collection("football_cache").doc(`fixture_${fixtureId}`);
+  const cache = await cacheRef.get();
+  if (cache.exists && cache.data().expiresAtMs > Date.now()) return { ...cache.data(), cached: true };
+  const apiKey = typeof process.env.FOOTBALL_API_KEY === "string"
+    ? process.env.FOOTBALL_API_KEY.trim()
+    : "";
+  let details = { fixtureId, events: [], statistics: [], lineups: [], fallback: true };
+  if (apiKey) {
+    try {
+      const base = "https://v3.football.api-sports.io";
+      const paths = [
+        `/fixtures?id=${fixtureId}`,
+        `/fixtures/events?fixture=${fixtureId}`,
+        `/fixtures/statistics?fixture=${fixtureId}`,
+        `/fixtures/lineups?fixture=${fixtureId}`
+      ];
+      const responses = await Promise.all(paths.map(path => fetch(base + path, {
+        headers: { "x-apisports-key": apiKey }, signal: AbortSignal.timeout(12000)
+      })));
+      if (responses.some(response => !response.ok)) throw new Error("Football details unavailable.");
+      const [fixtureData, eventData, statsData, lineupData] =
+        await Promise.all(responses.map(response => response.json()));
+      details = {
+        fixtureId,
+        fixture: cleanFootballFixture(fixtureData.response?.[0]),
+        events: (eventData.response || []).slice(0, 100).map(event => ({
+          time: event.time?.elapsed ?? null,
+          extra: event.time?.extra ?? null,
+          type: String(event.type || ""),
+          detail: String(event.detail || ""),
+          team: String(event.team?.name || ""),
+          player: String(event.player?.name || ""),
+          assist: String(event.assist?.name || "")
+        })),
+        statistics: (statsData.response || []).map(team => ({
+          team: String(team.team?.name || ""),
+          values: (team.statistics || []).map(stat => ({
+            type: String(stat.type || ""),
+            value: typeof stat.value === "number" || typeof stat.value === "string" ? stat.value : null
+          }))
+        })),
+        lineups: (lineupData.response || []).map(team => ({
+          team: String(team.team?.name || ""),
+          formation: String(team.formation || ""),
+          startXI: (team.startXI || []).map(row => String(row.player?.name || "")),
+          substitutes: (team.substitutes || []).map(row => String(row.player?.name || ""))
+        })),
+        fallback: false
+      };
+    } catch (error) {
+      logger.error("Football detail refresh failed.", { fixtureId, message: error.message });
+      if (cache.exists) return { ...cache.data(), cached: true, stale: true };
+    }
+  }
+  const payload = {
+    ...details,
+    fetchedAtMs: Date.now(),
+    expiresAtMs: Date.now() + FOOTBALL_CACHE_MS,
+    updatedAt: FieldValue.serverTimestamp()
+  };
+  await cacheRef.set(payload);
+  return { ...payload, cached: false };
+});
+
+exports.castFootballPrediction = onCall(async request => {
+  const auth = requireVerifiedUser(request);
+  const fixtureId = Number(request.data?.fixtureId);
+  const choice = request.data?.choice;
+  if (!Number.isSafeInteger(fixtureId) || fixtureId < 1 ||
+      !["home", "draw", "away"].includes(choice)) {
+    throw new HttpsError("invalid-argument", "Choose a valid match prediction.");
+  }
+  const cache = await db.collection("football_cache").doc(`fixture_${fixtureId}`).get();
+  const fixture = cache.data()?.fixture;
+  if (fixture && !["NS", "TBD", "PST"].includes(fixture.status?.short)) {
+    throw new HttpsError("failed-precondition", "Predictions close when the match starts.");
+  }
+  const voteRef = db.collection("match_polls").doc(String(fixtureId))
+    .collection("votes").doc(auth.uid);
+  const existing = await voteRef.get();
+  await voteRef.set({
+    choice,
+    createdAt: existing.data()?.createdAt || FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp()
+  });
+  return { predicted: true, choice };
+});
+
+async function footballRecipientsForMatch(matchId) {
+  const pins = await db.collectionGroup("pinnedMatches")
+    .where("matchId", "==", String(matchId)).get();
+  return [...new Set(pins.docs.map(document => document.ref.parent.parent.id))];
+}
+
+async function sendFootballPush(uid, title, body, link, eventId, preferenceKey) {
+  const { getMessaging } = require("firebase-admin/messaging");
+  const prefs = await db.collection("users").doc(uid)
+    .collection("footballAlertPrefs").doc("preferences").get();
+  if (!prefs.exists || prefs.data().pushEnabled !== true ||
+      (preferenceKey && prefs.data()[preferenceKey] !== true)) return;
+  const tokens = await db.collection("users").doc(uid).collection("fcmTokens").get();
+  const validTokens = tokens.docs.map(document => document.data().token)
+    .filter(token => typeof token === "string" && token.length <= 4096);
+  if (!validTokens.length) return;
+  const response = await getMessaging().sendEachForMulticast({
+    tokens: validTokens,
+    notification: { title, body },
+    webpush: { fcmOptions: { link }, notification: { tag: eventId, renotify: true } },
+    data: { eventId, url: link }
+  });
+  await Promise.all(response.responses.map(async (result, index) => {
+    if (result.success) return;
+    if (["messaging/registration-token-not-registered",
+      "messaging/invalid-registration-token"].includes(result.error?.code || "")) {
+      await tokens.docs[index].ref.delete();
+    }
+  }));
+}
+
+async function queueFootballEmail(uid, title, body, eventId, preferenceKey) {
+  const prefs = await db.collection("users").doc(uid)
+    .collection("footballAlertPrefs").doc("preferences").get();
+  if (!prefs.exists || prefs.data().emailEnabled !== true ||
+      (preferenceKey && prefs.data()[preferenceKey] !== true)) return;
+  const user = await getAuth().getUser(uid);
+  if (!user.email) return;
+  try {
+    await db.collection("footballEmailQueue").doc(
+      crypto.createHash("sha256").update(`${eventId}:${uid}`).digest("hex")
+    ).create({
+      uid,
+      email: user.email,
+      subject: `Golden Eagle Football: ${title}`,
+      text: body,
+      status: "pending",
+      createdAt: FieldValue.serverTimestamp()
+    });
+  } catch (error) {
+    if (error.code !== 6 && error.code !== "already-exists") throw error;
+  }
+}
+
+async function processFootballEmailQueue() {
+  const nodemailer = require("nodemailer");
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const from = process.env.FOOTBALL_EMAIL_FROM;
+  const queue = await db.collection("footballEmailQueue")
+    .where("status", "==", "pending").limit(50).get();
+  if (queue.empty) return;
+  if (!host || !user || !pass || !from) {
+    logger.warn("Football email delivery is waiting for SMTP configuration.");
+    return;
+  }
+  const transport = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+  await Promise.all(queue.docs.map(async document => {
+    const data = document.data();
+    try {
+      await transport.sendMail({ from, to: data.email, subject: data.subject, text: data.text });
+      await document.ref.update({ status: "sent", sentAt: FieldValue.serverTimestamp() });
+    } catch (error) {
+      await document.ref.update({
+        status: "failed",
+        error: String(error.message || "Email delivery failed.").slice(0, 300),
+        failedAt: FieldValue.serverTimestamp()
+      });
+    }
+  }));
+}
+
+async function deliverFootballAlert(eventId, fixture, title, body, preferenceKey) {
+  const recipients = await footballRecipientsForMatch(fixture.id);
+  await Promise.all(recipients.flatMap(uid => [
+    sendFootballPush(uid, title, body, `https://goldeneaglegsm.com/football.html?fixture=${fixture.id}`, eventId, preferenceKey),
+    queueFootballEmail(uid, title, body, eventId, preferenceKey),
+    db.collection("users").doc(uid).collection("notifications").doc(eventId).set({
+      type: "football",
+      title,
+      message: body,
+      fixtureId: fixture.id,
+      createdAt: FieldValue.serverTimestamp()
+    }, { merge: true })
+  ]));
+}
+
+exports.onFootballAlert = onSchedule("every 1 minutes", async () => {
+  const apiKey = typeof process.env.FOOTBALL_API_KEY === "string"
+    ? process.env.FOOTBALL_API_KEY.trim()
+    : "";
+  if (!apiKey) {
+    await processFootballEmailQueue();
+    return;
+  }
+  const live = await fetchFootballFixtures(apiKey);
+  const stateRef = db.collection("football_alert_state").doc("matches");
+  const previousSnapshot = await stateRef.get();
+  const previous = previousSnapshot.data()?.fixtures || {};
+  for (const fixture of live) {
+    await db.collection("football_cache").doc(`fixture_${fixture.id}`).set({
+      fixtureId: fixture.id,
+      fixture,
+      fetchedAtMs: Date.now(),
+      expiresAtMs: Date.now() + FOOTBALL_CACHE_MS,
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    const old = previous[String(fixture.id)];
+    const kickoff = Date.parse(fixture.date);
+    const now = Date.now();
+    if (fixture.status?.short === "NS" && kickoff > now &&
+        kickoff <= now + FOOTBALL_ALERT_WINDOW_MS && old?.kickoffSent !== true) {
+      await deliverFootballAlert(
+        `football:${fixture.id}:kickoff`,
+        fixture,
+        "Match starts soon",
+        `${fixture.teams.home.name} vs ${fixture.teams.away.name} starts within 15 minutes.`,
+        "kickoffEnabled"
+      );
+    }
+    if (old && (fixture.goals.home !== old.home || fixture.goals.away !== old.away)) {
+      await deliverFootballAlert(
+        `football:${fixture.id}:score:${fixture.goals.home}-${fixture.goals.away}`,
+        fixture,
+        "Goal update",
+        `${fixture.teams.home.name} ${fixture.goals.home ?? 0}-${fixture.goals.away ?? 0} ${fixture.teams.away.name}`,
+        "goalEnabled"
+      );
+    }
+    previous[String(fixture.id)] = {
+      home: fixture.goals.home,
+      away: fixture.goals.away,
+      status: fixture.status?.short,
+      kickoffSent: old?.kickoffSent === true ||
+        (fixture.status?.short === "NS" && kickoff > now && kickoff <= now + FOOTBALL_ALERT_WINDOW_MS)
+    };
+  }
+  await stateRef.set({ fixtures: previous, updatedAt: FieldValue.serverTimestamp() });
+  await processFootballEmailQueue();
+});
+
+exports.onFootballChatReply = onDocumentCreated(
+  "match_chats/{matchId}/messages/{messageId}",
+  async event => {
+    const data = event.data?.data();
+    if (!data?.replyTo?.id) return;
+    const parent = await db.collection("match_chats").doc(event.params.matchId)
+      .collection("messages").doc(data.replyTo.id).get();
+    const recipientUid = parent.data()?.authorId;
+    if (!recipientUid || recipientUid === data.authorId) return;
+    const title = "New football chat reply";
+    const body = `${data.authorName || "A fan"} replied to your match comment.`;
+    const link = `https://goldeneaglegsm.com/football.html?fixture=${encodeURIComponent(event.params.matchId)}`;
+    await Promise.all([
+      sendFootballPush(recipientUid, title, body, link, event.id, "replyEnabled"),
+      queueFootballEmail(recipientUid, title, body, event.id, "replyEnabled"),
+      db.collection("users").doc(recipientUid).collection("notifications").doc(event.id).set({
+        type: "football_reply",
+        title,
+        message: body,
+        fixtureId: event.params.matchId,
+        createdAt: Timestamp.now()
+      }, { merge: true })
+    ]);
+  }
+);
+
+exports.awardFootballPredictionPoints = onSchedule("every 5 minutes", async () => {
+  const caches = await db.collection("football_cache").get();
+  for (const result of caches.docs) {
+    const fixture = result.data();
+    if (!Number.isSafeInteger(fixture.fixture?.id) ||
+        fixture.fixture?.status?.short !== "FT" ||
+        !Number.isInteger(fixture.fixture?.goals?.home) ||
+        !Number.isInteger(fixture.fixture?.goals?.away)) continue;
+    const outcome = fixture.fixture.goals.home === fixture.fixture.goals.away
+      ? "draw"
+      : fixture.fixture.goals.home > fixture.fixture.goals.away ? "home" : "away";
+    const votes = await db.collection("match_polls").doc(String(fixture.fixture.id))
+      .collection("votes").get();
+    await Promise.all(votes.docs.map(vote => db.runTransaction(async transaction => {
+      const awardRef = db.collection("footballPredictionStats").doc(vote.id);
+      const existingSnapshot = await transaction.get(awardRef);
+      const key = `fixture_${fixture.fixture.id}`;
+      const existing = existingSnapshot.data() || {};
+      if (existing.resolved?.[key]) return;
+      const correct = vote.data().choice === outcome;
+      transaction.set(awardRef, {
+        correct: (existing.correct || 0) + (correct ? 1 : 0),
+        points: (existing.points || 0) + (correct ? 10 : 0),
+        streak: correct ? (existing.streak || 0) + 1 : 0,
+        resolved: { ...(existing.resolved || {}), [key]: true },
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+    })));
+  }
 });
 
 function accountWalletRef(uid) {

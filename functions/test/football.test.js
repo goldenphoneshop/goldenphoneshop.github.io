@@ -30,7 +30,7 @@ test("football fixtures use sanitized fallback and provider fields", () => {
 });
 
 test("football client contains no provider key and uses privacy-enhanced embeds", () => {
-  assert.doesNotMatch(html, /FOOTBALL_API_KEY|x-apisports-key/i);
+  assert.doesNotMatch(html, /x-apisports-key|FLWSECK|sk_(live|test)_/i);
   assert.match(html, /https:\/\/www\.youtube-nocookie\.com\/embed\//);
   assert.match(html, /match_chats/);
   assert.match(html, /match_polls/);
