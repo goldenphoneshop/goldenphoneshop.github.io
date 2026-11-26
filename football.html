@@ -439,7 +439,17 @@
     highlightForm.onsubmit=async event=>{event.preventDefault();if(currentUser?.uid!==OWNER_UID)return openAuth();const videoId=youtubeId(highlightUrl.value.trim());if(!/^[A-Za-z0-9_-]{11}$/.test(videoId))return alert("Paste a valid official YouTube URL.");await db.collection("football_highlights").add({title:highlightTitle.value.trim(),videoId,fixtureId:selectedMatch?String(selectedMatch.id):null,addedBy:currentUser.uid,addedAt:firebase.firestore.FieldValue.serverTimestamp()});event.target.reset()};
     async function deleteHighlight(id){if(currentUser?.uid!==OWNER_UID||!confirm("Delete this official highlight?"))return;await functions.httpsCallable("deleteFootballHighlight")({highlightId:id})}
     showHighlights.onclick=()=>{adminHighlightForm.hidden=currentUser?.uid!==OWNER_UID;highlightList.scrollIntoView({behavior:"smooth"})};
-    function loadFeaturedProducts(){db.collection("products").limit(6).get().then(snapshot=>{featuredProducts.innerHTML=snapshot.docs.map(doc=>{const p=doc.data(),image=Array.isArray(p.imageUrls)?p.imageUrls[0]:p.imageUrl;return `<a class="card product" href="./index.html?productId=${encodeURIComponent(doc.id)}">${image?`<img src="${escapeHtml(image)}" alt="">`:""}<strong>${escapeHtml(p.title||"Marketplace product")}</strong><p class="gold">₦${Number(p.price||0).toLocaleString()}</p></a>`}).join("")}).catch(()=>featuredProducts.textContent="Marketplace products could not load.")});
+    function loadFeaturedProducts(){
+      db.collection("products").limit(6).get()
+        .then(snapshot => {
+          featuredProducts.innerHTML = snapshot.docs.map(doc => {
+            const product = doc.data();
+            const image = Array.isArray(product.imageUrls) ? product.imageUrls[0] : product.imageUrl;
+            return `<a class="card product" href="./index.html?productId=${encodeURIComponent(doc.id)}">${image ? `<img src="${escapeHtml(image)}" alt="">` : ""}<strong>${escapeHtml(product.title || "Marketplace product")}</strong><p class="gold">₦${Number(product.price || 0).toLocaleString()}</p></a>`;
+          }).join("");
+        })
+        .catch(() => { featuredProducts.textContent = "Marketplace products could not load."; });
+    }
 
     async function openAlertPreferences(){if(!currentUser)return openAuth();alertsModal.hidden=false;const snap=await db.collection("users").doc(currentUser.uid).collection("footballAlertPrefs").doc("preferences").get();const p=snap.data()||{};pushAlerts.checked=p.pushEnabled===true;emailAlerts.checked=p.emailEnabled===true;kickoffAlerts.checked=p.kickoffEnabled!==false;goalAlerts.checked=p.goalEnabled!==false;replyAlerts.checked=p.replyEnabled!==false}
     closeAlerts.onclick=()=>alertsModal.hidden=true;
