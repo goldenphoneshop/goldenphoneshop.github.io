@@ -2570,8 +2570,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
 
         async function loadProfilePhotoInto(image, photoPath, uid, notifyOnError = false) {
             const requestId = String(Number(image.dataset.photoRequest || 0) + 1);
-            const viewer = firebaseAuth.currentUser;
-            const viewerUid = currentUser?.uid;
+            const viewerUidAtStart = currentUser?.uid || null;
+            const authUidAtStart = firebaseAuth.currentUser?.uid || null;
             image.dataset.photoRequest = requestId;
             image.classList.add('hidden');
             const safePath = safeProfilePhotoPath(photoPath, uid);
@@ -2583,19 +2583,15 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
             try {
                 let objectUrl = profilePhotoObjectUrls.get(safePath);
                 if (!objectUrl) {
-                    if (!viewer || !viewerUid || viewer.uid !== viewerUid) {
-                        throw new Error('Sign in to load profile photos.');
-                    }
                     const ref = firebaseStorage.ref(safePath);
                     const metadata = await ref.getMetadata();
                     if (!Number.isSafeInteger(metadata.size) || metadata.size <= 0 ||
                         metadata.size > MAX_PROFILE_PHOTO_BYTES) {
                         throw new Error('Stored profile photo has an invalid size.');
                     }
-                    const token = await viewer.getIdToken();
                     const response = await fetch(
                         `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(ref.bucket)}/o/${encodeURIComponent(safePath)}?alt=media`,
-                        { headers: { Authorization: `Firebase ${token}` } }
+                        { cache: 'force-cache' }
                     );
                     if (!response.ok) throw new Error(`Profile photo download failed (${response.status}).`);
                     const blob = await response.blob();
@@ -2603,8 +2599,9 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(blob.type)) {
                         throw new Error('Stored profile photo has an unsupported image type.');
                     }
-                    if (currentUser?.uid !== viewerUid || firebaseAuth.currentUser?.uid !== viewerUid) return;
                     objectUrl = URL.createObjectURL(blob);
+                    if ((currentUser?.uid || null) !== viewerUidAtStart ||
+                        (firebaseAuth.currentUser?.uid || null) !== authUidAtStart) return;
                     profilePhotoObjectUrls.set(safePath, objectUrl);
                     if (profilePhotoObjectUrls.size > 30) {
                         const [oldestPath, oldestUrl] = profilePhotoObjectUrls.entries().next().value;
@@ -2612,7 +2609,8 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                         profilePhotoObjectUrls.delete(oldestPath);
                     }
                 }
-                if (!viewerUid || currentUser?.uid !== viewerUid || firebaseAuth.currentUser?.uid !== viewerUid ||
+                if ((currentUser?.uid || null) !== viewerUidAtStart ||
+                    (firebaseAuth.currentUser?.uid || null) !== authUidAtStart ||
                     image.dataset.photoRequest !== requestId || image.dataset.localPreview === 'true') return;
                 image.src = objectUrl;
                 image.classList.remove('hidden');
@@ -2623,9 +2621,6 @@ window.addEventListener('load', initializeFirebaseAuth, { once: true });
                 if (image.id === 'profilePhotoPreview') {
                     image.src = 'Image/app-logo.jpg';
                     image.classList.remove('hidden');
-                }
-                if (notifyOnError) {
-                    showToast('Profile photo could not load. Check Storage rules and bucket CORS settings.', 'error');
                 }
             }
         }

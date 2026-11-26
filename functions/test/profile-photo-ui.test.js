@@ -35,11 +35,11 @@ function setup() {
   return { context, requests, errors, image, classes };
 }
 
-test("profile photos load with an authenticated request for the viewer or another member", async () => {
+test("profile photos load publicly for the viewer or another member", async () => {
   const { context, requests, image, classes } = setup();
   await context.loadProfilePhotoInto(image, "profile-photos/viewer/own", "viewer", true);
   assert.equal(image.src, "blob:photo");
-  assert.equal(requests[0].options.headers.Authorization, "Firebase id-token");
+  assert.equal(requests[0].options.headers, undefined);
   assert.match(requests[0].url, /profile-photos%2Fviewer%2Fown\?alt=media$/);
   await context.loadProfilePhotoInto(image, "profile-photos/other/photo", "other", true);
   assert.equal(image.src, "blob:photo");
@@ -59,11 +59,11 @@ test("profile photo requests discard results after an account change", async () 
   assert.equal(context.profilePhotoObjectUrls.size, 0);
 });
 
-test("failed or oversized photo downloads are reported without displaying them", async () => {
+test("failed or oversized photo downloads fall back silently without displaying them", async () => {
   const { context, errors, image, requests } = setup();
   context.firebaseStorage.ref = () => ({ getMetadata: async () => ({ size: 6 * 1024 * 1024 }) });
   await context.loadProfilePhotoInto(image, "profile-photos/viewer/own", "viewer", true);
   assert.equal(requests.length, 0);
   assert.equal(image.src, undefined);
-  assert.equal(errors.length, 1);
+  assert.equal(errors.length, 0);
 });
