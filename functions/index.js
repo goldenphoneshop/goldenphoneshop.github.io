@@ -76,7 +76,10 @@ const OWNER_ADMIN_UID = "LROHsLUXfEPnC6bDmSvy3vcRnNE3";
 const PERMANENT_VERIFIED_DEALER_UID = "71ZtsYMKKtMsOSdHhBHAbjHzcqc2";
 const PERMANENT_VERIFIED_DEALER_EMAIL = "employmentteamr303@gmail.com";
 const FIRST_SANCTION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
-const FOOTBALL_CACHE_MS = 60 * 1000;
+const FOOTBALL_LIST_LIVE_CACHE_MS = 3 * 60 * 1000;
+const FOOTBALL_LIST_CACHE_MS = 15 * 60 * 1000;
+const FOOTBALL_LIVE_DETAIL_CACHE_MS = 2 * 60 * 1000;
+const FOOTBALL_DETAIL_CACHE_MS = 24 * 60 * 60 * 1000;
 const FOOTBALL_ALERT_WINDOW_MS = 15 * 60 * 1000;
 
 function isOwnerAdmin(auth) {
@@ -140,11 +143,22 @@ function cleanFootballFixture(fixture) {
 }
 
 async function fetchFootballFixtures(apiKey) {
-  const date = new Date().toISOString().slice(0, 10);
-  const requests = [
-    "https://v3.football.api-sports.io/fixtures?live=all",
-    `https://v3.football.api-sports.io/fixtures?date=${date}`
-  ].map(url => fetch(url, {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Lagos",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  const dateAtOffset = offset => {
+    const value = new Date(Date.now() + offset * 24 * 60 * 60 * 1000);
+    const parts = Object.fromEntries(formatter.formatToParts(value)
+      .filter(part => part.type !== "literal")
+      .map(part => [part.type, part.value]));
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  };
+  const today = dateAtOffset(0);
+  const urls = [`https://v3.football.api-sports.io/fixtures?date=${today}`];
+  const requests = urls.map(url => fetch(url, {
     headers: { "x-apisports-key": apiKey },
     signal: AbortSignal.timeout(12000)
   }));
@@ -153,6 +167,19 @@ async function fetchFootballFixtures(apiKey) {
     if (!response.ok) throw new Error(`Football provider returned HTTP ${response.status}.`);
   }
   const payloads = await Promise.all(responses.map(response => response.json()));
+  payloads.forEach((payload, index) => {
+    const providerErrors = payload?.errors;
+    const hasErrors = Array.isArray(providerErrors)
+      ? providerErrors.length > 0
+      : providerErrors && typeof providerErrors === "object" &&
+        Object.keys(providerErrors).length > 0;
+    if (hasErrors) {
+      logger.error("API-Football returned errors.", {
+        scope: today,
+        errors: providerErrors
+      });
+    }
+  });
   const fixtures = payloads.flatMap(payload => Array.isArray(payload.response) ? payload.response : []);
   return [...new Map(fixtures.map(item => [item?.fixture?.id, cleanFootballFixture(item)])
     .filter(([, item]) => item)).values()]
@@ -300,8 +327,11 @@ exports.getFootballMatches = onCall(async () => {
   const now = Date.now();
   const cacheRef = db.collection("football_cache").doc("matches");
   const cached = await cacheRef.get();
-  if (cached.exists && Number.isSafeInteger(cached.data().expiresAtMs) &&
-      cached.data().expiresAtMs > now && Array.isArray(cached.data().matches)) {
+  const cachedMatches = cached.exists && Array.isArray(cached.data().matches)
+    ? cached.data().matches
+    : [];
+  if (cachedMatches.length > 0 && Number.isSafeInteger(cached.data().expiresAtMs) &&
+      cached.data().expiresAtMs > now) {
     return {
       matches: cached.data().matches,
       cached: true,
@@ -316,24 +346,42 @@ exports.getFootballMatches = onCall(async () => {
   let fallback = true;
   if (apiKey) {
     try {
-      matches = await fetchFootballFixtures(apiKey);
-      fallback = false;
+      const providerMatches = await fetchFootballFixtures(apiKey);
+      if (providerMatches.length === 0) {
+        logger.warn("API-Football returned no fixtures for live, today, or tomorrow.");
+      } else {
+        matches = providerMatches;
+        fallback = false;
+      }
     } catch (error) {
       logger.error("Football score refresh failed; serving cached or fallback data.", {
         message: error.message
       });
-      if (cached.exists && Array.isArray(cached.data().matches)) {
-        matches = cached.data().matches;
+      if (cachedMatches.length > 0) {
+        matches = cachedMatches;
         fallback = cached.data().fallback === true;
+      }
+      if (matches.length === 0) {
+        if (cachedMatches.length > 0) {
+          matches = cachedMatches;
+          fallback = cached.data().fallback === true;
+        } else {
+          matches = fallbackFootballMatches();
+          fallback = true;
+        }
       }
     }
   }
   const fetchedAtMs = now;
+  const hasLiveMatches = matches.some(match =>
+    ["1H", "2H", "HT", "ET", "BT", "P", "LIVE"].includes(match.status?.short)
+  );
+  const listCacheMs = hasLiveMatches ? FOOTBALL_LIST_LIVE_CACHE_MS : FOOTBALL_LIST_CACHE_MS;
   await cacheRef.set({
     matches,
     fallback,
     fetchedAtMs,
-    expiresAtMs: fetchedAtMs + FOOTBALL_CACHE_MS,
+    expiresAtMs: fetchedAtMs + listCacheMs,
     updatedAt: FieldValue.serverTimestamp()
   });
   return { matches, cached: false, fallback, fetchedAtMs };
@@ -414,10 +462,13 @@ exports.getMatchLiveDetails = onCall(async request => {
       if (cache.exists) return { ...cache.data(), cached: true, stale: true };
     }
   }
+  const isLive = details.fixture &&
+    ["1H", "2H", "HT", "ET", "BT", "P", "LIVE"].includes(details.fixture.status?.short);
+  const detailCacheMs = isLive ? FOOTBALL_LIVE_DETAIL_CACHE_MS : FOOTBALL_DETAIL_CACHE_MS;
   const payload = {
     ...details,
     fetchedAtMs: Date.now(),
-    expiresAtMs: Date.now() + FOOTBALL_CACHE_MS,
+    expiresAtMs: Date.now() + detailCacheMs,
     updatedAt: FieldValue.serverTimestamp()
   };
   await cacheRef.set(payload);
@@ -564,7 +615,7 @@ exports.onFootballAlert = onSchedule("every 1 minutes", async () => {
       fixtureId: fixture.id,
       fixture,
       fetchedAtMs: Date.now(),
-      expiresAtMs: Date.now() + FOOTBALL_CACHE_MS,
+      expiresAtMs: Date.now() + FOOTBALL_LIST_LIVE_CACHE_MS,
       updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
     const old = previous[String(fixture.id)];

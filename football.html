@@ -297,7 +297,7 @@
       renderStageScore();
       stagePanels.hidden = false;
       subscribeChat(); subscribePoll(); subscribeReactions(); loadLiveDetails();
-      clearInterval(detailTimer); detailTimer = setInterval(loadLiveDetails, 60000);
+      clearInterval(detailTimer); detailTimer = setInterval(loadLiveDetails, 120000);
       renderPinnedBar();
     }
     function renderStageScore() {
@@ -458,7 +458,7 @@
     async function tokenHash(token){const bytes=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(token));return [...new Uint8Array(bytes)].map(v=>v.toString(16).padStart(2,"0")).join("").slice(0,40)}
     if(messaging){messaging.onMessage(payload=>{document.title=`⚽ ${payload.notification?.title||"Match alert"}`;setTimeout(()=>document.title="Golden Eagle Live Match Center",5000)})}
 
-    loadMatches();subscribeHighlights();loadFeaturedProducts();setInterval(loadMatches,60000);
+    loadMatches();subscribeHighlights();loadFeaturedProducts();setInterval(loadMatches,180000);
   </script>
 </body>
 </html>

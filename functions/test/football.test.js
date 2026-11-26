@@ -29,6 +29,34 @@ test("football fixtures use sanitized fallback and provider fields", () => {
   assert.equal(match.goals.home, 1);
 });
 
+test("football fixture sync requests one daily feed and logs provider errors", async () => {
+  const start = source.indexOf("function fallbackFootballMatches");
+  const end = source.indexOf("function containsPhoneNumber", start);
+  const urls = [];
+  const errors = [];
+  const context = {
+    Date, Intl, Number, String, Object, Map, Array, AbortSignal,
+    logger: { error: (message, fields) => errors.push({ message, fields }) },
+    fetch: async url => {
+      urls.push(url);
+      return {
+        ok: true,
+        json: async () => ({
+          errors: { plan: "limited" },
+          response: []
+        })
+      };
+    }
+  };
+  vm.runInNewContext(source.slice(start, end), context);
+  const fixtures = await context.fetchFootballFixtures("server-only-key");
+  assert.equal(fixtures.length, 0);
+  assert.equal(urls.length, 1);
+  assert.match(urls[0], /date=\d{4}-\d{2}-\d{2}$/);
+  assert.doesNotMatch(urls[0], /live=all/);
+  assert.equal(errors.length, 1);
+});
+
 test("football client contains no provider key and uses privacy-enhanced embeds", () => {
   assert.doesNotMatch(html, /x-apisports-key|FLWSECK|sk_(live|test)_/i);
   assert.match(html, /https:\/\/www\.youtube-nocookie\.com\/embed\//);
