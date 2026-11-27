@@ -122,9 +122,26 @@ test("football quota fallback merges full public league feeds", async () => {
   assert.equal(fixtures.find(fixture => fixture.id === 778).league.name,
     "Community Sunday League");
   assert.equal(urls.filter(url => url.includes("eventsnextleague.php")).length, 6);
-  assert.equal(urls.filter(url => url.includes("site.api.espn.com")).length, 6);
+  assert.equal(urls.filter(url => url.includes("site.api.espn.com")).length, 8);
   assert.match(urls.find(url => url.includes("eventsday.php")),
     /eventsday\.php\?d=2026-11-27&s=Soccer$/);
+});
+
+test("football timestamps use explicit UTC and bypass stale kickoff entries", () => {
+  const start = source.indexOf("function fallbackFootballMatches");
+  const end = source.indexOf("function containsPhoneNumber", start);
+  const context = {
+    Date, Intl, Number, String, Object, Map, Array, Set, AbortSignal
+  };
+  vm.runInNewContext(source.slice(start, end), context);
+  assert.equal(context.normalizeFootballTimestamp("2026-11-27 18:30:00"),
+    "2026-11-27T18:30:00.000Z");
+  assert.equal(context.hasStaleKickoffMatch([{
+    date: "2026-11-27T12:00:00Z", status: { short: "NS" }
+  }], Date.parse("2026-11-27T12:30:00Z")), true);
+  assert.equal(context.hasStaleKickoffMatch([{
+    date: "2026-11-27T12:00:00Z", status: { short: "1H" }
+  }], Date.parse("2026-11-27T12:30:00Z")), false);
 });
 
 test("football client contains no provider key and uses privacy-enhanced embeds", () => {
@@ -133,4 +150,7 @@ test("football client contains no provider key and uses privacy-enhanced embeds"
   assert.match(html, /match_chats/);
   assert.match(html, /match_polls/);
   assert.match(html, /OWNER_UID = "LROHsLUXfEPnC6bDmSvy3vcRnNE3"/);
+  assert.equal((html.match(/id="livePitch"/g) || []).length, 1);
+  assert.doesNotMatch(html, /id="officialVideo"/);
+  assert.match(html, /id="livePitch" class="pitch stage-pitch hidden"/);
 });

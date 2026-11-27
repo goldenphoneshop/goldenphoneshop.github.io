@@ -155,6 +155,21 @@ function lagosFootballDate(value = new Date()) {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
+function normalizeFootballTimestamp(value) {
+  const text = String(value || "").trim().replace(
+    /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})/,
+    "$1T$2"
+  );
+  if (!text) return "";
+  if (/[zZ]$|[+-]\d{2}:\d{2}$/.test(text)) return new Date(text).toISOString();
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text)) {
+    const parsed = new Date(`${text}Z`);
+    return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
+  }
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
+}
+
 function footballQuotaResetMs(nowMs = Date.now()) {
   const reset = new Date(nowMs);
   reset.setUTCHours(24, 0, 0, 0);
@@ -208,9 +223,9 @@ function cleanTheSportsDbFixture(event, date = lagosFootballDate()) {
   if (!Number.isSafeInteger(id) || !event?.strHomeTeam || !event?.strAwayTeam) return null;
   return {
     id,
-    date: String(event?.strTimestamp ||
+    date: normalizeFootballTimestamp(String(event?.strTimestamp ||
       `${event?.dateEvent || date}T${event?.strTime || "00:00:00"}`)
-      .replace(" ", "T"),
+      .replace(" ", "T")),
     status: {
       short,
       long: status || (short === "FT" ? "Match Finished" : "Not Started"),
@@ -280,15 +295,25 @@ function cleanEspnFixture(event, league) {
     return null;
   }
   const state = String(competition?.status?.type?.state || "");
-  const short = state === "post" ? "FT" : state === "in" ? "LIVE" : "NS";
+  const statusType = competition?.status?.type || {};
+  const clock = Number.parseFloat(statusType?.shortDetail);
+  const elapsed = Number.isFinite(clock) ? Math.round(clock)
+    : Number.isFinite(Number(competition?.status?.displayClock))
+      ? Math.round(Number(competition.status.displayClock)) : null;
+  const statusText = String(statusType?.shortDetail || statusType?.description || "");
+  const short = state === "post" ? "FT"
+    : state === "in"
+      ? /half|HT/i.test(statusText) ? "HT"
+        : /second|2H/i.test(statusText) || elapsed > 45 ? "2H" : "1H"
+      : "NS";
   return {
     id,
-    date: String(event?.date || ""),
+    date: normalizeFootballTimestamp(event?.date),
     status: {
       short,
       long: String(competition?.status?.type?.description ||
         (short === "FT" ? "Full Time" : short === "LIVE" ? "Live" : "Scheduled")),
-      elapsed: null
+      elapsed
     },
     league: {
       name: league.name,
@@ -323,7 +348,9 @@ async function fetchEspnFixtures(today = lagosFootballDate(),
     { code: "uefa.champions", name: "UEFA Champions League", country: "Europe" },
     { code: "ita.1", name: "Serie A", country: "Italy" },
     { code: "ger.1", name: "Bundesliga", country: "Germany" },
-    { code: "fra.1", name: "Ligue 1", country: "France" }
+    { code: "fra.1", name: "Ligue 1", country: "France" },
+    { code: "afc.champions", name: "AFC Champions League", country: "Asia" },
+    { code: "fifa.world", name: "FIFA World Football", country: "International" }
   ];
   const dates = `${today.replaceAll("-", "")}-${tomorrow.replaceAll("-", "")}`;
   const results = await Promise.allSettled(leagues.map(async league => {
@@ -349,12 +376,20 @@ function normalizeFootballName(value) {
     .toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
+function hasStaleKickoffMatch(matches, nowMs = Date.now()) {
+  return (matches || []).some(match => {
+    if (match?.status?.short !== "NS") return false;
+    const kickoffMs = Date.parse(normalizeFootballTimestamp(match?.date));
+    return Number.isFinite(kickoffMs) && kickoffMs <= nowMs &&
+      kickoffMs >= nowMs - 3 * 60 * 60 * 1000;
+  });
+}
+
 function mergeFootballFixtures(fixtures, dates) {
   const unique = new Map();
   fixtures.forEach(match => {
     if (!match) return;
-    const kickoff = new Date(/\b\d{2}:\d{2}:\d{2}$/.test(match.date)
-      ? `${match.date}Z` : match.date);
+    const kickoff = new Date(normalizeFootballTimestamp(match.date));
     if (Number.isNaN(kickoff.getTime())) return;
     const date = lagosFootballDate(kickoff);
     if (dates && !dates.has(date)) return;
@@ -537,8 +572,10 @@ exports.getFootballMatches = onCall(async () => {
   const quotaBackoffActive = (cachedQuotaError || Boolean(cachedData.quotaBackoffUntilMs)) &&
     cachedData.quotaBackoffDate === today &&
     Number(cachedData.quotaBackoffUntilMs || 0) > now;
+  const staleKickoff = hasStaleKickoffMatch(cachedMatches, now);
   if (cachedMatches.length > 0 && Number.isSafeInteger(cached.data().expiresAtMs) &&
-      cached.data().expiresAtMs > now && !legacyQuotaCache && !staleQuotaMarker) {
+      cached.data().expiresAtMs > now && !legacyQuotaCache && !staleQuotaMarker &&
+      !staleKickoff) {
     return {
       matches: cached.data().matches,
       cached: true,
@@ -670,12 +707,25 @@ exports.getMatchLiveDetails = onCall(async request => {
   }
   const cacheRef = db.collection("football_cache").doc(`fixture_${fixtureId}`);
   const cache = await cacheRef.get();
-  if (cache.exists && cache.data().expiresAtMs > Date.now()) return { ...cache.data(), cached: true };
+  const nowMs = Date.now();
+  if (cache.exists && cache.data().expiresAtMs > nowMs &&
+      !hasStaleKickoffMatch([cache.data().fixture], nowMs)) {
+    return { ...cache.data(), cached: true };
+  }
+  const listCache = await db.collection("football_cache").doc("matches").get();
+  const listFixture = listCache.exists && Array.isArray(listCache.data().matches)
+    ? listCache.data().matches.find(match => Number(match.id) === fixtureId)
+    : null;
+  const quotaBackoffActive = listCache.exists &&
+    Number(listCache.data().quotaBackoffUntilMs || 0) > nowMs;
   const apiKey = typeof process.env.FOOTBALL_API_KEY === "string"
     ? process.env.FOOTBALL_API_KEY.trim()
     : "";
-  let details = { fixtureId, events: [], statistics: [], lineups: [], fallback: true };
-  if (apiKey) {
+  let details = {
+    fixtureId, fixture: listFixture || null, events: [], statistics: [], lineups: [],
+    fallback: !listFixture
+  };
+  if (apiKey && !quotaBackoffActive) {
     try {
       const base = "https://v3.football.api-sports.io";
       const paths = [
@@ -720,6 +770,22 @@ exports.getMatchLiveDetails = onCall(async request => {
     } catch (error) {
       logger.error("Football detail refresh failed.", { fixtureId, message: error.message });
       if (cache.exists) return { ...cache.data(), cached: true, stale: true };
+    }
+  }
+  if (!details.fixture || details.fallback || hasStaleKickoffMatch([details.fixture], nowMs)) {
+    try {
+      const publicMatches = await fetchPublicFootballFixtures();
+      const publicFixture = publicMatches.find(match =>
+        Number(match.id) === fixtureId ||
+        listFixture && normalizeFootballName(match.teams?.home?.name) ===
+          normalizeFootballName(listFixture.teams?.home?.name) &&
+          normalizeFootballName(match.teams?.away?.name) ===
+          normalizeFootballName(listFixture.teams?.away?.name));
+      if (publicFixture) details = { ...details, fixture: publicFixture, fallback: false };
+    } catch (error) {
+      logger.error("Public football detail refresh failed.", {
+        fixtureId, message: error.message
+      });
     }
   }
   const isLive = details.fixture &&
