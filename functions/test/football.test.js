@@ -55,6 +55,7 @@ test("football fixture sync requests one daily feed and logs provider errors", a
   assert.match(urls[0], /date=\d{4}-\d{2}-\d{2}$/);
   assert.doesNotMatch(urls[0], /live=all/);
   assert.equal(errors.length, 1);
+  assert.equal(errors[0].fields.errors.plan, "limited");
 });
 
 test("football client contains no provider key and uses privacy-enhanced embeds", () => {

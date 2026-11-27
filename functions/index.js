@@ -78,6 +78,7 @@ const PERMANENT_VERIFIED_DEALER_EMAIL = "employmentteamr303@gmail.com";
 const FIRST_SANCTION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const FOOTBALL_LIST_LIVE_CACHE_MS = 3 * 60 * 1000;
 const FOOTBALL_LIST_CACHE_MS = 15 * 60 * 1000;
+const FOOTBALL_QUOTA_BACKOFF_MS = 24 * 60 * 60 * 1000;
 const FOOTBALL_LIVE_DETAIL_CACHE_MS = 2 * 60 * 1000;
 const FOOTBALL_DETAIL_CACHE_MS = 24 * 60 * 60 * 1000;
 const FOOTBALL_ALERT_WINDOW_MS = 15 * 60 * 1000;
@@ -174,10 +175,17 @@ async function fetchFootballFixtures(apiKey) {
       : providerErrors && typeof providerErrors === "object" &&
         Object.keys(providerErrors).length > 0;
     if (hasErrors) {
+      const quotaError = Object.values(providerErrors || {})
+        .some(value => /request limit for the day/i.test(String(value)));
       logger.error("API-Football returned errors.", {
         scope: today,
         errors: providerErrors
       });
+      if (quotaError) {
+        const error = new Error("API-Football daily request limit reached.");
+        error.code = "provider-quota";
+        throw error;
+      }
     }
   });
   const fixtures = payloads.flatMap(payload => Array.isArray(payload.response) ? payload.response : []);
@@ -336,6 +344,9 @@ exports.getFootballMatches = onCall(async () => {
       matches: cached.data().matches,
       cached: true,
       fallback: cached.data().fallback === true,
+      providerError: typeof cached.data().providerError === "string"
+        ? cached.data().providerError
+        : "",
       fetchedAtMs: cached.data().fetchedAtMs || 0
     };
   }
@@ -344,6 +355,8 @@ exports.getFootballMatches = onCall(async () => {
     : "";
   let matches = fallbackFootballMatches();
   let fallback = true;
+  let cacheMs = FOOTBALL_LIST_CACHE_MS;
+  let providerError = "";
   if (apiKey) {
     try {
       const providerMatches = await fetchFootballFixtures(apiKey);
@@ -361,6 +374,10 @@ exports.getFootballMatches = onCall(async () => {
         matches = cachedMatches;
         fallback = cached.data().fallback === true;
       }
+      if (error.code === "provider-quota") {
+        cacheMs = FOOTBALL_QUOTA_BACKOFF_MS;
+        providerError = error.message;
+      }
       if (matches.length === 0) {
         if (cachedMatches.length > 0) {
           matches = cachedMatches;
@@ -376,15 +393,18 @@ exports.getFootballMatches = onCall(async () => {
   const hasLiveMatches = matches.some(match =>
     ["1H", "2H", "HT", "ET", "BT", "P", "LIVE"].includes(match.status?.short)
   );
-  const listCacheMs = hasLiveMatches ? FOOTBALL_LIST_LIVE_CACHE_MS : FOOTBALL_LIST_CACHE_MS;
+  const listCacheMs = providerError
+    ? cacheMs
+    : hasLiveMatches ? FOOTBALL_LIST_LIVE_CACHE_MS : FOOTBALL_LIST_CACHE_MS;
   await cacheRef.set({
     matches,
     fallback,
+    providerError,
     fetchedAtMs,
     expiresAtMs: fetchedAtMs + listCacheMs,
     updatedAt: FieldValue.serverTimestamp()
   });
-  return { matches, cached: false, fallback, fetchedAtMs };
+  return { matches, cached: false, fallback, providerError, fetchedAtMs };
 });
 
 exports.deleteFootballHighlight = onCall(async request => {
@@ -599,14 +619,14 @@ async function deliverFootballAlert(eventId, fixture, title, body, preferenceKey
 }
 
 exports.onFootballAlert = onSchedule("every 1 minutes", async () => {
-  const apiKey = typeof process.env.FOOTBALL_API_KEY === "string"
-    ? process.env.FOOTBALL_API_KEY.trim()
-    : "";
-  if (!apiKey) {
+  const cache = await db.collection("football_cache").doc("matches").get();
+  const live = cache.exists && Array.isArray(cache.data().matches)
+    ? cache.data().matches
+    : [];
+  if (live.length === 0) {
     await processFootballEmailQueue();
     return;
   }
-  const live = await fetchFootballFixtures(apiKey);
   const stateRef = db.collection("football_alert_state").doc("matches");
   const previousSnapshot = await stateRef.get();
   const previous = previousSnapshot.data()?.fixtures || {};

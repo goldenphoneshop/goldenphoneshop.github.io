@@ -226,7 +226,11 @@
       try {
         const result = await functions.httpsCallable("getFootballMatches")();
         allMatches = result.data?.matches || [];
-        matchStatus.textContent = result.data?.fallback ? "Preview fixtures — the server-side football provider is not configured yet." : `Updated ${new Date(result.data.fetchedAtMs).toLocaleTimeString()}`;
+        matchStatus.textContent = result.data?.fallback
+          ? (result.data?.providerError
+            ? `Live provider limit reached. Preview fixtures are shown; retrying automatically later.`
+            : "Preview fixtures — the server-side football provider is not configured yet.")
+          : `Updated ${new Date(result.data.fetchedAtMs).toLocaleTimeString()}`;
         renderLeagueFilters();
         renderMatches();
         renderPinnedBar();
