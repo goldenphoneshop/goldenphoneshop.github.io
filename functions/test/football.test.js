@@ -58,6 +58,51 @@ test("football fixture sync requests one daily feed and logs provider errors", a
   assert.equal(errors[0].fields.errors.plan, "limited");
 });
 
+test("football quota fallback maps TheSportsDB soccer fixtures", async () => {
+  const start = source.indexOf("function fallbackFootballMatches");
+  const end = source.indexOf("function containsPhoneNumber", start);
+  const urls = [];
+  const context = {
+    Date, Intl, Number, String, Object, Array, AbortSignal,
+    logger: { error: () => {} },
+    fetch: async url => {
+      urls.push(url);
+      return {
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              idEvent: "777", idHomeTeam: "10", idAwayTeam: "20",
+              strHomeTeam: "Arsenal", strAwayTeam: "Chelsea",
+              strHomeTeamBadge: "https://example.test/arsenal.png",
+              strAwayTeamBadge: "https://example.test/chelsea.png",
+              strLeague: "English Premier League",
+              strCountry: "England", strVenue: "Emirates Stadium",
+              dateEvent: "2026-11-27", strTime: "17:30:00",
+              strTimestamp: "2026-11-27T17:30:00", strStatus: "Not Started",
+              intHomeScore: null, intAwayScore: null
+            },
+            {
+              idEvent: "778", strHomeTeam: "Other", strAwayTeam: "Other FC",
+              strLeague: "Community Sunday League"
+            }
+          ]
+        })
+      };
+    }
+  };
+  vm.runInNewContext(source.slice(start, end), context);
+  const fixtures = await context.fetchTheSportsDbFixtures("2026-11-27");
+  assert.equal(fixtures.length, 2);
+  const premierLeague = fixtures.find(fixture => fixture.id === 777);
+  assert.equal(premierLeague.league.name, "English Premier League");
+  assert.equal(premierLeague.goals.home, null);
+  assert.equal(fixtures.find(fixture => fixture.id === 778).league.name,
+    "Community Sunday League");
+  assert.match(urls[0],
+    /eventsday\.php\?d=2026-11-27&s=Soccer$/);
+});
+
 test("football client contains no provider key and uses privacy-enhanced embeds", () => {
   assert.doesNotMatch(html, /x-apisports-key|FLWSECK|sk_(live|test)_/i);
   assert.match(html, /https:\/\/www\.youtube-nocookie\.com\/embed\//);
