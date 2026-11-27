@@ -199,59 +199,187 @@ async function fetchFootballFixtures(apiKey) {
     .sort((left, right) => String(left.date).localeCompare(String(right.date)));
 }
 
+function cleanTheSportsDbFixture(event, date = lagosFootballDate()) {
+  const status = String(event?.strStatus || "").trim();
+  const short = /finished|FT/i.test(status) ? "FT"
+    : /live|1H|2H|HT|halftime/i.test(status) ? "LIVE"
+      : "NS";
+  const id = Number(event?.idEvent);
+  if (!Number.isSafeInteger(id) || !event?.strHomeTeam || !event?.strAwayTeam) return null;
+  return {
+    id,
+    date: String(event?.strTimestamp ||
+      `${event?.dateEvent || date}T${event?.strTime || "00:00:00"}`)
+      .replace(" ", "T"),
+    status: {
+      short,
+      long: status || (short === "FT" ? "Match Finished" : "Not Started"),
+      elapsed: null
+    },
+    league: {
+      name: String(event?.strLeague || "Football"),
+      country: String(event?.strCountry || ""),
+      logo: String(event?.strLeagueBadge || "")
+    },
+    venue: { name: String(event?.strVenue || "") },
+    teams: {
+      home: {
+        id: Number(event?.idHomeTeam) || 0,
+        name: String(event.strHomeTeam),
+        logo: String(event?.strHomeTeamBadge || "")
+      },
+      away: {
+        id: Number(event?.idAwayTeam) || 0,
+        name: String(event.strAwayTeam),
+        logo: String(event?.strAwayTeamBadge || "")
+      }
+    },
+    goals: {
+      home: /^\d+$/.test(String(event?.intHomeScore ?? ""))
+        ? Number(event.intHomeScore)
+        : null,
+      away: /^\d+$/.test(String(event?.intAwayScore ?? ""))
+        ? Number(event.intAwayScore)
+        : null
+    }
+  };
+}
+
 async function fetchTheSportsDbFixtures(date = lagosFootballDate()) {
-  const url = `https://www.thesportsdb.com/api/v1/json/123/eventsday.php?d=${date}&s=Soccer`;
-  const response = await fetch(url, { signal: AbortSignal.timeout(12000) });
-  if (!response.ok) throw new Error(`TheSportsDB returned HTTP ${response.status}.`);
-  const payload = await response.json();
-  return (Array.isArray(payload?.events) ? payload.events : [])
-    .map(event => {
-      const status = String(event?.strStatus || "").trim();
-      const short = /finished|FT/i.test(status) ? "FT"
-        : /live|1H|2H|HT|halftime/i.test(status) ? "LIVE"
-          : "NS";
-      const id = Number(event?.idEvent);
-      if (!Number.isSafeInteger(id) || !event?.strHomeTeam || !event?.strAwayTeam) return null;
-      return {
-        id,
-        date: String(event?.strTimestamp ||
-          `${event?.dateEvent || date}T${event?.strTime || "00:00:00"}`)
-          .replace(" ", "T"),
-        status: {
-          short,
-          long: status || (short === "FT" ? "Match Finished" : "Not Started"),
-          elapsed: null
-        },
-        league: {
-          name: String(event?.strLeague || "Football"),
-          country: String(event?.strCountry || ""),
-          logo: ""
-        },
-        venue: { name: String(event?.strVenue || "") },
-        teams: {
-          home: {
-            id: Number(event?.idHomeTeam) || 0,
-            name: String(event.strHomeTeam),
-            logo: String(event?.strHomeTeamBadge || "")
-          },
-          away: {
-            id: Number(event?.idAwayTeam) || 0,
-            name: String(event.strAwayTeam),
-            logo: String(event?.strAwayTeamBadge || "")
-          }
-        },
-        goals: {
-          home: /^\d+$/.test(String(event?.intHomeScore ?? ""))
-            ? Number(event.intHomeScore)
-            : null,
-          away: /^\d+$/.test(String(event?.intAwayScore ?? ""))
-            ? Number(event.intAwayScore)
-            : null
-        }
-      };
-    })
-    .filter(Boolean)
+  const leagueIds = [4328, 4335, 4480, 4332, 4331, 4334];
+  const urls = [
+    `https://www.thesportsdb.com/api/v1/json/123/eventsday.php?d=${date}&s=Soccer`,
+    ...leagueIds.map(id =>
+      `https://www.thesportsdb.com/api/v1/json/123/eventsnextleague.php?id=${id}`)
+  ];
+  const results = await Promise.allSettled(urls.map(async url => {
+    const response = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    if (!response.ok) throw new Error(`TheSportsDB returned HTTP ${response.status}.`);
+    return response.json();
+  }));
+  results.forEach(result => {
+    if (result.status === "rejected") {
+      logger.warn("TheSportsDB football feed failed.", { message: result.reason?.message });
+    }
+  });
+  return results.flatMap(result =>
+    result.status === "fulfilled" && Array.isArray(result.value?.events)
+      ? result.value.events.map(event => cleanTheSportsDbFixture(event, date)).filter(Boolean)
+      : []);
+}
+
+function cleanEspnFixture(event, league) {
+  const competition = event?.competitions?.[0];
+  const competitors = Array.isArray(competition?.competitors)
+    ? competition.competitors
+    : [];
+  const home = competitors.find(team => team?.homeAway === "home");
+  const away = competitors.find(team => team?.homeAway === "away");
+  const id = Number(event?.id);
+  if (!Number.isSafeInteger(id) || !home?.team?.displayName || !away?.team?.displayName) {
+    return null;
+  }
+  const state = String(competition?.status?.type?.state || "");
+  const short = state === "post" ? "FT" : state === "in" ? "LIVE" : "NS";
+  return {
+    id,
+    date: String(event?.date || ""),
+    status: {
+      short,
+      long: String(competition?.status?.type?.description ||
+        (short === "FT" ? "Full Time" : short === "LIVE" ? "Live" : "Scheduled")),
+      elapsed: null
+    },
+    league: {
+      name: league.name,
+      country: league.country,
+      logo: String(event?.leagues?.[0]?.logo || "")
+    },
+    venue: { name: String(competition?.venue?.fullName || "") },
+    teams: {
+      home: {
+        id: Number(home.team?.id) || 0,
+        name: String(home.team.displayName),
+        logo: String(home.team?.logo || "")
+      },
+      away: {
+        id: Number(away.team?.id) || 0,
+        name: String(away.team.displayName),
+        logo: String(away.team?.logo || "")
+      }
+    },
+    goals: {
+      home: /^\d+$/.test(String(home?.score ?? "")) ? Number(home.score) : null,
+      away: /^\d+$/.test(String(away?.score ?? "")) ? Number(away.score) : null
+    }
+  };
+}
+
+async function fetchEspnFixtures(today = lagosFootballDate(),
+    tomorrow = lagosFootballDate(new Date(Date.now() + 24 * 60 * 60 * 1000))) {
+  const leagues = [
+    { code: "eng.1", name: "English Premier League", country: "England" },
+    { code: "esp.1", name: "La Liga", country: "Spain" },
+    { code: "uefa.champions", name: "UEFA Champions League", country: "Europe" },
+    { code: "ita.1", name: "Serie A", country: "Italy" },
+    { code: "ger.1", name: "Bundesliga", country: "Germany" },
+    { code: "fra.1", name: "Ligue 1", country: "France" }
+  ];
+  const dates = `${today.replaceAll("-", "")}-${tomorrow.replaceAll("-", "")}`;
+  const results = await Promise.allSettled(leagues.map(async league => {
+    const url = "https://site.api.espn.com/apis/site/v2/sports/soccer/" +
+      `${league.code}/scoreboard?dates=${dates}&limit=100`;
+    const response = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    if (!response.ok) throw new Error(`ESPN ${league.code} returned HTTP ${response.status}.`);
+    const payload = await response.json();
+    return (Array.isArray(payload?.events) ? payload.events : [])
+      .map(event => cleanEspnFixture(event, league))
+      .filter(Boolean);
+  }));
+  results.forEach(result => {
+    if (result.status === "rejected") {
+      logger.warn("ESPN football feed failed.", { message: result.reason?.message });
+    }
+  });
+  return results.flatMap(result => result.status === "fulfilled" ? result.value : []);
+}
+
+function normalizeFootballName(value) {
+  return String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function mergeFootballFixtures(fixtures, dates) {
+  const unique = new Map();
+  fixtures.forEach(match => {
+    if (!match) return;
+    const kickoff = new Date(/\b\d{2}:\d{2}:\d{2}$/.test(match.date)
+      ? `${match.date}Z` : match.date);
+    if (Number.isNaN(kickoff.getTime())) return;
+    const date = lagosFootballDate(kickoff);
+    if (dates && !dates.has(date)) return;
+    const key = [
+      date,
+      normalizeFootballName(match.teams?.home?.name),
+      normalizeFootballName(match.teams?.away?.name)
+    ].join("|");
+    const current = unique.get(key);
+    const preferIncoming = !current ||
+      current.status?.short === "NS" && match.status?.short !== "NS" ||
+      !current.teams?.home?.logo && match.teams?.home?.logo;
+    if (preferIncoming) unique.set(key, match);
+  });
+  return [...unique.values()]
     .sort((left, right) => String(left.date).localeCompare(String(right.date)));
+}
+
+async function fetchPublicFootballFixtures(today = lagosFootballDate()) {
+  const tomorrow = lagosFootballDate(new Date(Date.now() + 24 * 60 * 60 * 1000));
+  const results = await Promise.all([
+    fetchTheSportsDbFixtures(today),
+    fetchEspnFixtures(today, tomorrow)
+  ]);
+  return mergeFootballFixtures(results.flat(), new Set([today, tomorrow]));
 }
 
 function containsPhoneNumber(value) {
@@ -437,16 +565,16 @@ exports.getFootballMatches = onCall(async () => {
   }
   const tryTheSportsDb = async () => {
     try {
-      const secondaryMatches = await fetchTheSportsDbFixtures(today);
+      const secondaryMatches = await fetchPublicFootballFixtures(today);
       if (secondaryMatches.length > 0) {
         matches = secondaryMatches;
         fallback = false;
-        provider = "thesportsdb";
+        provider = "public-football-feeds";
         return true;
       }
-      logger.warn("TheSportsDB returned no soccer fixtures.", { date: today });
+      logger.warn("Public football feeds returned no supported fixtures.", { date: today });
     } catch (error) {
-      logger.error("TheSportsDB football fallback failed.", { message: error.message });
+      logger.error("Public football fallback failed.", { message: error.message });
     }
     return false;
   };
@@ -483,8 +611,10 @@ exports.getFootballMatches = onCall(async () => {
         await tryTheSportsDb();
       }
     }
+  } else {
+    await tryTheSportsDb();
   }
-  if (fallback && cachedMatches.length > 0 && provider !== "thesportsdb") {
+  if (fallback && cachedMatches.length > 0 && provider !== "public-football-feeds") {
     matches = cachedMatches;
     fallback = cachedData.fallback === true;
     provider = String(cachedData.provider || "cache");

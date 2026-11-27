@@ -58,48 +58,72 @@ test("football fixture sync requests one daily feed and logs provider errors", a
   assert.equal(errors[0].fields.errors.plan, "limited");
 });
 
-test("football quota fallback maps TheSportsDB soccer fixtures", async () => {
+test("football quota fallback merges full public league feeds", async () => {
   const start = source.indexOf("function fallbackFootballMatches");
   const end = source.indexOf("function containsPhoneNumber", start);
   const urls = [];
   const context = {
     Date, Intl, Number, String, Object, Array, AbortSignal,
-    logger: { error: () => {} },
+    logger: { error: () => {}, warn: () => {} },
     fetch: async url => {
       urls.push(url);
+      if (url.includes("site.api.espn.com")) {
+        return {
+          ok: true,
+          json: async () => ({
+            events: url.includes("/eng.1/") ? [{
+              id: "9001", date: "2026-11-27T18:30:00Z",
+              competitions: [{
+                status: { type: { state: "pre", description: "Scheduled" } },
+                venue: { fullName: "Emirates Stadium" },
+                competitors: [
+                  { homeAway: "home", score: "0",
+                    team: { id: "10", displayName: "Arsenal", logo: "arsenal.png" } },
+                  { homeAway: "away", score: "0",
+                    team: { id: "20", displayName: "Chelsea", logo: "chelsea.png" } }
+                ]
+              }]
+            }] : []
+          })
+        };
+      }
+      const events = url.includes("eventsnextleague")
+        ? []
+        : [
+          {
+            idEvent: "777", idHomeTeam: "10", idAwayTeam: "20",
+            strHomeTeam: "Arsenal", strAwayTeam: "Chelsea",
+            strHomeTeamBadge: "https://example.test/arsenal.png",
+            strAwayTeamBadge: "https://example.test/chelsea.png",
+            strLeague: "English Premier League",
+            strCountry: "England", strVenue: "Emirates Stadium",
+            dateEvent: "2026-11-27", strTime: "17:30:00",
+            strTimestamp: "2026-11-27T17:30:00", strStatus: "Not Started",
+            intHomeScore: null, intAwayScore: null
+          },
+          {
+            idEvent: "778", strHomeTeam: "Other", strAwayTeam: "Other FC",
+            strLeague: "Community Sunday League",
+            dateEvent: "2026-11-27", strTime: "20:00:00"
+          }
+        ];
       return {
         ok: true,
-        json: async () => ({
-          events: [
-            {
-              idEvent: "777", idHomeTeam: "10", idAwayTeam: "20",
-              strHomeTeam: "Arsenal", strAwayTeam: "Chelsea",
-              strHomeTeamBadge: "https://example.test/arsenal.png",
-              strAwayTeamBadge: "https://example.test/chelsea.png",
-              strLeague: "English Premier League",
-              strCountry: "England", strVenue: "Emirates Stadium",
-              dateEvent: "2026-11-27", strTime: "17:30:00",
-              strTimestamp: "2026-11-27T17:30:00", strStatus: "Not Started",
-              intHomeScore: null, intAwayScore: null
-            },
-            {
-              idEvent: "778", strHomeTeam: "Other", strAwayTeam: "Other FC",
-              strLeague: "Community Sunday League"
-            }
-          ]
-        })
+        json: async () => ({ events })
       };
     }
   };
   vm.runInNewContext(source.slice(start, end), context);
-  const fixtures = await context.fetchTheSportsDbFixtures("2026-11-27");
+  const fixtures = await context.fetchPublicFootballFixtures("2026-11-27");
   assert.equal(fixtures.length, 2);
   const premierLeague = fixtures.find(fixture => fixture.id === 777);
   assert.equal(premierLeague.league.name, "English Premier League");
   assert.equal(premierLeague.goals.home, null);
   assert.equal(fixtures.find(fixture => fixture.id === 778).league.name,
     "Community Sunday League");
-  assert.match(urls[0],
+  assert.equal(urls.filter(url => url.includes("eventsnextleague.php")).length, 6);
+  assert.equal(urls.filter(url => url.includes("site.api.espn.com")).length, 6);
+  assert.match(urls.find(url => url.includes("eventsday.php")),
     /eventsday\.php\?d=2026-11-27&s=Soccer$/);
 });
 
