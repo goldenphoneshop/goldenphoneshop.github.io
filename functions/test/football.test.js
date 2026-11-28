@@ -200,4 +200,10 @@ test("football client contains no provider key and uses privacy-enhanced embeds"
   assert.doesNotMatch(html,
     /No official stream or highlight is linked to this fixture/);
   assert.match(html, /animateLiveBall/);
+  assert.match(html, /id="prematchCard"/);
+  assert.match(html,
+    /Kickoff upcoming — live goals, cards, and stats will appear here once play starts\./);
+  assert.match(html,
+    /Match underway — waiting for first key event\./);
+  assert.match(html, /data-stage-tab="video"/);
 });
