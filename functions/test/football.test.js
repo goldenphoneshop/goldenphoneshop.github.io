@@ -118,7 +118,9 @@ test("football quota fallback merges full public league feeds", async () => {
   assert.equal(fixtures.length, 2);
   const premierLeague = fixtures.find(fixture => fixture.id === 777);
   assert.equal(premierLeague.league.name, "English Premier League");
-  assert.equal(premierLeague.goals.home, null);
+  assert.equal(premierLeague.goals.home, 0);
+  assert.equal(premierLeague.espnEventId, 9001);
+  assert.equal(premierLeague.espnLeagueCode, "eng.1");
   assert.equal(fixtures.find(fixture => fixture.id === 778).league.name,
     "Community Sunday League");
   assert.equal(urls.filter(url => url.includes("eventsnextleague.php")).length, 6);
@@ -142,6 +144,48 @@ test("football timestamps use explicit UTC and bypass stale kickoff entries", ()
   assert.equal(context.hasStaleKickoffMatch([{
     date: "2026-11-27T12:00:00Z", status: { short: "1H" }
   }], Date.parse("2026-11-27T12:30:00Z")), false);
+  const event = context.cleanEspnEvent({
+    clock: { displayValue: "63'" },
+    text: "Goal for the home team",
+    team: { displayName: "Arsenal" },
+    participant: { athlete: { displayName: "Saka" } }
+  });
+  assert.equal(event.time, 63);
+  assert.equal(event.player, "Saka");
+  assert.equal(event.team, "Arsenal");
+});
+
+test("football detail fallback requests ESPN summary timeline", async () => {
+  const start = source.indexOf("function fallbackFootballMatches");
+  const end = source.indexOf("function containsPhoneNumber", start);
+  const urls = [];
+  const context = {
+    Date, Intl, Number, String, Object, Array, AbortSignal,
+    fetch: async url => {
+      urls.push(url);
+      return {
+        ok: true,
+        json: async () => ({
+          keyEvents: [{
+            clock: { displayValue: "72'" },
+            type: { text: "Goal" },
+            text: "Goal — Arsenal",
+            team: { displayName: "Arsenal" },
+            participant: { athlete: { displayName: "Bukayo Saka" } }
+          }],
+          boxscore: { teams: [] }
+        })
+      };
+    }
+  };
+  vm.runInNewContext(source.slice(start, end), context);
+  const summary = await context.fetchEspnMatchSummary({
+    espnEventId: 9001, espnLeagueCode: "eng.1"
+  });
+  assert.equal(summary.events.length, 1);
+  assert.equal(summary.events[0].type, "Goal");
+  assert.equal(summary.events[0].time, 72);
+  assert.match(urls[0], /\/eng\.1\/summary\?event=9001$/);
 });
 
 test("football client contains no provider key and uses privacy-enhanced embeds", () => {
@@ -153,4 +197,7 @@ test("football client contains no provider key and uses privacy-enhanced embeds"
   assert.equal((html.match(/id="livePitch"/g) || []).length, 1);
   assert.doesNotMatch(html, /id="officialVideo"/);
   assert.match(html, /id="livePitch" class="pitch stage-pitch hidden"/);
+  assert.doesNotMatch(html,
+    /No official stream or highlight is linked to this fixture/);
+  assert.match(html, /animateLiveBall/);
 });

@@ -308,6 +308,8 @@ function cleanEspnFixture(event, league) {
       : "NS";
   return {
     id,
+    espnEventId: id,
+    espnLeagueCode: league.code,
     date: normalizeFootballTimestamp(event?.date),
     status: {
       short,
@@ -402,7 +404,17 @@ function mergeFootballFixtures(fixtures, dates) {
     const preferIncoming = !current ||
       current.status?.short === "NS" && match.status?.short !== "NS" ||
       !current.teams?.home?.logo && match.teams?.home?.logo;
-    if (preferIncoming) unique.set(key, match);
+    if (current && match.espnEventId && !current.espnEventId) {
+      unique.set(key, {
+        ...current,
+        espnEventId: match.espnEventId,
+        espnLeagueCode: match.espnLeagueCode,
+        status: match.status,
+        goals: match.goals
+      });
+    } else if (preferIncoming) {
+      unique.set(key, match);
+    }
   });
   return [...unique.values()]
     .sort((left, right) => String(left.date).localeCompare(String(right.date)));
@@ -415,6 +427,54 @@ async function fetchPublicFootballFixtures(today = lagosFootballDate()) {
     fetchEspnFixtures(today, tomorrow)
   ]);
   return mergeFootballFixtures(results.flat(), new Set([today, tomorrow]));
+}
+
+function cleanEspnEvent(event) {
+  const clock = event?.clock?.displayValue ?? event?.clock?.value ?? event?.time?.displayValue;
+  const time = Number.parseInt(String(clock || ""), 10);
+  const text = String(event?.text || event?.description || event?.type?.text || "").trim();
+  const type = String(event?.type?.text || event?.type?.description ||
+    event?.eventType || text || "")
+    .trim();
+  return {
+    time: Number.isFinite(time) ? time : null,
+    extra: null,
+    type,
+    detail: text,
+    team: String(event?.team?.displayName || event?.team?.name || ""),
+    player: String(event?.participant?.athlete?.displayName ||
+      event?.participant?.displayName || event?.athlete?.displayName || ""),
+    assist: String(event?.assist?.displayName || "")
+  };
+}
+
+async function fetchEspnMatchSummary(fixture) {
+  const eventId = Number(fixture?.espnEventId);
+  const leagueCode = String(fixture?.espnLeagueCode || "");
+  if (!Number.isSafeInteger(eventId) || !/^[A-Za-z0-9.]+$/.test(leagueCode)) return null;
+  const url = "https://site.api.espn.com/apis/site/v2/sports/soccer/" +
+    `${leagueCode}/summary?event=${eventId}`;
+  const response = await fetch(url, { signal: AbortSignal.timeout(12000) });
+  if (!response.ok) throw new Error(`ESPN summary returned HTTP ${response.status}.`);
+  const payload = await response.json();
+  const candidateEvents = [
+    payload?.keyEvents,
+    payload?.scoringPlays,
+    payload?.plays,
+    payload?.commentary?.items,
+    payload?.commentary
+  ].find(Array.isArray) || [];
+  const events = candidateEvents.slice(-100).map(cleanEspnEvent)
+    .filter(event => event.type || event.detail);
+  const teams = Array.isArray(payload?.boxscore?.teams) ? payload.boxscore.teams : [];
+  const statistics = teams.map(team => ({
+    team: String(team?.team?.displayName || team?.team?.name || ""),
+    values: (Array.isArray(team?.statistics) ? team.statistics : []).map(stat => ({
+      type: String(stat?.name || stat?.label || ""),
+      value: stat?.displayValue ?? stat?.value ?? null
+    }))
+  }));
+  return { events, statistics, lineups: [] };
 }
 
 function containsPhoneNumber(value) {
@@ -781,9 +841,29 @@ exports.getMatchLiveDetails = onCall(async request => {
           normalizeFootballName(listFixture.teams?.home?.name) &&
           normalizeFootballName(match.teams?.away?.name) ===
           normalizeFootballName(listFixture.teams?.away?.name));
-      if (publicFixture) details = { ...details, fixture: publicFixture, fallback: false };
+      if (publicFixture) {
+        details = { ...details, fixture: publicFixture, fallback: false };
+      }
     } catch (error) {
       logger.error("Public football detail refresh failed.", {
+        fixtureId, message: error.message
+      });
+    }
+  }
+  if (!details.events.length && details.fixture) {
+    try {
+      const summary = await fetchEspnMatchSummary(details.fixture);
+      if (summary) {
+        details = {
+          ...details,
+          events: summary.events,
+          statistics: details.statistics.length ? details.statistics : summary.statistics,
+          lineups: details.lineups.length ? details.lineups : summary.lineups,
+          fallback: false
+        };
+      }
+    } catch (error) {
+      logger.error("ESPN football timeline refresh failed.", {
         fixtureId, message: error.message
       });
     }

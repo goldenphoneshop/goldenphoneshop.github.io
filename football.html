@@ -168,7 +168,7 @@
     const $ = id => document.getElementById(id);
     let currentUser = null, currentProfileName = "", allMatches = [], selectedMatch = null, statusFilter = "all", leagueFilter = "";
     let chatUnsubscribe = null, pollUnsubscribe = null, reactionUnsubscribe = null, detailTimer = null;
-    let activeStageTab = "pitch";
+    let activeStageTab = "pitch", officialVideoAvailable = false, ballAnimationTimer = null;
     let replyTarget = null, recorder = null, recordChunks = [], recordStartedAt = 0, recordTimer = null;
     const pinnedIds = new Set(JSON.parse(localStorage.getItem("goldenEagle_pinnedMatches") || "[]"));
 
@@ -293,6 +293,8 @@
     async function openMatch(matchId, scroll = false) {
       selectedMatch = allMatches.find(match => String(match.id) === String(matchId));
       if (!selectedMatch) return;
+      officialVideoAvailable = false;
+      officialStageVideo.innerHTML = "";
       stageShell.scrollIntoView({ behavior:"smooth", block:"start" });
       renderStageScore();
       renderStageMode();
@@ -317,10 +319,13 @@
     };
     function renderStageMode() {
       const hasMatch = Boolean(selectedMatch);
-      stageMatch.classList.toggle("hidden", activeStageTab === "video");
-      livePitch.classList.toggle("hidden", !hasMatch || activeStageTab !== "pitch");
-      officialStageVideo.classList.toggle("hidden", activeStageTab !== "video");
-      if (activeStageTab === "video" && selectedMatch) renderOfficialVideo();
+      const showingVideo = activeStageTab === "video" && officialVideoAvailable;
+      stageMatch.classList.toggle("hidden", showingVideo);
+      livePitch.classList.toggle("hidden", !hasMatch || showingVideo);
+      officialStageVideo.classList.toggle("hidden", !showingVideo);
+      if (activeStageTab === "video" && selectedMatch && !officialVideoAvailable) {
+        officialStageVideo.innerHTML = "";
+      }
     }
     document.querySelectorAll("[data-stage-tab]").forEach(button => button.onclick = () => {
       activeStageTab = button.dataset.stageTab;
@@ -339,11 +344,12 @@
           Object.assign(selectedMatch, detail.fixture);
           renderStageScore(); renderMatches(); renderPinnedBar();
         }
-        eventFeed.innerHTML = (detail.events || []).slice().reverse().map(event =>
+        const events = detail.events || [];
+        eventFeed.innerHTML = events.slice().reverse().map(event =>
           `<div class="event"><strong>${escapeHtml(event.time ?? "")}${event.extra ? `+${escapeHtml(event.extra)}` : ""}' ${escapeHtml(event.type)}</strong><br><span class="muted">${escapeHtml(event.player)}${event.assist ? ` · Assist: ${escapeHtml(event.assist)}` : ""} · ${escapeHtml(event.team)}</span></div>`
         ).join("") || '<p class="muted">No live events yet.</p>';
         const possession = detail.statistics?.flatMap(team => team.values || []).find(stat => stat.type === "Ball Possession");
-        if (possession) liveBall.style.left = `${Math.min(85,Math.max(15,parseInt(possession.value) || 50))}%`;
+        animateLiveBall(events, possession?.value);
         statsContent.innerHTML = (detail.statistics || []).map(team => `<section><h3>${escapeHtml(team.team)}</h3>${team.values.map(stat => `<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding:.35rem 0"><span class="muted">${escapeHtml(stat.type)}</span><strong>${escapeHtml(stat.value ?? "-")}</strong></div>`).join("")}</section>`).join("") +
           (detail.lineups || []).map(team => `<section><h3>${escapeHtml(team.team)} · ${escapeHtml(team.formation)}</h3><p class="muted">${escapeHtml(team.startXI.join(", "))}</p></section>`).join("");
         renderOfficialVideo();
@@ -351,14 +357,46 @@
         setTimeout(() => tvStage.classList.remove("goal-flash"), 1000);
       } catch (error) { eventFeed.textContent = error.message || "Live details unavailable."; }
     }
+    function animateLiveBall(events, possessionValue) {
+      clearInterval(ballAnimationTimer);
+      const isLive = ["LIVE","1H","2H","HT"].includes(selectedMatch?.status?.short);
+      if (!isLive) return;
+      const hasEvents = Array.isArray(events) && events.length > 0;
+      if (hasEvents) {
+        const latest = events[events.length - 1];
+        const phase = (Number(latest?.time) || selectedMatch.status?.elapsed || 50) % 10 / 10;
+        liveBall.style.left = `${Math.round(20 + phase * 60)}%`;
+        liveBall.style.top = `${42 + Math.sin(phase * Math.PI * 2) * 18}%`;
+        return;
+      }
+      const possession = Math.min(72, Math.max(28, parseInt(possessionValue, 10) || 50));
+      const clock = Number(selectedMatch.status?.elapsed) || 1;
+      const homeLead = Number(selectedMatch.goals?.home || 0) -
+        Number(selectedMatch.goals?.away || 0);
+      const bias = Math.max(-12, Math.min(12, homeLead * 4));
+      let step = 0;
+      const moveBall = () => {
+        const wave = step * .72 + clock * .19;
+        const left = Math.round(possession + bias + Math.sin(wave) * 22);
+        const top = Math.round(50 + Math.cos(wave * .67) * 24);
+        liveBall.style.left = `${Math.min(86, Math.max(14, left))}%`;
+        liveBall.style.top = `${Math.min(82, Math.max(18, top))}%`;
+        step += 1;
+      };
+      moveBall();
+      ballAnimationTimer = setInterval(moveBall, 1800);
+    }
     async function renderOfficialVideo() {
       if (!selectedMatch) return;
-      officialStageVideo.innerHTML = '<p class="muted">No official stream or highlight is linked to this fixture.</p>';
+      officialStageVideo.innerHTML = "";
+      officialVideoAvailable = false;
       const snapshot = await db.collection("football_highlights").where("fixtureId","==",String(selectedMatch.id)).limit(1).get();
       if (!snapshot.empty) {
         const data = snapshot.docs[0].data();
         officialStageVideo.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(data.videoId)}" title="${escapeHtml(data.title)}" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+        officialVideoAvailable = true;
       }
+      renderStageMode();
     }
 
     function subscribeChat() {
